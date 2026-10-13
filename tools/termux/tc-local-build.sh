@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Резерв: зібрати APK на самому телефоні (як Dorama DEV 17) і відкрити встановлення.
 # Підписується тим самим ключем, що й у GitHub, — ставиться поверх.
+# --offline (пункт 12): без інтернету — Gradle бере все з кешу першої збірки.
 set -u
+offline=""
+[ "${1:-}" = "--offline" ] && offline="--offline"
 . "$(dirname -- "$0")/tc-common.sh"
 cd "$TC_REPO" || exit 1
 
@@ -21,8 +24,13 @@ log_dir="$TC_DOCS/logs"
 mkdir -p "$log_dir"
 log="$log_dir/local-build-$(date +%Y%m%d-%H%M%S).log"
 version="$(tc_version)"
-echo "Збираю Track Catcher v$version на телефоні… (перший раз — 5–10 хв)"
-if "$gradle" -p android :app:assembleRelease --stacktrace > "$log" 2>&1; then
+if [ -n "$offline" ]; then
+  echo "Збираю Track Catcher v$version на телефоні без інтернету…"
+else
+  echo "Збираю Track Catcher v$version на телефоні… (перший раз — 5–10 хв, качає бібліотеки)"
+fi
+echo "Код — з цієї папки (останнє оновлення: пункт 1)."
+if "$gradle" -p android :app:assembleRelease $offline --stacktrace > "$log" 2>&1; then
   apk="$TC_REPO/android/app/build/outputs/apk/release/app-release.apk"
   [ -s "$apk" ] || { fail "Збірка пройшла, але APK не знайдено."; exit 1; }
   dest_dir="$TC_DOCS/apk/v$version-local"
@@ -34,6 +42,11 @@ if "$gradle" -p android :app:assembleRelease --stacktrace > "$log" 2>&1; then
   echo "Відкриваю встановлення — натисни «Оновити»."
   tc_open "$dest" || warn "Відкрий файл у «Моїх файлах»."
 else
+  if [ -n "$offline" ] && grep -q "No cached version\|offline mode" "$log"; then
+    fail "Без інтернету не вийшло: бібліотек ще немає в кеші."
+    info "Один раз збери з інтернетом (пункт 11) — далі пункт 12 працюватиме офлайн."
+    exit 1
+  fi
   fail "Збірка не вдалась. Коротко:"
   sed -n '/What went wrong/,/^\* Try/p' "$log" | grep -v '^\* Try' | head -n 30
   info "Повний лог: Documents/Track Catcher/logs/$(basename "$log")"

@@ -38,4 +38,4 @@ git clone https://github.com/faric-ua/faric-track-catcher ~/faric-track-catcher 
 
 ## Резерв — збірка на телефоні
 
-Меню → **11** (як Dorama DEV 17). Потрібні ті самі речі, що для Dorama: Java 17, `~/android-sdk`, ARM64 `aapt2` (у `~/.gradle/gradle.properties`), `~/gradle/gradle-8.13`, плюс ключ з пункту 7. Лог — `Documents/Track Catcher/logs/`.
+Меню → **11** (як Dorama DEV 17). Перша збірка качає бібліотеки (AGP, Kotlin, jump3r) з Maven — потрібен інтернет, але не GitHub. Далі меню → **12** збирає **без інтернету** з кешу Gradle. Код береться з папки на телефоні (оновлюється пунктом 1, коли GitHub доступний). Потрібні ті самі речі, що для Dorama: Java 17, `~/android-sdk`, ARM64 `aapt2` (у `~/.gradle/gradle.properties`), `~/gradle/gradle-8.13`, плюс ключ з пункту 7. Лог — `Documents/Track Catcher/logs/`.
