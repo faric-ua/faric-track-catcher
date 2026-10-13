@@ -48,6 +48,7 @@ while true; do
   echo "  3 — Статус: що на GitHub і на телефоні"
   echo "  4 — Відкрити папку з записами"
   echo "  5 — Встановити APK, зібраний на іншому телефоні (для старого телефона)"
+  echo "  6 — Shell (командний рядок). Назад у меню: exit"
   echo
   echo " ПЕРШЕ НАЛАШТУВАННЯ (один раз)"
   echo "  7 — Ключ підпису: створити й передати в GitHub"
@@ -65,13 +66,31 @@ while true; do
     1)
       clear
       bash "$TOOLS/tc-sync.sh"
-      pause_menu
-      exec bash "$REPO/menu.sh"
+      rc=$?
+      if [ "$rc" = 0 ]; then
+        # оновилось — меню перезапускається саме, з новим кодом
+        echo "Перезапускаю меню…"
+        sleep 1
+        exec bash "$REPO/menu.sh"
+      elif [ "$rc" = 10 ]; then
+        sleep 1
+      else
+        pause_menu
+      fi
       ;;
     2) run_tool tc-install-latest.sh ;;
     3) run_tool tc-status.sh ;;
     4) run_tool tc-open-folder.sh ;;
     5) run_tool tc-install-phone-build.sh ;;
+    6)
+      clear
+      echo "Shell у папці Track Catcher. Щоб повернутись у меню — набери: exit"
+      echo
+      (cd "$REPO" && bash -l) || true
+      # після exit — меню знову, з автооновленням (раптом щось змінилось)
+      unset TC_MENU_SYNCED
+      exec bash "$REPO/menu.sh"
+      ;;
     7) run_tool tc-signing-setup.sh ;;
     8) run_tool tc-signing-backup.sh ;;
     9) run_tool tc-widget.sh ;;
