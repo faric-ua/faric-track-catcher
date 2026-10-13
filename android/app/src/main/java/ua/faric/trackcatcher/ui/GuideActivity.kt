@@ -52,12 +52,19 @@ class GuideActivity : Activity() {
                 }
             }
         }
-        ViewCompat.setOnApplyWindowInsetsListener(web) { v, insets ->
+        // WebView не зсуває вміст через padding — відступи від смуг дає контейнер (знайдено на емуляторі).
+        val frame = android.widget.FrameLayout(this).apply {
+            setBackgroundColor(Palette.bg)
+            addView(web, android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            ))
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(frame) { v, insets ->
             val b = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             v.setPadding(b.left, b.top, b.right, b.bottom)
             WindowInsetsCompat.CONSUMED
         }
-        setContentView(web)
+        setContentView(frame)
         web.loadUrl(savedInstanceState?.getString(KEY_URL) ?: urlFor(intent.getStringExtra(EXTRA_SECTION)))
         if (Build.VERSION.SDK_INT >= 33) {
             val cb = OnBackInvokedCallback { goBack() }
