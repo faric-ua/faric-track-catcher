@@ -28,6 +28,8 @@ object Classifier {
         minLengthSec: Int,
     ): Verdict {
         if (audibleMs < 1_000) {
+            // Тиша до того, як щось заграло (назви ще немає), — не помилка плеєра.
+            if (meta.isUnknown) return Verdict(RecStatus.SKIPPED, listOf("тиша — музика ще не грала"))
             return if (lengthMs >= 5_000) {
                 Verdict(RecStatus.FAILED, listOf("тиша — цей плеєр, схоже, не дає себе записувати"))
             } else {

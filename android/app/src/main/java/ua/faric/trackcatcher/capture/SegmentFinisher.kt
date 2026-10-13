@@ -79,7 +79,9 @@ class SegmentFinisher(context: Context) {
             wavUri = wav?.uri, wavName = wav?.name, wavSize = wav?.size ?: 0L,
             cutBySilence = job.cutBySilence,
         )
-        val id = db.insert(row)
+        // Порожній шматок (менше секунди тиші — напр. «Стоп» одразу після «Почати») в історію не пишемо.
+        val empty = verdict.status == RecStatus.SKIPPED && lengthMs < 1_000 && stats.audibleMs == 0L
+        val id = if (empty) 0L else db.insert(row)
         job.pcmFile.delete()
         job.sidecar.delete()
         return row.copy(id = id)
