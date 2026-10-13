@@ -1,0 +1,35 @@
+name: Checks
+
+# Python-тести контрактів, аудит інтерфейсу, аудит публічного репо, синтаксис shell.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Shell syntax
+        run: |
+          set -euo pipefail
+          for f in menu.sh tools/termux/*.sh; do bash -n "$f"; done
+      - name: UI audit
+        run: python3 scripts/audit_ui.py
+      - name: Public repo audit
+        run: python3 scripts/audit_repo.py
+      - name: Contract tests
+        run: |
+          set -o pipefail
+          if ! python3 -m unittest discover -s tests -v 2>&1 | tee py-tests.log; then
+            grep -E 'FAIL:|ERROR:|AssertionError' py-tests.log | head -30 | while IFS= read -r line; do echo "::error title=Python tests::$line"; done
+            exit 1
+          fi

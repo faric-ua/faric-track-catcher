@@ -1,0 +1,203 @@
+name: Android
+
+# PR: тести + збірка (без ключа, лише перевірка, що компілюється).
+# main / ручний запуск: тести + збірка зі стабільним ключем + реліз vX.Y.Z (якщо такої версії ще нема).
+on:
+  pull_request:
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      PUBLISH: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Locate Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          test -d "$SDK_ROOT"
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -path '*/bin/sdkmanager' 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          test -x "$SDKMANAGER"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" >/dev/null
+          echo "BUILD_TOOLS=$ANDROID_SDK_ROOT/build-tools/35.0.0" >> "$GITHUB_ENV"
+
+      - name: Read version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' android/app/build.gradle.kts | head -n 1)"
+          CODE="$(sed -n 's/^ *versionCode = \([0-9]*\)$/\1/p' android/app/build.gradle.kts | head -n 1)"
+          test -n "$VERSION" && test -n "$CODE"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "CODE=$CODE" >> "$GITHUB_ENV"
+          echo "::notice title=VERSION::v$VERSION (build $CODE)"
+
+      # У середовищі Claude логи Actions недоступні — помилки компіляції й тестів дублюємо анотаціями.
+      - name: Unit tests
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! gradle -p android :app:testDebugUnitTest --console=plain 2>&1 | tee unit-tests.log; then
+            grep -E '^e: |FAILED|AssertionError|expected:|Exception' unit-tests.log | head -40 | while IFS= read -r line; do
+              echo "::error title=Unit tests::${line}"
+            done
+            exit 1
+          fi
+
+      - name: Media self-test (ffprobe)
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v ffprobe >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null; }
+          dir=android/app/build/media-selftest
+          for f in selftest.mp3 selftest.wav; do
+            info="$(ffprobe -v error -show_entries stream=codec_name,sample_rate,channels,bit_rate:format=duration:format_tags=title,artist,album -of default=nw=1 "$dir/$f" | tr '\n' ' ')"
+            echo "::notice title=MEDIA_SELFTEST $f::$info"
+            echo "$info" | grep -q "sample_rate=48000" || { echo "::error title=Media self-test::$f — не 48000 Гц"; exit 1; }
+            echo "$info" | grep -q "channels=2" || { echo "::error title=Media self-test::$f — не стерео"; exit 1; }
+            echo "$info" | grep -q "Обійми" || { echo "::error title=Media self-test::$f — немає назви в тегах"; exit 1; }
+          done
+          ffprobe -v error -show_entries stream=codec_name -of csv=p=0 "$dir/selftest.mp3" | grep -qx mp3
+          ffmpeg -v error -i "$dir/selftest.mp3" -f null - 2> decode.log || true
+          if [ -s decode.log ]; then echo "::error title=Media self-test::MP3 декодується з помилками: $(head -c 300 decode.log)"; exit 1; fi
+
+      - name: Prepare signing key
+        if: env.PUBLISH == 'true'
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.TC_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.TC_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.TC_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.TC_KEY_PASSWORD }}
+          CERT_SHA256: ${{ secrets.TC_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ] || [ -z "$CERT_SHA256" ]; then
+            echo "::warning title=Ключ підпису::Ключ ще не налаштовано. На телефоні: меню Track Catcher → 7. Реліз не публікую."
+            echo "SIGNED=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          KS="$RUNNER_TEMP/track-catcher.jks"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$KS"
+          keytool -list -keystore "$KS" -storepass "$STORE_PASSWORD" >/dev/null
+          echo "::add-mask::$STORE_PASSWORD"
+          echo "::add-mask::$KEY_PASSWORD"
+          {
+            echo "TC_KEYSTORE_PATH=$KS"
+            echo "TC_STORE_PASSWORD=$STORE_PASSWORD"
+            echo "TC_KEY_ALIAS=$KEY_ALIAS"
+            echo "TC_KEY_PASSWORD=$KEY_PASSWORD"
+            echo "TC_EXPECTED_CERT=$(printf '%s' "$CERT_SHA256" | tr -d ': ' | tr 'A-F' 'a-f')"
+            echo "SIGNED=true"
+          } >> "$GITHUB_ENV"
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! gradle -p android :app:assembleRelease --console=plain 2>&1 | tee assemble.log; then
+            grep -E '^e: |FAILED|error:' assemble.log | head -40 | while IFS= read -r line; do
+              echo "::error title=Android build::${line}"
+            done
+            exit 1
+          fi
+
+      - name: Verify and name APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=android/app/build/outputs/apk/release
+          mkdir -p dist
+          if [ "${SIGNED:-false}" = "true" ]; then
+            SRC="$OUT/app-release.apk"
+            test -s "$SRC"
+            "$BUILD_TOOLS/zipalign" -c -p 4 "$SRC"
+            CERT="$("$BUILD_TOOLS/apksigner" verify --print-certs "$SRC" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)"
+            if [ "$CERT" != "$TC_EXPECTED_CERT" ]; then
+              echo "::error title=Ключ підпису::Сертифікат APK ($CERT) не збігається з очікуваним — не публікую."
+              exit 1
+            fi
+            echo "::notice title=SIGNER_CERT_SHA256::$CERT"
+            APK="dist/Track-Catcher-v$VERSION.apk"
+          else
+            SRC="$(ls "$OUT"/app-release*.apk | head -n 1)"
+            APK="dist/Track-Catcher-v$VERSION-unsigned.apk"
+          fi
+          cp "$SRC" "$APK"
+          "$BUILD_TOOLS/aapt2" dump badging "$APK" | head -n 3
+          (cd dist && sha256sum "$(basename "$APK")" > "$(basename "$APK").sha256")
+          echo "::notice title=APK_SHA256::$(cut -d' ' -f1 "$APK.sha256")  $(basename "$APK")"
+          echo "APK=$APK" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Track-Catcher-v${{ env.VERSION }}
+          path: dist/
+          retention-days: 14
+
+      - name: Publish release
+        if: env.PUBLISH == 'true' && env.SIGNED == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="v$VERSION"
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::warning title=Реліз::$TAG уже опубліковано — новий реліз лише з новою версією (versionName/versionCode)."
+            exit 0
+          fi
+          SHA_LINE="$(cat "$APK.sha256")"
+          NOTES="Track Catcher $VERSION (build $CODE)
+          Коміт: $GITHUB_SHA
+          Збірка: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          APK SHA-256: $SHA_LINE
+          Перевірка на телефоні: ще не було (phone-qa-pending).
+          Встановлення: меню Track Catcher → 2."
+          gh release create "$TAG" "$APK" "$APK.sha256" -R "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --prerelease --title "Track Catcher $VERSION" --notes "$NOTES"
+          echo "::notice title=RELEASE::$TAG опубліковано"
