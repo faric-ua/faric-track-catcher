@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.window.OnBackInvokedCallback
@@ -14,9 +15,12 @@ import android.window.OnBackInvokedDispatcher
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.webkit.WebViewAssetLoader
 
 /**
  * Інструкція користувача — сторінка з assets/guide (працює без інтернету).
+ * Віддається через WebViewAssetLoader (https://appassets.androidplatform.net/assets/…):
+ * з file:// WebView не показував картинки (знайдено на емуляторі, v0.1.2).
  * Головна: список можливостей; дотик → докладний розділ. «Назад» — на попередній розділ.
  */
 class GuideActivity : Activity() {
@@ -27,15 +31,21 @@ class GuideActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        val assets = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
         web = WebView(this).apply {
             setBackgroundColor(Palette.bg)
             settings.javaScriptEnabled = true // лише перемикання розділів у локальній сторінці
             settings.allowFileAccess = false
             settings.allowContentAccess = false
             webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                    assets.shouldInterceptRequest(request.url)
+
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val url = request.url
-                    if (url.scheme == "file") return false
+                    if (url.host == WebViewAssetLoader.DEFAULT_DOMAIN) return false
                     // Зовнішні посилання (GitHub) — у браузері.
                     runCatching { startActivity(Intent(Intent.ACTION_VIEW, url)) }
                     return true
@@ -48,14 +58,22 @@ class GuideActivity : Activity() {
             WindowInsetsCompat.CONSUMED
         }
         setContentView(web)
-        val section = savedInstanceState?.getString(KEY_URL) ?: intent.getStringExtra(EXTRA_SECTION)?.let { "$START#$it" } ?: START
-        web.loadUrl(section)
+        web.loadUrl(savedInstanceState?.getString(KEY_URL) ?: urlFor(intent.getStringExtra(EXTRA_SECTION)))
         if (Build.VERSION.SDK_INT >= 33) {
             val cb = OnBackInvokedCallback { goBack() }
             backCallback = cb
             onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb)
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        web.loadUrl(urlFor(intent.getStringExtra(EXTRA_SECTION)))
+    }
+
+    private fun urlFor(section: String?): String =
+        if (section.isNullOrBlank() || section == "home") START else "$START#$section"
 
     private fun goBack() {
         if (web.canGoBack()) web.goBack() else finish()
@@ -80,7 +98,7 @@ class GuideActivity : Activity() {
     }
 
     companion object {
-        private const val START = "file:///android_asset/guide/index.html"
+        private const val START = "https://" + WebViewAssetLoader.DEFAULT_DOMAIN + "/assets/guide/index.html"
         private const val KEY_URL = "url"
         private const val EXTRA_SECTION = "section"
 

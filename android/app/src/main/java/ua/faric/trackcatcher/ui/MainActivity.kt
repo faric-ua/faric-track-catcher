@@ -113,7 +113,6 @@ class MainActivity : Activity() {
         if (i == null) return
         DemoData.apply(this, i)
         i.getStringExtra(EXTRA_TAB)?.let { name -> Tab.entries.firstOrNull { it.name == name } }?.let { if (it != tab) showTab(it) }
-        if (BuildConfig.DEBUG && i.hasExtra("guide")) GuideActivity.open(this, i.getStringExtra("guide")?.ifBlank { null })
         if (BuildConfig.DEBUG) {
             i.getStringExtra("dialog")?.let { if (it == NightScreen.KEY) showNightScreen() else screen?.restoreDialog(it) }
         }

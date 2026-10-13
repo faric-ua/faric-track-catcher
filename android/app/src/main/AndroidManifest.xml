@@ -44,7 +44,8 @@
         <!-- Інструкція: поворот не перезавантажує сторінку (лишаєшся в тому самому розділі). -->
         <activity
             android:name=".ui.GuideActivity"
-            android:exported="false"
+            android:exported="true"
+            android:launchMode="singleTop"
             android:label="Інструкція"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize" />
 

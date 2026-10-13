@@ -88,6 +88,8 @@ kotlin {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
+    // Інструкція користувача: сторінка з assets через https-адресу (картинки з file:// не вантажились).
+    implementation("androidx.webkit:webkit:1.12.1")
     // MP3: Java-порт LAME 3.98.4 (LGPL-2.1+), без NDK — збирається і в CI, і на телефоні.
     implementation("de.sciss:jump3r:1.0.5")
 

@@ -58,15 +58,16 @@ start --es tab SETTINGS
 shot l04-settings-two-pane
 rotate 0
 shot p07-settings
-# інструкція користувача
-start --es guide ""
-shot g01-guide-home 4
-adb shell input keyevent KEYCODE_BACK
-start --es guide record
+# інструкція користувача (окреме вікно; singleTop — розділи змінюються без закриття)
+guide() { adb shell am start -n "$PKG/ua.faric.trackcatcher.ui.GuideActivity" --es section "$1" >/dev/null; }
+guide home
+shot g01-guide-home 5
+guide record
 shot g02-guide-record 4
-adb shell input keyevent KEYCODE_BACK
-start --es guide history
+guide history
 shot g03-guide-history 4
+guide night
+shot g04-guide-night 4
 adb shell input keyevent KEYCODE_BACK
 start --es tab SETTINGS
 adb shell settings put system font_scale 1.3
