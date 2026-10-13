@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MENU = (ROOT / "menu.sh").read_text(encoding="utf-8")
-STABLE_ITEMS = {"1", "2", "3", "4", "5", "7", "8", "9", "11", "12", "0"}
+STABLE_ITEMS = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "11", "12", "0"}
 
 
 def git(cwd, *args):
@@ -32,6 +32,22 @@ class MenuContract(unittest.TestCase):
             text = f.read_text(encoding="utf-8")
             for bad in ("reset --hard", "git clean", "push --force", "rm -rf"):
                 self.assertNotIn(bad, text, f"{f.name}: {bad}")
+
+    def test_widget_launcher_syncs_then_opens_menu(self):
+        w = (ROOT / "termux-widget/Track Catcher").read_text(encoding="utf-8")
+        self.assertTrue(w.startswith("#!/data/data/com.termux/files/usr/bin/bash"))
+        self.assertLess(w.index("tc-sync.sh"), w.index('exec bash "$MENU"'))
+        self.assertIn("TC_MENU_SYNCED=1", w)
+        self.assertIn('PROJECT="$HOME/faric-track-catcher"', w)
+        self.assertIn("tc-widget.sh\" --quiet", MENU)
+        self.assertNotIn("rm -", (ROOT / "tools/termux/tc-widget.sh").read_text(encoding="utf-8"))
+
+    def test_shell_returns_to_menu_and_update_restarts(self):
+        shell = MENU[MENU.index("    6)"):MENU.index("    7)")]
+        self.assertIn("bash -l", shell)
+        self.assertIn('exec bash "$REPO/menu.sh"', shell)
+        upd = MENU[MENU.index("    1)"):MENU.index("    2)")]
+        self.assertLess(upd.index('if [ "$rc" = 0 ]'), upd.index('exec bash "$REPO/menu.sh"'))
 
     def test_second_phone_never_creates_second_key(self):
         setup = (ROOT / "tools/termux/tc-signing-setup.sh").read_text(encoding="utf-8")
