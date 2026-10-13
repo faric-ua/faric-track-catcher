@@ -22,6 +22,9 @@ if [ -z "${TC_MENU_SYNCED:-}" ]; then
   fi
 fi
 
+# Ярлик Termux:Widget завжди відповідає репо (ставиться/оновлюється тихо).
+bash "$TOOLS/tc-widget.sh" --quiet 2>/dev/null || true
+
 pause_menu() {
   echo
   read -r -p "Натисни Enter, щоб повернутись у меню…" _
@@ -49,7 +52,7 @@ while true; do
   echo " ПЕРШЕ НАЛАШТУВАННЯ (один раз)"
   echo "  7 — Ключ підпису: створити й передати в GitHub"
   echo "  8 — Ключ підпису: резервна копія в Documents"
-  echo "  9 — Ярлик «Track Catcher» для Termux:Widget"
+  echo "  9 — Ярлик «Track Catcher» для Termux:Widget (ставиться сам; тут — підказка)"
   echo
   echo " РЕЗЕРВ"
   echo " 11 — Зібрати APK на телефоні, встановити й відправити на GitHub"

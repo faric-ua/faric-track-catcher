@@ -8,7 +8,7 @@
 git clone https://github.com/faric-ua/faric-track-catcher ~/faric-track-catcher && bash ~/faric-track-catcher/menu.sh
 ```
 
-Потім у меню: **9** — ярлик «Track Catcher» для Termux:Widget (далі меню відкривається одним дотиком).
+Ярлик «Track Catcher» для Termux:Widget ставиться сам, щойно меню відкрилось (файл `termux-widget/Track Catcher` у репо → `~/.shortcuts`). На віджеті натисни оновлення (⟳) — з'явиться «Track Catcher». Дотик: меню саме оновлюється з GitHub і відкривається. Пункт **9** — те саме вручну з підказкою.
 
 ## Один раз — ключ підпису
 

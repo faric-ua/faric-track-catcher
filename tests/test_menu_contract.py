@@ -33,6 +33,15 @@ class MenuContract(unittest.TestCase):
             for bad in ("reset --hard", "git clean", "push --force", "rm -rf"):
                 self.assertNotIn(bad, text, f"{f.name}: {bad}")
 
+    def test_widget_launcher_syncs_then_opens_menu(self):
+        w = (ROOT / "termux-widget/Track Catcher").read_text(encoding="utf-8")
+        self.assertTrue(w.startswith("#!/data/data/com.termux/files/usr/bin/bash"))
+        self.assertLess(w.index("tc-sync.sh"), w.index('exec bash "$MENU"'))
+        self.assertIn("TC_MENU_SYNCED=1", w)
+        self.assertIn('PROJECT="$HOME/faric-track-catcher"', w)
+        self.assertIn("tc-widget.sh\" --quiet", MENU)
+        self.assertNotIn("rm -", (ROOT / "tools/termux/tc-widget.sh").read_text(encoding="utf-8"))
+
     def test_second_phone_never_creates_second_key(self):
         setup = (ROOT / "tools/termux/tc-signing-setup.sh").read_text(encoding="utf-8")
         guard = setup.index("gh secret list")

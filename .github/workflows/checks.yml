@@ -21,7 +21,7 @@ jobs:
       - name: Shell syntax
         run: |
           set -euo pipefail
-          for f in menu.sh tools/termux/*.sh; do bash -n "$f"; done
+          for f in menu.sh tools/termux/*.sh "termux-widget/Track Catcher"; do bash -n "$f"; done
       - name: UI audit
         run: python3 scripts/audit_ui.py
       - name: Public repo audit
