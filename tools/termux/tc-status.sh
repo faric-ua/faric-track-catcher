@@ -31,4 +31,6 @@ if tc_gh_ready; then
 else
   warn "gh не увійшов у GitHub — частину статусу не видно"
 fi
+inst="$(pm list packages --show-versioncode ua.faric.trackcatcher 2>/dev/null | sed -n 's/.*versionCode:\([0-9]*\).*/\1/p' | head -n 1)"
+if [ -n "$inst" ]; then ok "Встановлено на телефоні: build $inst"; else info "Встановлену версію Android не показав (або Track Catcher ще не встановлено)"; fi
 if [ -f "$TC_KEY" ]; then ok "Ключ підпису на телефоні: є"; else warn "Ключа на телефоні немає — пункт 7"; fi
