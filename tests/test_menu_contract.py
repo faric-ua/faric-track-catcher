@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MENU = (ROOT / "menu.sh").read_text(encoding="utf-8")
-STABLE_ITEMS = {"1", "2", "3", "4", "7", "8", "9", "11", "12", "0"}
+STABLE_ITEMS = {"1", "2", "3", "4", "5", "7", "8", "9", "11", "12", "0"}
 
 
 def git(cwd, *args):
@@ -32,6 +32,22 @@ class MenuContract(unittest.TestCase):
             text = f.read_text(encoding="utf-8")
             for bad in ("reset --hard", "git clean", "push --force", "rm -rf"):
                 self.assertNotIn(bad, text, f"{f.name}: {bad}")
+
+    def test_second_phone_never_creates_second_key(self):
+        setup = (ROOT / "tools/termux/tc-signing-setup.sh").read_text(encoding="utf-8")
+        guard = setup.index("gh secret list")
+        create = setup.index("keytool -genkeypair")
+        self.assertLess(guard, create, "перевірка «ключ уже в GitHub» має бути до створення ключа")
+
+    def test_phone_build_goes_to_separate_release(self):
+        pub = (ROOT / "tools/termux/tc-publish-phone-apk.sh").read_text(encoding="utf-8")
+        inst = (ROOT / "tools/termux/tc-install-latest.sh").read_text(encoding="utf-8")
+        self.assertIn('TAG="phone-build"', pub)
+        self.assertIn("git diff --quiet HEAD -- android", pub)  # опис = код у Git
+        self.assertNotIn("--force", pub)
+        self.assertIn("grep -v '^phone-build$'", inst)  # пункт 2 — лише офіційні релізи
+        build = (ROOT / "tools/termux/tc-local-build.sh").read_text(encoding="utf-8")
+        self.assertIn("tc-publish-phone-apk.sh", build)
 
     def test_phone_and_ci_use_same_gradle_and_signing_names(self):
         build = (ROOT / "tools/termux/tc-local-build.sh").read_text(encoding="utf-8")
