@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="tc_bg">#FF0E1116</color>
+    <color name="tc_accent">#FFFFB15A</color>
+    <color name="ic_launcher_background">#FF0E1116</color>
+
+    <style name="Theme.TrackCatcher" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/tc_bg</item>
+        <item name="android:colorBackground">@color/tc_bg</item>
+        <item name="android:colorAccent">@color/tc_accent</item>
+        <item name="android:colorPrimary">@color/tc_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+</resources>
