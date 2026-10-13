@@ -9,7 +9,11 @@ ACT="$PKG/ua.faric.trackcatcher.ui.MainActivity"
 mkdir -p "$OUT"
 
 shot() { sleep "${2:-3}"; adb exec-out screencap -p > "$OUT/$1.png"; echo "знімок: $1"; }
-rotate() { adb shell settings put system user_rotation "$1"; sleep 3; }
+rotate() {
+  adb shell settings put system user_rotation "$1"
+  adb shell cmd window user-rotation lock "$1" >/dev/null 2>&1 || adb shell wm user-rotation lock "$1" >/dev/null 2>&1 || true
+  sleep 4
+}
 start() { adb shell am start -n "$ACT" "$@" >/dev/null; }
 
 adb wait-for-device
@@ -61,10 +65,13 @@ shot l05-history-font130
 rotate 0
 adb shell settings put system font_scale 1.0
 
-adb logcat -d -b crash > "$OUT/crash.txt" || true
+# Падіння лише нашого застосунку (системні застосунки емулятора теж іноді падають — їх не рахуємо).
+adb logcat -d -b crash > "$OUT/crash-all.txt" || true
+grep -A 30 "Process: $PKG" "$OUT/crash-all.txt" > "$OUT/crash.txt" || true
 adb logcat -d -s AndroidRuntime:E > "$OUT/runtime-errors.txt" || true
+adb shell wm size > "$OUT/display.txt" 2>&1 || true
 if [ -s "$OUT/crash.txt" ]; then
-  echo "::error title=UI screens::Застосунок падав на емуляторі: $(head -c 400 "$OUT/crash.txt" | tr '\n' ' ')"
+  echo "::error title=UI screens::Track Catcher падав на емуляторі: $(head -c 600 "$OUT/crash.txt" | tr '\n' ' ')"
   exit 1
 fi
 echo "::notice title=UI screens::$(ls "$OUT"/*.png | wc -l) знімків, падінь немає"

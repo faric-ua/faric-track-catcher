@@ -136,7 +136,11 @@ class MainActivity : Activity() {
             }
             rail.addView(brand(vertical = true), ui.matchWrap())
             for (t in Tab.entries) {
-                val b = ui.choice("${t.glyph}\n${t.label}", t == tab) { showTab(t) }.apply { textSize = 13f }
+                val b = ui.choice("${t.glyph}\n${t.label}", t == tab) { showTab(t) }.apply {
+                    textSize = 13f
+                    maxLines = 3
+                    setPadding(ui.dp(6), ui.dp(8), ui.dp(6), ui.dp(8))
+                }
                 tabButtons[t] = b
                 rail.addView(b, ui.matchWrap())
             }
@@ -157,7 +161,12 @@ class MainActivity : Activity() {
                 setBackgroundColor(Palette.surface)
             }
             for (t in Tab.entries) {
-                val b = ui.choice("${t.glyph}\n${t.label}", t == tab) { showTab(t) }.apply { textSize = 12.5f }
+                val b = ui.choice("${t.glyph}\n${t.label}", t == tab) { showTab(t) }.apply {
+                    textSize = 12.5f
+                    // великий шрифт: «Налаштування» має влізти — менші поля, дозволено 3 рядки
+                    maxLines = 3
+                    setPadding(ui.dp(4), ui.dp(6), ui.dp(4), ui.dp(6))
+                }
                 tabButtons[t] = b
                 bar.addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             }
