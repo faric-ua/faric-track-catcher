@@ -30,7 +30,22 @@ else
   echo "Збираю Track Catcher v$version на телефоні… (перший раз — 5–10 хв, качає бібліотеки)"
 fi
 echo "Код — з цієї папки (останнє оновлення: пункт 1)."
-if "$gradle" -p android :app:assembleRelease $offline --stacktrace > "$log" 2>&1; then
+# Збірка у фоні, а на екрані — час і що зараз робиться (щоб не здавалось, що зависло).
+"$gradle" -p android :app:assembleRelease $offline --stacktrace --console=plain > "$log" 2>&1 &
+pid=$!
+start=$(date +%s)
+while kill -0 "$pid" 2>/dev/null; do
+  sleep 3
+  el=$(( $(date +%s) - start ))
+  step="$(grep -E '^> Task |Download |^> Configure' "$log" 2>/dev/null | tail -n 1 | sed 's/^> //; s#https\?://[^ ]*/##' | cut -c1-52)"
+  printf '\r⏳ %d:%02d  %-52s' $((el / 60)) $((el % 60)) "${step:-готуюсь…}"
+done
+wait "$pid"
+rc=$?
+el=$(( $(date +%s) - start ))
+printf '\r%-70s\r' ""
+echo "Час збірки: $((el / 60)) хв $((el % 60)) с"
+if [ "$rc" = 0 ]; then
   apk="$TC_REPO/android/app/build/outputs/apk/release/app-release.apk"
   [ -s "$apk" ] || { fail "Збірка пройшла, але APK не знайдено."; exit 1; }
   dest_dir="$TC_DOCS/apk/v$version-local"

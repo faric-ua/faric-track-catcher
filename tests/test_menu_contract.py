@@ -49,6 +49,11 @@ class MenuContract(unittest.TestCase):
         upd = MENU[MENU.index("    1)"):MENU.index("    2)")]
         self.assertLess(upd.index('if [ "$rc" = 0 ]'), upd.index('exec bash "$REPO/menu.sh"'))
 
+    def test_local_build_shows_progress(self):
+        b = (ROOT / "tools/termux/tc-local-build.sh").read_text(encoding="utf-8")
+        self.assertIn('kill -0 "$pid"', b)
+        self.assertIn('wait "$pid"', b)
+
     def test_second_phone_never_creates_second_key(self):
         setup = (ROOT / "tools/termux/tc-signing-setup.sh").read_text(encoding="utf-8")
         guard = setup.index("gh secret list")
