@@ -22,6 +22,8 @@ adb shell settings put global transition_animation_scale 0
 adb shell settings put global animator_duration_scale 0
 adb shell settings put system accelerometer_rotation 0
 adb shell settings put system font_scale 1.0
+# не показувати системну підказку «Viewing full screen» над нічним екраном
+adb shell settings put secure immersive_mode_confirmations confirmed || true
 adb install -r "$APK"
 adb logcat -c
 rotate 0
@@ -56,6 +58,17 @@ start --es tab SETTINGS
 shot l04-settings-two-pane
 rotate 0
 shot p07-settings
+# інструкція користувача
+start --es guide ""
+shot g01-guide-home 4
+adb shell input keyevent KEYCODE_BACK
+start --es guide record
+shot g02-guide-record 4
+adb shell input keyevent KEYCODE_BACK
+start --es guide history
+shot g03-guide-history 4
+adb shell input keyevent KEYCODE_BACK
+start --es tab SETTINGS
 adb shell settings put system font_scale 1.3
 sleep 2
 start --es tab RECORD
