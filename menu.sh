@@ -36,28 +36,41 @@ run_tool() {
   pause_menu
 }
 
+installed_build() {
+  # versionCode встановленого Track Catcher (якщо Android дозволяє Termux це побачити)
+  pm list packages --show-versioncode ua.faric.trackcatcher 2>/dev/null | sed -n 's/.*versionCode:\([0-9]*\).*/\1/p' | head -n 1
+}
+
 while true; do
   clear
   version="$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' "$REPO/android/app/build.gradle.kts" 2>/dev/null | head -n 1)"
+  code="$(sed -n 's/^ *versionCode = \([0-9]*\)$/\1/p' "$REPO/android/app/build.gradle.kts" 2>/dev/null | head -n 1)"
+  inst="$(installed_build)"
   echo "Track Catcher · меню"
-  echo "$(git branch --show-current 2>/dev/null) · $(git rev-parse --short HEAD 2>/dev/null) · у репо v${version:-?}"
+  echo "$(git branch --show-current 2>/dev/null) · $(git rev-parse --short HEAD 2>/dev/null) · нова версія v${version:-?} (build ${code:-?})"
+  if [ -n "$inst" ]; then
+    if [ "$inst" = "$code" ]; then echo "На телефоні: build $inst — найновіша"; else echo "На телефоні: build $inst — є новіша, пункт 2"; fi
+  fi
+  echo
+  echo " ВСТАНОВИТИ / ОНОВИТИ ЗАСТОСУНОК"
+  echo "  2 — Встановити нову версію з GitHub"
+  echo " 10 — Вікно встановлення сховалось? Відкрити ще раз"
+  echo "  5 — Встановити версію, зібрану на іншому телефоні"
   echo
   echo " ЩОДНЯ"
-  echo "  1 — Оновити меню з GitHub"
-  echo "  2 — Встановити останній реліз (завантажити, перевірити, відкрити встановлення)"
-  echo "  3 — Статус: що на GitHub і на телефоні"
+  echo "  1 — Оновити це меню"
+  echo "  3 — Статус: що на GitHub і що на телефоні"
   echo "  4 — Відкрити папку з записами"
-  echo "  5 — Встановити APK, зібраний на іншому телефоні (для старого телефона)"
-  echo "  6 — Shell (командний рядок). Назад у меню: exit"
+  echo "  6 — Командний рядок (shell). Назад у меню: exit"
+  echo
+  echo " ЗБІРКА НА ЦЬОМУ ТЕЛЕФОНІ"
+  echo " 11 — Зібрати тут і встановити (і відправити для іншого телефона)"
+  echo " 12 — Зібрати тут без інтернету"
   echo
   echo " ПЕРШЕ НАЛАШТУВАННЯ (один раз)"
-  echo "  7 — Ключ підпису: створити й передати в GitHub"
-  echo "  8 — Ключ підпису: резервна копія в Documents"
-  echo "  9 — Ярлик «Track Catcher» для Termux:Widget (ставиться сам; тут — підказка)"
-  echo
-  echo " РЕЗЕРВ"
-  echo " 11 — Зібрати APK на телефоні, встановити й відправити на GitHub"
-  echo " 12 — Зібрати на телефоні БЕЗ інтернету (після першої збірки)"
+  echo "  7 — Ключ підпису: створити (лише на основному телефоні)"
+  echo "  8 — Ключ підпису: резервна копія"
+  echo "  9 — Ярлик меню на головному екрані (Termux:Widget)"
   echo
   echo "  0 — Вийти"
   echo
@@ -94,6 +107,7 @@ while true; do
     7) run_tool tc-signing-setup.sh ;;
     8) run_tool tc-signing-backup.sh ;;
     9) run_tool tc-widget.sh ;;
+    10) run_tool tc-reopen-install.sh ;;
     11) run_tool tc-local-build.sh ;;
     12)
       clear
