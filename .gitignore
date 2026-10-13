@@ -1,0 +1,34 @@
+# Track Catcher — публічний репозиторій.
+# Ключі підпису й паролі — ніколи в Git.
+*.jks
+*.jks.*
+*.keystore
+*.keystore.*
+*.p12
+*signing.properties
+.env*
+*.pem
+*.key
+
+# Записи й медіа — ніколи в Git (особисті).
+*.wav
+*.WAV
+*.mp3
+*.MP3
+*.m4a
+*.flac
+*.ogg
+*.pcm
+recordings/
+
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+.kotlin/
+.idea/
+*.iml
+
+# Python
+__pycache__/
+*.py[cod]
