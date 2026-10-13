@@ -60,6 +60,7 @@ class MainActivity : Activity() {
     private var backCallback: Any? = null
     private var backRegistered = false
     private val handler = Handler(Looper.getMainLooper())
+    private var night: NightScreen? = null
     private val tick = object : Runnable {
         override fun run() {
             renderChip(RecorderHub.state)
@@ -95,7 +96,9 @@ class MainActivity : Activity() {
         }
         buildChrome()
         showTab(tab)
-        savedInstanceState?.getString(KEY_DIALOG)?.let { key -> screen?.restoreDialog(key) }
+        savedInstanceState?.getString(KEY_DIALOG)?.let { key ->
+            if (key == NightScreen.KEY) showNightScreen() else screen?.restoreDialog(key)
+        }
         if (savedInstanceState == null) applyIntent(intent)
     }
 
@@ -110,7 +113,9 @@ class MainActivity : Activity() {
         if (i == null) return
         DemoData.apply(this, i)
         i.getStringExtra(EXTRA_TAB)?.let { name -> Tab.entries.firstOrNull { it.name == name } }?.let { if (it != tab) showTab(it) }
-        if (BuildConfig.DEBUG) i.getStringExtra("dialog")?.let { screen?.restoreDialog(it) }
+        if (BuildConfig.DEBUG) {
+            i.getStringExtra("dialog")?.let { if (it == NightScreen.KEY) showNightScreen() else screen?.restoreDialog(it) }
+        }
     }
 
     // ---------- каркас ----------
@@ -146,7 +151,13 @@ class MainActivity : Activity() {
             }
             rail.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
             rail.addView(statusChip, ui.matchWrap())
-            frame.addView(rail, LinearLayout.LayoutParams(ui.dp(132), ViewGroup.LayoutParams.MATCH_PARENT))
+            // Великий шрифт: смуга прокручується, а не обрізається.
+            val railScroll = android.widget.ScrollView(this).apply {
+                isFillViewport = true
+                isVerticalScrollBarEnabled = false
+                addView(rail, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            }
+            frame.addView(railScroll, LinearLayout.LayoutParams(ui.dp(152), ViewGroup.LayoutParams.MATCH_PARENT))
             frame.addView(ui.divider().apply { layoutParams = LinearLayout.LayoutParams(maxOf(1, ui.dp(1) / 2), ViewGroup.LayoutParams.MATCH_PARENT) })
             frame.addView(content, ui.weight(1f))
         } else {
@@ -173,7 +184,10 @@ class MainActivity : Activity() {
             frame.addView(bar, ui.matchWrap())
         }
         root.addView(frame, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        overlay = Overlay(root, ui) { updateBackCallback() }
+        overlay = Overlay(root, ui) { key ->
+            if (key != NightScreen.KEY) night?.let { it.close(); night = null }
+            updateBackCallback()
+        }
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val b = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime(),
@@ -221,7 +235,17 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Чорний екран на мінімальній яскравості: телефон не блокується сам — Android не зупинить запис. */
+    fun showNightScreen() {
+        if (RecorderHub.state.phase != RecorderHub.Phase.RECORDING) return
+        val n = NightScreen(this) { overlay.dismiss() }
+        night = n
+        overlay.showFullScreen(NightScreen.KEY, n.view)
+        n.open()
+    }
+
     private fun renderChip(s: RecorderHub.State) {
+        if (s.phase != RecorderHub.Phase.RECORDING && night != null && overlay.key == NightScreen.KEY) overlay.dismiss()
         val text = when (s.phase) {
             RecorderHub.Phase.RECORDING -> "● " + TimeText.clock(System.currentTimeMillis() - s.startedAt) + " · " + s.tracks.coerceAtLeast(1)
             RecorderHub.Phase.FINISHING -> "Зберігаю…"
@@ -251,6 +275,7 @@ class MainActivity : Activity() {
         tracker.start()
         tracker.refresh()
         screen?.onResume()
+        if (overlay.key == NightScreen.KEY) night?.open()
         if (RecorderHub.state.phase == RecorderHub.Phase.IDLE && CaptureService.hasOrphans(this)) {
             runCatching { startService(CaptureService.recoverIntent(this)) }
         }
@@ -258,6 +283,7 @@ class MainActivity : Activity() {
 
     override fun onStop() {
         started = false
+        if (overlay.key == NightScreen.KEY) night?.pause()
         handler.removeCallbacks(tick)
         unobserveHub?.invoke()
         unobserveHub = null

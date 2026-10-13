@@ -37,7 +37,7 @@ class AuditTests(unittest.TestCase):
     def test_ui_audit_catches_missing_landscape(self):
         tmp = self._copy()
         f = tmp / "android/app/src/main/java/ua/faric/trackcatcher/ui/PlainScreen.kt"
-        f.write_text("package x\nclass PlainScreen\n", encoding="utf-8")
+        f.write_text("package x\nclass PlainScreen(host: MainActivity) : Screen(host)\n", encoding="utf-8")
         rules = {r for r, _ in audit_ui.audit(tmp)}
         self.assertIn("UI-05", rules)
 

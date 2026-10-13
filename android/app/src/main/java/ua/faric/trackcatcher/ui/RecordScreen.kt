@@ -49,6 +49,12 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val npExtra = ui.numbers(ui.text("", 13f, Palette.faint)).apply { maxLines = 2 }
 
     private val mainButton = ui.button("", Ui.Kind.REC, large = true) { onMain() }
+    private val nightButton = ui.button("☾ Нічний екран — щоб телефон не заблокувався", Ui.Kind.PRIMARY) { host.showNightScreen() }
+    private val nightHint = ui.text(
+        "Android 15+ зупиняє запис, коли екран блокується. Увімкни музику, повернись сюди й натисни «Нічний екран» — " +
+            "екран стане чорним і майже без підсвітки, а запис ітиме далі.",
+        12.5f, Palette.faint,
+    )
     private val formatLine = ui.text("", 14f, Palette.muted).apply {
         setPadding(ui.dp(4), ui.dp(2), ui.dp(4), ui.dp(2))
         isClickable = true
@@ -100,13 +106,16 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
 
         view = if (ui.twoPane) {
+            // Альбомна: головна кнопка має бути видно без прокрутки — стан і кнопка ліворуч, пісня праворуч.
             val left = ui.column(12).apply {
                 addView(statusCard, ui.matchWrap())
-                addView(nowCard, ui.matchWrap())
                 addView(mainButton, ui.matchWrap())
+                addView(nightButton, ui.matchWrap())
+                addView(nightHint, ui.matchWrap())
                 addView(formatLine, ui.matchWrap())
             }
             val right = ui.column(12).apply {
+                addView(nowCard, ui.matchWrap())
                 addView(permsSlot, ui.matchWrap())
                 addView(recentCard, ui.matchWrap())
             }
@@ -120,6 +129,8 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 addView(statusCard, ui.matchWrap())
                 addView(nowCard, ui.matchWrap())
                 addView(mainButton, ui.matchWrap())
+                addView(nightButton, ui.matchWrap())
+                addView(nightHint, ui.matchWrap())
                 addView(formatLine, ui.matchWrap())
                 addView(permsSlot, ui.matchWrap())
                 addView(recentCard, ui.matchWrap())
@@ -168,6 +179,9 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 ui.setEnabled(mainButton, false)
             }
         }
+        val recording = s.phase == RecorderHub.Phase.RECORDING
+        nightButton.visibility = if (recording) View.VISIBLE else View.GONE
+        nightHint.visibility = if (recording) View.VISIBLE else View.GONE
         warning.visibility = if (s.warning != null) View.VISIBLE else View.GONE
         warning.text = s.warning ?: ""
         errorBox.visibility = if (s.error != null) View.VISIBLE else View.GONE

@@ -84,10 +84,11 @@ def audit(root: Path) -> list[tuple[str, str]]:
     else:
         problems.append(("UI-04", "немає ui/Ui.kt"))
 
-    # UI-05: кожен екран має книжковий і альбомний варіант.
+    # UI-05: кожна вкладка (клас-нащадок Screen) має книжковий і альбомний варіант.
     for path in sources:
-        if path.name.endswith("Screen.kt") and path.name != "Screen.kt":
-            if "twoPane" not in path.read_text(encoding="utf-8"):
+        body = path.read_text(encoding="utf-8")
+        if re.search(r"\)\s*:\s*Screen\(host\)", body) or (path.name.endswith("Screen.kt") and "Screen(host)" in body):
+            if "twoPane" not in body:
                 problems.append(("UI-05", f"{path.relative_to(root).as_posix()}: немає альбомного варіанта (twoPane)"))
 
     # UI-08: вікна з ключем відновлюються після повороту.

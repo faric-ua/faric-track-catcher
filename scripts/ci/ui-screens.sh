@@ -36,6 +36,9 @@ start --ez demo_seed true --es tab RECORD
 shot p02-record-ready
 start --es demo_state recording --es tab RECORD
 shot p03-record-recording
+start --es demo_state recording --es tab RECORD --es dialog night
+shot p03b-night-screen
+adb shell input keyevent KEYCODE_BACK
 start --es tab HISTORY
 shot p04-history
 start --es tab HISTORY --es dialog detail:3

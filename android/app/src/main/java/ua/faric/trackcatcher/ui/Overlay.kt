@@ -49,6 +49,16 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
         onChange(key)
     }
 
+    /** Вікно на весь екран без рамки (нічний екран). */
+    fun showFullScreen(key: String, content: View) {
+        dismiss(notify = false)
+        this.key = key
+        content.isClickable = true
+        host.addView(content, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        layer = content
+        onChange(key)
+    }
+
     fun dismiss(notify: Boolean = true) {
         layer?.let { host.removeView(it) }
         layer = null

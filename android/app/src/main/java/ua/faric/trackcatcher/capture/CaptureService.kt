@@ -48,6 +48,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     @Volatile private var running = false
     @Volatile private var stopping = false
     @Volatile private var playerPaused = false
+    @Volatile private var userStop = false
 
     private var sessionId = 0L
     private var lastNotified = ""
@@ -66,7 +67,10 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> startRecording(intent)
-            ACTION_STOP -> stopRecording()
+            ACTION_STOP -> {
+                userStop = true
+                stopRecording()
+            }
             ACTION_RECOVER -> recoverOrphans()
         }
         return START_NOT_STICKY
@@ -77,6 +81,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     @SuppressLint("MissingPermission")
     private fun startRecording(intent: Intent) {
         if (running || stopping) return
+        userStop = false
         enterForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION, notification("Готуюсь до запису…", ""))
         val code = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
         val data: Intent? = if (Build.VERSION.SDK_INT >= 33) {
@@ -97,7 +102,16 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         }
         proj.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() {
-                main.post { stopRecording() }
+                main.post {
+                    if (running && !userStop) {
+                        // Android 15+ сам зупиняє запис, коли екран блокується.
+                        RecorderHub.update {
+                            it.copy(error = "Запис зупинив Android — найчастіше через блокування екрана. " +
+                                "Записане збережено. Наступного разу під час запису вмикай «Нічний екран».")
+                        }
+                    }
+                    stopRecording()
+                }
             }
         }, main)
         projection = proj

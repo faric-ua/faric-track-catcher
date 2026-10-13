@@ -27,6 +27,9 @@ object Palette {
     const val warningFill = 0xFF2B251F.toInt()
     const val meterOff = 0xFF262E3A.toInt()
     const val scrim = 0xCC05070A.toInt()
+    const val night = 0xFF000000.toInt()
+    const val nightText = 0xFF7A5A33.toInt()
+    const val nightFaint = 0xFF3A2C1C.toInt()
     const val ripple = 0x33FFFFFF
     const val transparent = 0x00000000
 }
