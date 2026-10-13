@@ -1,0 +1,1 @@
+diag-out/src/de/sciss/jump3r/lowlevel/LameEncoder.java

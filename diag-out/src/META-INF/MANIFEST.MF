@@ -1,0 +1,5 @@
+Manifest-Version: 1.0
+Specification-Vendor: de.sciss
+Specification-Title: jump3r
+Specification-Version: 1.0.5
+
