@@ -15,6 +15,8 @@ echo
 if tc_gh_ready; then
   rel="$(gh release list -R "$TC_SLUG" -L 1 --json tagName,publishedAt -q '.[0] | "\(.tagName) · \(.publishedAt)"' 2>/dev/null)"
   if [ -n "$rel" ]; then ok "Останній реліз: $rel"; else warn "Релізів ще немає"; fi
+  pb="$(gh release download phone-build -R "$TC_SLUG" -p phone-build.env -O - 2>/dev/null | sed -n 's/^VERSION_NAME=//p;s/^BUILT_AT=/ · зібрано /p' | tr -d '\n')"
+  [ -n "$pb" ] && info "APK з телефона (пункт 5): v$pb"
   echo
   echo "Останні збірки (Android):"
   gh run list -R "$TC_SLUG" -w android.yml -L 3 \

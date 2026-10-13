@@ -44,6 +44,7 @@ while true; do
   echo "  2 — Встановити останній реліз (завантажити, перевірити, відкрити встановлення)"
   echo "  3 — Статус: що на GitHub і на телефоні"
   echo "  4 — Відкрити папку з записами"
+  echo "  5 — Встановити APK, зібраний на іншому телефоні (для старого телефона)"
   echo
   echo " ПЕРШЕ НАЛАШТУВАННЯ (один раз)"
   echo "  7 — Ключ підпису: створити й передати в GitHub"
@@ -51,7 +52,7 @@ while true; do
   echo "  9 — Ярлик «Track Catcher» для Termux:Widget"
   echo
   echo " РЕЗЕРВ"
-  echo " 11 — Зібрати APK на телефоні й встановити"
+  echo " 11 — Зібрати APK на телефоні, встановити й відправити на GitHub"
   echo " 12 — Зібрати на телефоні БЕЗ інтернету (після першої збірки)"
   echo
   echo "  0 — Вийти"
@@ -67,6 +68,7 @@ while true; do
     2) run_tool tc-install-latest.sh ;;
     3) run_tool tc-status.sh ;;
     4) run_tool tc-open-folder.sh ;;
+    5) run_tool tc-install-phone-build.sh ;;
     7) run_tool tc-signing-setup.sh ;;
     8) run_tool tc-signing-backup.sh ;;
     9) run_tool tc-widget.sh ;;

@@ -7,11 +7,11 @@ tc_need_storage || exit 1
 echo "Шукаю останній реліз Track Catcher…"
 tag=""
 if tc_gh_ready; then
-  tag="$(gh release list -R "$TC_SLUG" -L 1 --exclude-drafts --json tagName -q '.[0].tagName' 2>/dev/null || true)"
+  tag="$(gh release list -R "$TC_SLUG" -L 10 --exclude-drafts --json tagName -q '.[].tagName' 2>/dev/null | grep -v '^phone-build$' | head -n 1 || true)"
 fi
 if [ -z "$tag" ]; then
-  tag="$(curl -fsSL "https://api.github.com/repos/$TC_SLUG/releases?per_page=1" 2>/dev/null \
-    | grep -o '"tag_name": *"[^"]*"' | head -n 1 | sed 's/.*"\([^"]*\)"$/\1/')"
+  tag="$(curl -fsSL "https://api.github.com/repos/$TC_SLUG/releases?per_page=10" 2>/dev/null \
+    | grep -o '"tag_name": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/' | grep -v '^phone-build$' | head -n 1)"
 fi
 if [ -z "$tag" ]; then
   fail "Релізів ще немає."

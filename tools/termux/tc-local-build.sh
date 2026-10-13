@@ -39,6 +39,8 @@ if "$gradle" -p android :app:assembleRelease $offline --stacktrace > "$log" 2>&1
   cp "$apk" "$dest"
   sha256sum "$dest" > "$dest.sha256"
   ok "Готово: Documents/Track Catcher/apk/v$version-local/"
+  # Для іншого (старого) телефона: той самий APK — на GitHub (меню 5 там). Без інтернету — просто пропускаємо.
+  bash "$(dirname -- "$0")/tc-publish-phone-apk.sh" "$dest" || true
   echo "Відкриваю встановлення — натисни «Оновити»."
   tc_open "$dest" || warn "Відкрий файл у «Моїх файлах»."
 else
