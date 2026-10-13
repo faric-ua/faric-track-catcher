@@ -1,0 +1,61 @@
+name: UI screens
+
+# Знімки екранів на емуляторі (книжкова/альбомна, шрифт 1.0/1.3, поворот з відкритим вікном).
+# Запуск: пуш у гілку diag/ui-screens* або вручну. Знімки — у гілці diag/ui-screens-out.
+on:
+  push:
+    branches: ["diag/ui-screens*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  screens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Build debug APK
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! gradle -p android :app:assembleDebug --console=plain 2>&1 | tee build.log; then
+            grep -E '^e: |FAILED' build.log | head -30 | while IFS= read -r l; do echo "::error title=Build::$l"; done
+            exit 1
+          fi
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Emulator screenshots
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash scripts/ci/ui-screens.sh ui-screens
+      - name: Push screenshots
+        if: always()
+        shell: bash
+        run: |
+          set -eu
+          [ -d ui-screens ] || exit 0
+          git config user.name "track-catcher-ci"
+          git config user.email "ci@users.noreply.github.com"
+          git checkout --orphan screens-out
+          git rm -rfq --cached . >/dev/null
+          git add -f ui-screens
+          git commit -qm "UI screens for $GITHUB_SHA"
+          git push -f origin HEAD:diag/ui-screens-out

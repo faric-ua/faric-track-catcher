@@ -15,7 +15,8 @@ FORBIDDEN_FILES = re.compile(r"\.(jks|keystore|p12|pem|key|wav|mp3|m4a|flac|ogg|
 SECRET_PATTERNS = [
     ("приватний ключ", re.compile("BEGIN (RSA |OPENSSH |EC )?PRIVATE" + " KEY")),
     ("токен GitHub", re.compile("gh" + "p_[A-Za-z0-9]{20,}|github" + "_pat_[A-Za-z0-9_]{20,}")),
-    ("пароль ключа", re.compile(r"(store|key)Password\s*=\s*[A-Za-z0-9]{8,}")),
+    # формат .properties: storePassword=значення (не змінна Gradle і не шаблон %s)
+    ("пароль ключа", re.compile(r"^\s*(store|key)Password=[^\s%$]{6,}", re.M)),
     ("особиста пошта", re.compile(r"[A-Za-z0-9._%+-]+@gmail\.com", re.I)),
 ]
 REQUIRED_IGNORES = ["*.jks", "*.keystore", "*signing.properties", "*.wav", "*.mp3", "local.properties"]

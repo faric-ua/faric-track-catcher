@@ -22,6 +22,7 @@ import android.window.OnBackInvokedDispatcher
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import ua.faric.trackcatcher.BuildConfig
 import ua.faric.trackcatcher.capture.CaptureService
 import ua.faric.trackcatcher.capture.NowPlayingTracker
 import ua.faric.trackcatcher.core.TimeText
@@ -95,6 +96,21 @@ class MainActivity : Activity() {
         buildChrome()
         showTab(tab)
         savedInstanceState?.getString(KEY_DIALOG)?.let { key -> screen?.restoreDialog(key) }
+        if (savedInstanceState == null) applyIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyIntent(intent)
+    }
+
+    /** Відкрити потрібну вкладку (і демо-стан для знімків екрана в CI — лише debug). */
+    private fun applyIntent(i: Intent?) {
+        if (i == null) return
+        DemoData.apply(this, i)
+        i.getStringExtra(EXTRA_TAB)?.let { name -> Tab.entries.firstOrNull { it.name == name } }?.let { if (it != tab) showTab(it) }
+        if (BuildConfig.DEBUG) i.getStringExtra("dialog")?.let { screen?.restoreDialog(it) }
     }
 
     // ---------- каркас ----------
@@ -347,6 +363,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        const val EXTRA_TAB = "tab"
         private const val KEY_TAB = "tab"
         private const val KEY_SCREENS = "screens"
         private const val KEY_DIALOG = "dialog"

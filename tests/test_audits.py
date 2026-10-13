@@ -44,7 +44,10 @@ class AuditTests(unittest.TestCase):
     def test_repo_audit_catches_key_and_email(self):
         tmp = self._copy()
         (tmp / "release.jks").write_bytes(b"x")
-        (tmp / "notes.md").write_text("пиши на someone.private@gmail.com\nstorePassword=abcdefgh1234\n", encoding="utf-8")
+        # Зразки складаються з частин, щоб у самому репо не було «пошти» й «пароля».
+        email = "someone.private" + "@" + "gmail.com"
+        secret = "store" + "Password=" + "abcdefgh1234"
+        (tmp / "notes.md").write_text(f"пиши на {email}\n{secret}\n", encoding="utf-8")
         rules = [r for r, _ in audit_repo.audit(tmp)]
         self.assertIn("REPO-01", rules)
         self.assertGreaterEqual(rules.count("REPO-02"), 2)
