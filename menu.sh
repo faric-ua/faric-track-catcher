@@ -52,6 +52,7 @@ while true; do
   echo
   echo " РЕЗЕРВ"
   echo " 11 — Зібрати APK на телефоні й встановити"
+  echo " 12 — Зібрати на телефоні БЕЗ інтернету (після першої збірки)"
   echo
   echo "  0 — Вийти"
   echo
@@ -70,6 +71,11 @@ while true; do
     8) run_tool tc-signing-backup.sh ;;
     9) run_tool tc-widget.sh ;;
     11) run_tool tc-local-build.sh ;;
+    12)
+      clear
+      bash "$TOOLS/tc-local-build.sh" --offline
+      pause_menu
+      ;;
     0 | q | Q) exit 0 ;;
     *) ;;
   esac

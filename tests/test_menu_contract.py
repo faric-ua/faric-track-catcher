@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MENU = (ROOT / "menu.sh").read_text(encoding="utf-8")
-STABLE_ITEMS = {"1", "2", "3", "4", "7", "8", "9", "11", "0"}
+STABLE_ITEMS = {"1", "2", "3", "4", "7", "8", "9", "11", "12", "0"}
 
 
 def git(cwd, *args):
