@@ -48,6 +48,15 @@ class BuildContract(unittest.TestCase):
         self.assertIn("::error title=Android build::", CI)
         self.assertIn("::notice title=APK_SHA256::", CI)
 
+    def test_guide_served_via_asset_loader(self):
+        g = (ROOT / "android/app/src/main/java/ua/faric/trackcatcher/ui/GuideActivity.kt").read_text(encoding="utf-8")
+        self.assertIn("WebViewAssetLoader", g)
+        self.assertNotIn('"file:///android_asset', g)  # з file:// картинки не вантажились
+        html = (ROOT / "android/app/src/main/assets/guide/index.html").read_text(encoding="utf-8")
+        import re
+        for src in re.findall(r'src="(img/[^"]+)"', html):
+            self.assertTrue((ROOT / "android/app/src/main/assets/guide" / src).is_file(), src)
+
     def test_manifest_capture_setup(self):
         for perm in ("RECORD_AUDIO", "FOREGROUND_SERVICE_MEDIA_PROJECTION", "POST_NOTIFICATIONS"):
             self.assertIn(f"android.permission.{perm}", MANIFEST)

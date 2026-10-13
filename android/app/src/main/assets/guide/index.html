@@ -1,0 +1,328 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Інструкція Track Catcher</title>
+<style>
+/* Інструкція Track Catcher. Свідомо одна тема — темна, як сам застосунок (кольори з ui/Palette.kt).
+   Сторінка працює без інтернету: системний шрифт, картинки й схеми — локальні. */
+:root{
+  --bg:#0E1116; --surface:#171C23; --surface-2:#202733; --border:#333D4B;
+  --text:#F2F5F8; --muted:#A3AEBB; --faint:#6B7684;
+  --accent:#FFB15A; --accent-fill:#2E2416; --rec:#FF5A4E; --rec-fill:#35191A;
+  --ok:#62D296; --ok-fill:#16271E; --part:#A99FFF; --part-fill:#242046; --bad:#FF7A88; --bad-fill:#3A1C21;
+  --font: system-ui, "Roboto", "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg); color:var(--text)}
+body{margin:0; font-family:var(--font); font-size:16px; line-height:1.55; -webkit-text-size-adjust:100%}
+.wrap{max-width:760px; margin:0 auto; padding-inline:16px; padding-block:20px 48px}
+h1,h2,h3{margin:0; line-height:1.25; text-wrap:balance; font-weight:600}
+h1{font-size:1.75rem}
+h2{font-size:1.35rem}
+h3{font-size:1.05rem}
+p{margin:0}
+a{color:var(--accent)}
+.stack{display:flex; flex-direction:column; gap:14px}
+.muted{color:var(--muted)}
+.small{font-size:.88rem}
+.label{font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600}
+.brand{display:flex; align-items:center; gap:10px}
+.dot{width:12px; height:12px; border-radius:50%; background:var(--rec); flex:none}
+.card{background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:16px}
+
+/* головна: список можливостей */
+.features{display:grid; grid-template-columns:1fr; gap:10px; margin:0; padding:0; list-style:none}
+@media (min-width:620px){ .features{grid-template-columns:1fr 1fr} }
+.features a{display:grid; grid-template-columns:44px 1fr 16px; gap:12px; align-items:center; min-height:64px;
+  text-decoration:none; color:var(--text); background:var(--surface); border:1px solid var(--border);
+  border-radius:16px; padding:12px 14px}
+.features a:active{border-color:var(--ok); background:var(--ok-fill)}
+.features .ic{width:44px; height:44px; border-radius:12px; display:grid; place-items:center; background:var(--surface-2); font-size:20px}
+.features b{display:block; font-weight:600}
+.features span.d{display:block; color:var(--muted); font-size:.88rem; line-height:1.4}
+.features .chev{color:var(--faint)}
+
+/* розділ */
+.back{display:inline-flex; align-items:center; gap:6px; min-height:44px; padding:8px 14px; border-radius:12px;
+  border:1px solid var(--border); background:var(--surface-2); color:var(--text); text-decoration:none; font-weight:600}
+ol.steps{list-style:none; margin:0; padding:0; counter-reset:s; display:flex; flex-direction:column; gap:12px}
+ol.steps li{counter-increment:s; display:grid; grid-template-columns:30px 1fr; gap:12px; align-items:start}
+ol.steps li::before{content:counter(s); width:28px; height:28px; border-radius:50%; display:grid; place-items:center;
+  background:var(--accent-fill); color:var(--accent); font-weight:700; font-size:.9rem; font-variant-numeric:tabular-nums}
+ol.steps li > div{min-width:0}
+.btn{display:inline-block; padding:1px 8px; border-radius:8px; font-weight:600; white-space:nowrap}
+.btn.rec{background:var(--rec); color:var(--bg)}
+.btn.stop{background:var(--bad-fill); color:var(--bad); border:1px solid var(--bad)}
+.btn.prim{background:var(--accent-fill); color:var(--accent); border:1px solid var(--accent)}
+.btn.norm{background:var(--surface-2); color:var(--text); border:1px solid var(--border)}
+.pill{display:inline-block; font-size:.78rem; font-weight:600; padding:2px 9px; border-radius:20px; white-space:nowrap}
+.p-ok{background:var(--ok-fill); color:var(--ok)}
+.p-part{background:var(--part-fill); color:var(--part)}
+.p-bad{background:var(--bad-fill); color:var(--bad)}
+.p-skip{background:var(--surface-2); color:var(--muted)}
+figure{margin:0; display:flex; flex-direction:column; gap:8px; align-items:center}
+figure img{display:block; width:100%; max-width:300px; height:auto; border-radius:20px; border:1px solid var(--border)}
+figure.wide img{max-width:640px; border-radius:14px}
+figcaption{color:var(--muted); font-size:.86rem; text-align:center; max-width:46ch}
+.shots{display:flex; gap:12px; overflow-x:auto; padding-bottom:4px}
+.shots figure{flex:0 0 min(78%, 260px)}
+.diagram{background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:12px; overflow-x:auto}
+.diagram svg{display:block; width:100%; max-width:560px; height:auto; margin:0 auto; font-family:var(--font)}
+.note{border-left:3px solid var(--accent); padding:4px 0 4px 12px; color:var(--muted)}
+.warn{background:var(--accent-fill); border:1px solid #6E5A42; border-radius:14px; padding:12px 14px}
+table{border-collapse:collapse; width:100%; font-size:.93rem}
+td{padding:8px 6px; border-bottom:1px solid var(--border); vertical-align:top}
+td:first-child{white-space:nowrap; width:1%}
+details{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:4px 14px}
+details + details{margin-top:8px}
+summary{min-height:44px; display:flex; align-items:center; cursor:pointer; font-weight:600}
+details > div{padding:0 0 12px; color:var(--muted)}
+.mono{font-family:ui-monospace, "Roboto Mono", monospace; font-size:.9em}
+[hidden]{display:none !important}
+</style>
+
+<div class="wrap">
+
+<!-- ================= ГОЛОВНА ================= -->
+<main id="home" class="stack">
+  <div class="brand"><span class="dot" aria-hidden="true"></span><h1>Track Catcher</h1></div>
+  <p class="muted">Записує музику, яку грає телефон, і сам ріже її на пісні. Кожна пісня — окремий файл з назвою зі шторки. Нижче — що він уміє. Торкнись пункту — відкриється докладно, крок за кроком.</p>
+
+  <ul class="features">
+    <li><a href="#start"><span class="ic">🔑</span><span><b>Перший запуск</b><span class="d">4 дозволи — один раз</span></span><span class="chev">›</span></a></li>
+    <li><a href="#record"><span class="ic" style="color:var(--rec)">●</span><span><b>Записати пісні</b><span class="d">з будь-якого плеєра, 10–20 підряд</span></span><span class="chev">›</span></a></li>
+    <li><a href="#split"><span class="ic">✂︎</span><span><b>Одна пісня — один файл</b><span class="d">як застосунок знаходить кінець пісні</span></span><span class="chev">›</span></a></li>
+    <li><a href="#night"><span class="ic">☾</span><span><b>Нічний екран</b><span class="d">щоб запис не зупинився</span></span><span class="chev">›</span></a></li>
+    <li><a href="#history"><span class="ic">☰</span><span><b>Історія записів</b><span class="d">повні, неповні, невдалі, пропущені</span></span><span class="chev">›</span></a></li>
+    <li><a href="#actions"><span class="ic">▶︎</span><span><b>Слухати, поділитись, видалити</b><span class="d">що можна зробити з записом</span></span><span class="chev">›</span></a></li>
+    <li><a href="#settings"><span class="ic">⚙︎</span><span><b>Формат і якість</b><span class="d">MP3, WAV, мінімальна довжина, повтори</span></span><span class="chev">›</span></a></li>
+    <li><a href="#files"><span class="ic">📁</span><span><b>Де лежать файли</b><span class="d">папка й назви файлів</span></span><span class="chev">›</span></a></li>
+    <li><a href="#rotate"><span class="ic">⟲</span><span><b>Книжковий і альбомний вигляд</b><span class="d">поверни телефон — дві колонки</span></span><span class="chev">›</span></a></li>
+    <li><a href="#update"><span class="ic">⤓</span><span><b>Оновити застосунок</b><span class="d">через меню Termux</span></span><span class="chev">›</span></a></li>
+    <li><a href="#trouble"><span class="ic">?</span><span><b>Якщо щось не так</b><span class="d">тиша, «Невідома пісня», запис зупинився</span></span><span class="chev">›</span></a></li>
+  </ul>
+
+  <div class="diagram" role="img" aria-label="Як працює Track Catcher: плеєр грає, Track Catcher записує й читає назву зі шторки, ріже на пісні і зберігає файли в Музику; результат видно в Історії.">
+    <svg viewBox="0 0 560 150">
+      <defs><marker id="a0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#A3AEBB"/></marker></defs>
+      <rect x="8" y="40" width="112" height="70" rx="12" fill="#202733" stroke="#333D4B"/>
+      <text x="64" y="70" fill="#F2F5F8" font-size="14" font-weight="600" text-anchor="middle">Плеєр</text>
+      <text x="64" y="90" fill="#A3AEBB" font-size="11.5" text-anchor="middle">будь-який</text>
+      <rect x="196" y="28" width="168" height="94" rx="14" fill="#2E2416" stroke="#FFB15A" stroke-width="1.5"/>
+      <circle cx="218" cy="52" r="6" fill="#FF5A4E"/>
+      <text x="232" y="57" fill="#F2F5F8" font-size="14" font-weight="600">Track Catcher</text>
+      <text x="212" y="80" fill="#A3AEBB" font-size="11.5">звук + назва зі шторки</text>
+      <text x="212" y="100" fill="#A3AEBB" font-size="11.5">ріже на пісні</text>
+      <rect x="440" y="16" width="112" height="54" rx="12" fill="#202733" stroke="#333D4B"/>
+      <text x="496" y="40" fill="#F2F5F8" font-size="13" font-weight="600" text-anchor="middle">Музика</text>
+      <text x="496" y="58" fill="#A3AEBB" font-size="11" text-anchor="middle">MP3 / WAV</text>
+      <rect x="440" y="82" width="112" height="54" rx="12" fill="#202733" stroke="#333D4B"/>
+      <text x="496" y="106" fill="#F2F5F8" font-size="13" font-weight="600" text-anchor="middle">Історія</text>
+      <text x="496" y="124" fill="#A3AEBB" font-size="11" text-anchor="middle">що вдалось</text>
+      <line x1="120" y1="75" x2="192" y2="75" stroke="#A3AEBB" stroke-width="1.5" marker-end="url(#a0)"/>
+      <text x="156" y="68" fill="#A3AEBB" font-size="11" text-anchor="middle">грає</text>
+      <line x1="364" y1="60" x2="436" y2="45" stroke="#A3AEBB" stroke-width="1.5" marker-end="url(#a0)"/>
+      <line x1="364" y1="92" x2="436" y2="106" stroke="#A3AEBB" stroke-width="1.5" marker-end="url(#a0)"/>
+    </svg>
+  </div>
+  <p class="small muted">Записи лишаються лише на телефоні. Без інтернету, реклами й аналітики. Для особистого користування.</p>
+</main>
+
+<!-- ================= ПЕРШИЙ ЗАПУСК ================= -->
+<section id="start" class="page stack" hidden>
+  <a class="back" href="#">← Усі можливості</a>
+  <h2>Перший запуск: 4 дозволи</h2>
+  <p class="muted">На вкладці «Запис» є картка «Що дозволити». Кожен пункт — одна кнопка. Коли дозволено, пункт обводиться зеленою рамкою і пише «Готово».</p>
+  <figure><img src="img/first-run.webp" alt="Вкладка Запис з карткою Що дозволити"><figcaption>Картка «Що дозволити» на першому запуску.</figcaption></figure>
+  <ol class="steps">
+    <li><div><b>Запис звуку</b> → <span class="btn prim">Дозволити</span>. Android назве це «Мікрофон», але пишеться <b>лише звук самого телефона</b>, не голос навколо.</div></li>
+    <li><div><b>Назви пісень</b> → <span class="btn prim">Відкрити налаштування</span> → у списку «Доступ до сповіщень» увімкни <b>Track Catcher</b>. Так застосунок бачить назву, виконавця й обкладинку в шторці.</div></li>
+    <li><div><b>Повідомлення</b> → <span class="btn prim">Дозволити</span>. Під час запису в шторці буде видно, що пишеться, і кнопку «Стоп».</div></li>
+    <li><div><b>Робота у фоні</b> → <span class="btn prim">Дозволити</span>. Samsung не приспить запис, коли екран вимкнено.</div></li>
+  </ol>
+  <div class="warn"><b>Перемикач «Доступ до сповіщень» сірий?</b> Android так захищає застосунки, встановлені з файлу. Налаштування → Застосунки → Track Catcher → <b>⋮</b> (угорі праворуч) → «Дозволити обмежені налаштування». Потім знову крок 2. У картці є кнопка «Відкрити «Про застосунок»» — вона веде саме туди.</div>
+</section>
+
+<!-- ================= ЗАПИС ================= -->
+<section id="record" class="page stack" hidden>
+  <a class="back" href="#">← Усі можливості</a>
+  <h2>Записати пісні</h2>
+  <ol class="steps">
+    <li><div>Увімкни музику в будь-якому плеєрі (YouTube Music, Spotify, плеєр файлів…). Альбом чи плейлист — 10–20 пісень підряд.</div></li>
+    <li><div>Відкрий Track Catcher → вкладка <b>Запис</b>. У картці «Зараз грає» має з'явитись пісня зі шторки.</div></li>
+    <li><div>Натисни <span class="btn rec">● Почати запис</span>.</div></li>
+    <li><div>Android запитає «Почати запис?» — натисни <b>«Почати»</b>. Це питання буде щоразу: так влаштований Android.</div></li>
+    <li><div>Готово: червоне «● Записую» і час, рівень звуку L/R рухається, видно скільки пісень і скільки збережено.</div></li>
+    <li><div>Щоб запис не зупинився, коли екран гасне, — <span class="btn prim">☾ Нічний екран</span> (<a href="#night">докладно</a>).</div></li>
+    <li><div>Коли досить — <span class="btn stop">■ Зупинити запис</span> (або «Стоп» у шторці). Останні пісні дозбережуться за кілька секунд.</div></li>
+  </ol>
+  <div class="shots">
+    <figure><img src="img/ready.webp" alt="Готово до запису"><figcaption>Готово до запису.</figcaption></figure>
+    <figure><img src="img/recording.webp" alt="Іде запис"><figcaption>Іде запис: рівень, пісня, «Ця сесія».</figcaption></figure>
+  </div>
+  <p class="note">Поки плеєр на паузі, тиша у файл не пишеться. Можна поставити на паузу й продовжити — це буде той самий запис.</p>
+</section>
+
+<!-- ================= РОЗРІЗ ================= -->
+<section id="split" class="page stack" hidden>
+  <a class="back" href="#">← Усі можливості</a>
+  <h2>Одна пісня — один файл</h2>
+  <p class="muted">Звук пишеться без перерв. Коли в шторці змінюється назва, Track Catcher шукає тишу між піснями (в межах 2 секунд) і ріже там. Немає тиші (пісні плавно перетікають) — ріже точно в момент зміни назви.</p>
+  <div class="diagram" role="img" aria-label="Звук пишеться без перерв; у місцях тиші біля зміни назви він розрізається, і кожна пісня стає окремим файлом з її назвою.">
+    <svg viewBox="0 0 560 230">
+      <text x="10" y="18" fill="#A3AEBB" font-size="11" font-weight="600" letter-spacing="1">ШТОРКА</text>
+      <rect x="10" y="26" width="170" height="26" rx="13" fill="#202733" stroke="#333D4B"/><text x="95" y="44" fill="#F2F5F8" font-size="12.5" text-anchor="middle">Пісня A</text>
+      <rect x="190" y="26" width="200" height="26" rx="13" fill="#202733" stroke="#333D4B"/><text x="290" y="44" fill="#F2F5F8" font-size="12.5" text-anchor="middle">Пісня B</text>
+      <rect x="400" y="26" width="150" height="26" rx="13" fill="#202733" stroke="#333D4B"/><text x="475" y="44" fill="#F2F5F8" font-size="12.5" text-anchor="middle">Пісня C</text>
+      <text x="10" y="76" fill="#A3AEBB" font-size="11" font-weight="600" letter-spacing="1">ЗВУК</text>
+      <g fill="#FFB15A">
+        <rect x="10" y="88" width="168" height="34" rx="4" opacity=".85"/>
+        <rect x="192" y="84" width="196" height="42" rx="4" opacity=".85"/>
+        <rect x="402" y="90" width="148" height="30" rx="4" opacity=".85"/>
+      </g>
+      <g stroke="#FF5A4E" stroke-width="2" stroke-dasharray="5 4"><line x1="185" y1="22" x2="185" y2="140"/><line x1="395" y1="22" x2="395" y2="140"/></g>
+      <text x="185" y="156" fill="#FF5A4E" font-size="11.5" text-anchor="middle" font-weight="600">розріз у тиші</text>
+      <text x="395" y="156" fill="#FF5A4E" font-size="11.5" text-anchor="middle" font-weight="600">розріз у тиші</text>
+      <text x="10" y="182" fill="#A3AEBB" font-size="11" font-weight="600" letter-spacing="1">ФАЙЛИ</text>
+      <rect x="10" y="190" width="168" height="32" rx="8" fill="#171C23" stroke="#333D4B"/><text x="20" y="211" fill="#F2F5F8" font-size="12">A — Пісня A.mp3</text>
+      <rect x="192" y="190" width="196" height="32" rx="8" fill="#171C23" stroke="#333D4B"/><text x="202" y="211" fill="#F2F5F8" font-size="12">B — Пісня B.mp3</text>
+      <rect x="402" y="190" width="148" height="32" rx="8" fill="#171C23" stroke="#333D4B"/><text x="412" y="211" fill="#F2F5F8" font-size="12">C — Пісня C.mp3</text>
+    </svg>
+  </div>
+  <table>
+    <tr><td><span class="pill p-ok">повний</span></td><td>Пісня від початку до кінця.</td></tr>
+    <tr><td><span class="pill p-part">неповний</span></td><td>Почато посеред (запис увімкнули, коли пісня вже грала), зупинено посеред або перемкнуто до кінця.</td></tr>
+    <tr><td><span class="pill p-skip">пропущено</span></td><td>Коротше за мінімум (реклама), тиша до початку музики, або така пісня вже є (якщо так налаштовано).</td></tr>
+    <tr><td><span class="pill p-bad">невдало</span></td><td>Плеєр грав, а звуку не було — цей застосунок, схоже, не дає себе записувати. Або не вистачило місця.</td></tr>
+  </table>
+  <p class="note">Тиша на початку й у кінці кожного файлу обрізається (лишається 0,2 с).</p>
+</section>
+
+<!-- ================= НІЧНИЙ ЕКРАН ================= -->
+<section id="night" class="page stack" hidden>
+  <a class="back" href="#">← Усі можливості</a>
+  <h2>Нічний екран</h2>
+  <p class="muted">Android 15 і новіші <b>самі зупиняють запис, коли телефон блокується</b>. Нічний екран не дає йому заблокуватись: екран чорний, яскравість майже нуль, а запис іде.</p>
+  <ol class="steps">
+    <li><div>Почни запис (<a href="#record">як</a>) і переконайся, що плеєр грає.</div></li>
+    <li><div>На вкладці «Запис» натисни <span class="btn prim">☾ Нічний екран</span>.</div></li>
+    <li><div>Екран стане чорним з тьмяним годинником, назвою пісні й лічильником. Поклади телефон — можна прикрутити гучність.</div></li>
+    <li><div>Щоб вийти — <b>двічі торкнись</b> екрана або натисни «Назад».</div></li>
+  </ol>
+  <figure><img src="img/night.webp" alt="Нічний екран"><figcaption>Нічний екран: «● 12:36», пісня, скільки збережено.</figcaption></figure>
+  <div class="warn">Якщо натиснути кнопку блокування, Android може зупинити запис. Тоді на вкладці «Запис» з'явиться пояснення, а все записане до цього <b>збережеться</b>.</div>
+</section>
+
+<!-- ================= ІСТОРІЯ ================= -->
+<section id="history" class="page stack" hidden>
+  <a class="back" href="#">← Усі можливості</a>
+  <h2>Історія записів</h2>
+  <ol class="steps">
+    <li><div>Вкладка <b>Історія</b>. Записи згруповані по сесіях: дата, час, скільки записів, формат.</div></li>
+    <li><div>Угорі — пошук (виконавець, назва, альбом) і фільтри: <b>Усі · Повні · Неповні · Невдалі · Пропущені</b> з кількістю. Вибраний фільтр — у зеленій рамці.</div></li>
+    <li><div>У кожному рядку: обкладинка, назва, тривалість · формат · розмір · час, і статус. Якщо запис не повний — причина під назвою.</div></li>
+    <li><div>Торкнись запису — відкриються подробиці (<a href="#actions">що там можна зробити</a>).</div></li>
+  </ol>
+  <div class="shots">
+    <figure><img src="img/history.webp" alt="Історія"><figcaption>Історія з фільтрами.</figcaption></figure>
+    <figure><img src="img/detail.webp" alt="Подробиці запису"><figcaption>Подробиці запису.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ================= ДІЇ ================= -->
+<section id="actions" class="page stack" hidden>
+  <a class="back" href="#">← Усі можливості</a>
+  <h2>Слухати, поділитись, видалити</h2>
+  <p class="muted">Історія → торкнись запису. У подробицях: скільки записано, тривалість пісні, формат, назва файлу й розмір, папка, як різалось, з якого плеєра, коли.</p>
+  <table>
+    <tr><td><span class="btn prim">▶ Слухати</span></td><td>Відкриває файл у твоєму плеєрі. Якщо збережено і MP3, і WAV — дві кнопки.</td></tr>
+    <tr><td><span class="btn norm">Поділитись</span></td><td>Надіслати файл у месенджер, на пошту, в Drive.</td></tr>
+    <tr><td><span class="btn stop">Видалити файл</span></td><td>Спершу запитає «Видалити файл?». Файл зникне з «Музики», а запис в історії лишиться з поміткою «файл видалено».</td></tr>
+  </table>
+  <div class="shots">
+    <figure><img src="img/detail.webp" alt="Подробиці"><figcaption>Кнопки внизу подробиць.</figcaption></figure>
+    <figure><img src="img/delete.webp" alt="Видалити файл?"><figcaption>Підтвердження видалення.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ================= НАЛАШТУВАННЯ ================= -->
+<section id="settings" class="page stack" hidden>
+  <a class="back" href="#">← Усі можливості</a>
+  <h2>Формат і якість</h2>
+  <p class="muted">Вкладка <b>Налаштування</b>. Вибране — у зеленій рамці. Зміни діють з наступного запису.</p>
+  <table>
+    <tr><td><b>Формат</b></td><td><b>MP3</b> — для будь-якого плеєра, 4 хв ≈ 9 МБ (320). <b>WAV</b> — без втрат, 4 хв ≈ 46 МБ. <b>MP3 + WAV</b> — обидва файли.</td></tr>
+    <tr><td><b>Якість MP3</b></td><td>320 — на слух майже як оригінал. 192 — добре й удвічі менше місця. Також 128 і 256.</td></tr>
+    <tr><td><b>Коротші не зберігати</b></td><td>Зберігати все / 15 / 30 / 45 / 60 с. Коротші (реклама) підуть в історію як «пропущено», без файлу.</td></tr>
+    <tr><td><b>Якщо пісня вже є</b></td><td>«Записати ще раз» — новий файл з «(2)». «Пропустити» — якщо в історії вже є повний запис цієї пісні.</td></tr>
+  </table>
+  <figure><img src="img/settings.webp" alt="Налаштування"><figcaption>Налаштування.</figcaption></figure>
+</section>
+
+<!-- ================= ФАЙЛИ ================= -->
+<section id="files" class="page stack" hidden>
+  <a class="back" href="#">← Усі можливості</a>
+  <h2>Де лежать файли</h2>
+  <ol class="steps">
+    <li><div>Папка: <b>Музика › Track Catcher</b> (<span class="mono">Music/Track Catcher</span>). Її видно в «Моїх файлах» і в будь-якому плеєрі.</div></li>
+    <li><div>Назва файлу: <b>«Виконавець — Назва.mp3»</b>. Заборонені символи (/ : * ? …) замінюються на «_».</div></li>
+    <li><div>Така назва вже є — новий файл отримує «(2)», «(3)»…</div></li>
+    <li><div>У файлі записані назва, виконавець, альбом і обкладинка — плеєри їх показують.</div></li>
+    <li><div>Швидко відкрити папку: Налаштування → «Куди зберігається» → <span class="btn norm">Відкрити папку</span>.</div></li>
+  </ol>
+</section>
+
+<!-- ================= ПОВОРОТ ================= -->
+<section id="rotate" class="page stack" hidden>
+  <a class="back" href="#">← Усі можливості</a>
+  <h2>Книжковий і альбомний вигляд</h2>
+  <p class="muted">Поверни телефон — вкладки переїдуть у смугу ліворуч, а екрани стануть у дві колонки. Нічого не губиться: вибраний запис, фільтр, пошук, відкрите вікно. Запис іде далі.</p>
+  <figure class="wide"><img src="img/land-record.webp" alt="Запис в альбомному вигляді"><figcaption>«Запис»: ліворуч стан і кнопки, праворуч пісня й сесія.</figcaption></figure>
+  <figure class="wide"><img src="img/land-history.webp" alt="Історія в альбомному вигляді"><figcaption>«Історія»: список ліворуч, подробиці праворуч.</figcaption></figure>
+  <p class="note">Під час запису на інших вкладках угорі видно червоний значок «● 12:34 · 3» — торкнись, і повернешся на «Запис».</p>
+</section>
+
+<!-- ================= ОНОВЛЕННЯ ================= -->
+<section id="update" class="page stack" hidden>
+  <a class="back" href="#">← Усі можливості</a>
+  <h2>Оновити застосунок</h2>
+  <p class="muted">Через меню Termux «Track Catcher» (ярлик на головному екрані). Нова версія ставиться поверх — записи й історія лишаються.</p>
+  <table>
+    <tr><td><b>2</b></td><td>Встановити нову версію з GitHub.</td></tr>
+    <tr><td><b>10</b></td><td>Вікно встановлення сховалось? Відкрити ще раз.</td></tr>
+    <tr><td><b>5</b></td><td>Встановити версію, зібрану на іншому телефоні (для старого телефона).</td></tr>
+    <tr><td><b>11 / 12</b></td><td>Зібрати прямо на телефоні (з інтернетом / без).</td></tr>
+    <tr><td><b>3</b></td><td>Статус: що на GitHub і що встановлено.</td></tr>
+  </table>
+</section>
+
+<!-- ================= ПРОБЛЕМИ ================= -->
+<section id="trouble" class="page stack" hidden>
+  <a class="back" href="#">← Усі можливості</a>
+  <h2>Якщо щось не так</h2>
+  <details><summary>Запис «невдало: тиша»</summary><div>Деякі застосунки забороняють записувати свій звук (часто — платний захищений контент). Спробуй інший плеєр. Також перевір, що у вікні Android «Почати запис?» натиснуто «Почати».</div></details>
+  <details><summary>Усі пісні — «Невідома пісня» і не ріжуться</summary><div>Немає дозволу «Доступ до сповіщень» (<a href="#start">як дати</a>) або плеєр не показує пісню в шторці. Тоді все пишеться одним файлом.</div></details>
+  <details><summary>Запис зупинився сам</summary><div>Найчастіше — телефон заблокувався (Android 15+). Користуйся <a href="#night">нічним екраном</a>. Записане до зупинки збережене. Якщо застосунок закрився посеред запису — шматки збережуться як «неповні» при наступному запуску.</div></details>
+  <details><summary>Перемикач «Доступ до сповіщень» сірий</summary><div>Налаштування → Застосунки → Track Catcher → ⋮ → «Дозволити обмежені налаштування», потім увімкни доступ.</div></details>
+  <details><summary>Пісня розрізалась не там</summary><div>Між піснями без паузи розріз іде точно в момент зміни назви в шторці — можливі пів секунди чужої пісні на краю. Напиши, з якого плеєра й на якій пісні, — підлаштуємо.</div></details>
+  <details><summary>Файлу не видно в плеєрі</summary><div>Плеєр міг ще не пересканувати пам'ять. Відкрий Налаштування → «Відкрити папку» або «Мої файли» → Музика → Track Catcher.</div></details>
+</section>
+
+<p class="small muted" style="margin-top:28px">Track Catcher · <a href="https://github.com/faric-ua/faric-track-catcher">github.com/faric-ua/faric-track-catcher</a></p>
+</div>
+
+<script>
+(function () {
+  function show() {
+    var id = location.hash.slice(1);
+    var target = id ? document.getElementById(id) : null;
+    var isPage = !!(target && target.classList.contains('page'));
+    document.getElementById('home').hidden = isPage;
+    var pages = document.querySelectorAll('section.page');
+    for (var i = 0; i < pages.length; i++) pages[i].hidden = pages[i] !== target;
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener('hashchange', show);
+  show();
+})();
+</script>

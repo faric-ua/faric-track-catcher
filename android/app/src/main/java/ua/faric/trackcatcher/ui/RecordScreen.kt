@@ -61,6 +61,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         setOnClickListener { host.showTab(MainActivity.Tab.SETTINGS) }
     }
     private val permsSlot = FrameLayout(host)
+    private val guideButton = ui.button("Як записувати — інструкція", Ui.Kind.QUIET) { GuideActivity.open(host, "record") }
     private val recentCard = ui.card(10)
     private val recentList = ui.column(8)
 
@@ -113,6 +114,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 addView(nightButton, ui.matchWrap())
                 addView(nightHint, ui.matchWrap())
                 addView(formatLine, ui.matchWrap())
+                addView(guideButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             }
             val right = ui.column(12).apply {
                 addView(nowCard, ui.matchWrap())
@@ -132,6 +134,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 addView(nightButton, ui.matchWrap())
                 addView(nightHint, ui.matchWrap())
                 addView(formatLine, ui.matchWrap())
+                addView(guideButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
                 addView(permsSlot, ui.matchWrap())
                 addView(recentCard, ui.matchWrap())
             }

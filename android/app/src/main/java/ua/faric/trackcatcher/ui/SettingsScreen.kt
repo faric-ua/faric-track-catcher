@@ -41,6 +41,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         val aboutCard = ui.card(8).apply {
             addView(ui.label("Про застосунок"))
             addView(ui.title("Track Catcher ${BuildConfig.VERSION_NAME}", 17f))
+            addView(ui.button("Інструкція користувача", Ui.Kind.PRIMARY) { GuideActivity.open(host) }, wrap())
             addView(ui.numbers(ui.muted("Збірка ${BuildConfig.VERSION_CODE}", 13f)))
             addView(ui.muted("Записує звук, який грає телефон, і ріже його на пісні за назвою зі шторки. " +
                 "Записи лишаються на телефоні: без інтернету, реклами й аналітики. Лише для особистого користування.", 13.5f))
