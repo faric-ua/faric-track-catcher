@@ -143,7 +143,7 @@ class MainActivity : Activity() {
             for (t in Tab.entries) {
                 val b = ui.choice("${t.glyph}\n${t.label}", t == tab) { showTab(t) }.apply {
                     textSize = 13f
-                    maxLines = 3
+                    oneLineLabel(this)
                     setPadding(ui.dp(6), ui.dp(8), ui.dp(6), ui.dp(8))
                 }
                 tabButtons[t] = b
@@ -174,8 +174,7 @@ class MainActivity : Activity() {
             for (t in Tab.entries) {
                 val b = ui.choice("${t.glyph}\n${t.label}", t == tab) { showTab(t) }.apply {
                     textSize = 12.5f
-                    // великий шрифт: «Налаштування» має влізти — менші поля, дозволено 3 рядки
-                    maxLines = 3
+                    oneLineLabel(this)
                     setPadding(ui.dp(4), ui.dp(6), ui.dp(4), ui.dp(6))
                 }
                 tabButtons[t] = b
@@ -196,6 +195,17 @@ class MainActivity : Activity() {
             WindowInsetsCompat.CONSUMED
         }
         setContentView(root)
+    }
+
+    /**
+     * Вкладка: значок + підпис в ОДИН рядок; не влазить — «Налашту…» (власник, 13.10 20:11).
+     * Повна назва лишається для озвучування.
+     */
+    private fun oneLineLabel(tv: TextView) {
+        tv.maxLines = 2
+        tv.ellipsize = android.text.TextUtils.TruncateAt.END
+        tv.breakStrategy = android.text.Layout.BREAK_STRATEGY_SIMPLE
+        tv.hyphenationFrequency = android.text.Layout.HYPHENATION_FREQUENCY_NONE
     }
 
     private fun brand(vertical: Boolean): View {
