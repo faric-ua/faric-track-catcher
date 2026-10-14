@@ -51,16 +51,18 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             addView(ui.button("Інструкція користувача", Ui.Kind.PRIMARY) { GuideActivity.open(host) }, wrap())
             addView(ui.numbers(ui.muted("Збірка ${BuildConfig.VERSION_CODE}", 13f)))
             addView(ui.muted("Записує звук, який грає телефон, і ріже його на пісні за назвою зі шторки. " +
-                "Записи лишаються на телефоні: без інтернету, реклами й аналітики. Лише для особистого користування.", 13.5f))
+                "Записи лишаються на телефоні й нікуди не передаються: без реклами й аналітики. Інтернет — лише для перевірки оновлень " +
+                "з Google Диска автора. Лише для особистого користування.", 13.5f))
             addView(ui.text("MP3 — LAME 3.98.4 у Java-версії jump3r (LGPL-2.1).", 12.5f, Palette.faint))
             addView(ui.text("github.com/faric-ua/faric-track-catcher", 12.5f, Palette.faint))
         }
-        val all = listOf(formatCard, qualityCard, lengthCard, repeatCard, edgesCard, folderCard, permsSlot, aboutCard)
+        val updateCard = UpdateUi(host).card()
+        val all = listOf(formatCard, qualityCard, lengthCard, repeatCard, edgesCard, folderCard, permsSlot, updateCard, aboutCard)
         view = if (ui.twoPane) {
             val left = ui.column(12)
             val right = ui.column(12)
             listOf(formatCard, qualityCard, lengthCard, repeatCard, edgesCard).forEach { left.addView(it, ui.matchWrap()) }
-            listOf(folderCard, permsSlot, aboutCard).forEach { right.addView(it, ui.matchWrap()) }
+            listOf(folderCard, permsSlot, updateCard, aboutCard).forEach { right.addView(it, ui.matchWrap()) }
             ui.scroll(ui.row(12).apply {
                 gravity = Gravity.TOP
                 addView(left, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))

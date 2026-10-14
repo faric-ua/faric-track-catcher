@@ -98,9 +98,7 @@ class MainActivity : Activity() {
         }
         buildChrome()
         showTab(tab)
-        savedInstanceState?.getString(KEY_DIALOG)?.let { key ->
-            if (key == NightScreen.KEY) showNightScreen() else screen?.restoreDialog(key)
-        }
+        savedInstanceState?.getString(KEY_DIALOG)?.let { key -> restoreDialog(key) }
         if (savedInstanceState == null) applyIntent(intent)
     }
 
@@ -116,7 +114,16 @@ class MainActivity : Activity() {
         DemoData.apply(this, i)
         i.getStringExtra(EXTRA_TAB)?.let { name -> Tab.entries.firstOrNull { it.name == name } }?.let { if (it != tab) showTab(it) }
         if (BuildConfig.DEBUG) {
-            i.getStringExtra("dialog")?.let { if (it == NightScreen.KEY) showNightScreen() else screen?.restoreDialog(it) }
+            i.getStringExtra("dialog")?.let { restoreDialog(it) }
+        }
+    }
+
+    /** Вікно після повороту: нічний екран, оновлення (будь-яка вкладка) або вікно самого екрана. */
+    private fun restoreDialog(key: String) {
+        when {
+            key == NightScreen.KEY -> showNightScreen()
+            key.startsWith("update:") -> UpdateUi(this).restore(key)
+            else -> screen?.restoreDialog(key)
         }
     }
 
@@ -282,6 +289,8 @@ class MainActivity : Activity() {
         screen?.onStart()
         unobserveHub = RecorderHub.observe { renderChip(it) }
         handler.post(tick)
+        Updater.attach(this)
+        UpdateUi(this).autoCheck()
     }
 
     override fun onResume() {
@@ -293,6 +302,7 @@ class MainActivity : Activity() {
         if (RecorderHub.state.phase == RecorderHub.Phase.IDLE && CaptureService.hasOrphans(this)) {
             runCatching { startService(CaptureService.recoverIntent(this)) }
         }
+        UpdateUi(this).resumePendingInstall()
     }
 
     override fun onStop() {
@@ -303,6 +313,7 @@ class MainActivity : Activity() {
         unobserveHub = null
         screen?.onStop()
         tracker.stop()
+        Updater.detach(this)
         // Застосунок сховали — пауза (поворот екрана не рахується: плеєр грає далі).
         if (!isChangingConfigurations) InAppPlayer.pause()
         super.onStop()
@@ -411,6 +422,10 @@ class MainActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_TREE) {
             onFolderPicked(resultCode, data)
+            return
+        }
+        if (requestCode == UpdateUi.REQ_APK || requestCode == UpdateUi.REQ_JSON) {
+            UpdateUi(this).onFilePicked(requestCode, resultCode, data)
             return
         }
         if (requestCode != REQ_PROJECTION) return

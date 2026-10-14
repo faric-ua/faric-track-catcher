@@ -9,6 +9,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Оновлення з Google Диска автора (як Dorama T88): читати файл версії й APK. Записи нікуди не йдуть. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Відкрити вікно Android «Оновити» для перевіреного APK. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Щоб показати назву плеєра («Джерело») — плеєри мають значок у меню застосунків. -->
     <queries>
@@ -48,6 +52,17 @@
             android:launchMode="singleTop"
             android:label="Інструкція"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize" />
+
+        <!-- Перевірений APK оновлення (cache/updates/) — вікну встановлення Android. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_paths" />
+        </provider>
 
         <service
             android:name=".capture.CaptureService"
