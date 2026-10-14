@@ -15,6 +15,22 @@ object FileNames {
 
     fun baseName(meta: TrackMeta): String = sanitize(meta.displayName())
 
+    const val ROOT_DIR = "Music/Track Catcher/"
+
+    /** Папка для файлу: «Music/Track Catcher/Альбом/» або просто «Music/Track Catcher/», якщо альбому нема. */
+    fun folderFor(meta: TrackMeta, albumFolders: Boolean): String {
+        if (!albumFolders || meta.album.isBlank()) return ROOT_DIR
+        return ROOT_DIR + sanitize(meta.album, 80) + "/"
+    }
+
+    /** «Music/Track Catcher/Neon/» → «Музика › Track Catcher › Neon». */
+    fun folderLabel(relativeDir: String): String {
+        val parts = relativeDir.trim('/').split('/').filter { it.isNotBlank() }
+        if (parts.isEmpty()) return "Музика › Track Catcher"
+        val first = if (parts[0] == "Music") "Музика" else parts[0]
+        return (listOf(first) + parts.drop(1)).joinToString(" › ")
+    }
+
     fun unique(base: String, ext: String, exists: (String) -> Boolean): String {
         val first = "$base.$ext"
         if (!exists(first)) return first

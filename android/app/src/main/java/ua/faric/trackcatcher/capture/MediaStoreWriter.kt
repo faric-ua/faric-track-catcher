@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
+import ua.faric.trackcatcher.core.FileNames
 import java.io.IOException
 import java.io.OutputStream
 
@@ -14,20 +15,20 @@ class MediaStoreWriter(context: Context) {
 
     data class Saved(val uri: String, val name: String, val size: Long)
 
-    fun exists(name: String): Boolean =
+    fun exists(name: String, dir: String = RELATIVE_DIR): Boolean =
         resolver.query(
             collection,
             arrayOf(MediaStore.MediaColumns._ID),
             "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?",
-            arrayOf(name, RELATIVE_DIR),
+            arrayOf(name, dir),
             null,
         )?.use { it.moveToFirst() } ?: false
 
-    fun write(name: String, mime: String, body: (OutputStream) -> Unit): Saved {
+    fun write(name: String, mime: String, dir: String = RELATIVE_DIR, body: (OutputStream) -> Unit): Saved {
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
             put(MediaStore.MediaColumns.MIME_TYPE, mime)
-            put(MediaStore.MediaColumns.RELATIVE_PATH, RELATIVE_DIR)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, dir)
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
         val uri = resolver.insert(collection, values) ?: throw IOException("не вдалося створити файл у «Музиці»")
@@ -51,17 +52,26 @@ class MediaStoreWriter(context: Context) {
         return Saved(uri.toString(), actualName, size)
     }
 
-    /** Скільки наших файлів уже лежить у Music/Track Catcher/ (0 — папки ще нема). */
+    /** Скільки наших файлів уже лежить у Music/Track Catcher/ разом з папками альбомів (0 — папки ще нема). */
     fun count(): Int = try {
         resolver.query(
             collection,
             arrayOf(MediaStore.MediaColumns._ID),
-            "${MediaStore.MediaColumns.RELATIVE_PATH}=?",
-            arrayOf(RELATIVE_DIR),
+            "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?",
+            arrayOf("$RELATIVE_DIR%"),
             null,
         )?.use { it.count } ?: 0
     } catch (e: Exception) {
         0
+    }
+
+    /** Папка, де лежить файл, словами: «Музика › Track Catcher › Neon». */
+    fun folderLabel(uri: String): String? = try {
+        resolver.query(Uri.parse(uri), arrayOf(MediaStore.MediaColumns.RELATIVE_PATH), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0)?.let { FileNames.folderLabel(it) } else null
+        }
+    } catch (e: Exception) {
+        null
     }
 
     fun delete(uri: String): Boolean = try {
@@ -71,7 +81,7 @@ class MediaStoreWriter(context: Context) {
     }
 
     companion object {
-        const val RELATIVE_DIR = "Music/Track Catcher/"
+        const val RELATIVE_DIR = FileNames.ROOT_DIR
         const val FOLDER_LABEL = "Музика › Track Catcher"
     }
 }

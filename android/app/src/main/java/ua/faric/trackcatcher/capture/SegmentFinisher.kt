@@ -53,10 +53,11 @@ class SegmentFinisher(context: Context) {
         if (verdict.status == RecStatus.COMPLETE || verdict.status == RecStatus.PARTIAL) {
             try {
                 val base = FileNames.baseName(job.meta)
-                if (settings.format.wav) wav = writeWav(job, stats, base)
+                val dir = FileNames.folderFor(job.meta, settings.albumFolders)
+                if (settings.format.wav) wav = writeWav(job, stats, base, dir)
                 if (settings.format.mp3) {
                     bitrate = settings.mp3Bitrate
-                    mp3 = writeMp3(job, stats, base, settings.mp3Bitrate, lengthMs)
+                    mp3 = writeMp3(job, stats, base, dir, settings.mp3Bitrate, lengthMs)
                 }
             } catch (e: Exception) {
                 verdict = Verdict(RecStatus.FAILED, listOf(saveError(e)))
@@ -103,18 +104,18 @@ class SegmentFinisher(context: Context) {
         return row.copy(id = id)
     }
 
-    private fun writeWav(job: SegmentJob, stats: AudioStats, base: String): MediaStoreWriter.Saved {
-        val name = FileNames.unique(base, "wav") { store.exists(it) }
+    private fun writeWav(job: SegmentJob, stats: AudioStats, base: String, dir: String): MediaStoreWriter.Saved {
+        val name = FileNames.unique(base, "wav") { store.exists(it, dir) }
         val dataBytes = stats.keptFrames * Pcm.BYTES_PER_FRAME
-        return store.write(name, "audio/x-wav") { out ->
+        return store.write(name, "audio/x-wav", dir) { out ->
             out.write(WavHeader.build(dataBytes, info = WavHeader.infoFor(job.meta)))
             copyRange(job.pcmFile, stats) { buf, n -> out.write(buf, 0, n) }
         }
     }
 
-    private fun writeMp3(job: SegmentJob, stats: AudioStats, base: String, kbps: Int, lengthMs: Long): MediaStoreWriter.Saved {
-        val name = FileNames.unique(base, "mp3") { store.exists(it) }
-        return store.write(name, "audio/mpeg") { out: OutputStream ->
+    private fun writeMp3(job: SegmentJob, stats: AudioStats, base: String, dir: String, kbps: Int, lengthMs: Long): MediaStoreWriter.Saved {
+        val name = FileNames.unique(base, "mp3") { store.exists(it, dir) }
+        return store.write(name, "audio/mpeg", dir) { out: OutputStream ->
             out.write(Id3v2.build(job.meta, lengthMs, Artwork.readJpeg(job.meta.artworkPath)))
             Mp3Encoder(bitrateKbps = kbps).use { enc ->
                 copyRange(job.pcmFile, stats) { buf, n -> enc.encode(buf, 0, n, out) }

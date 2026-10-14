@@ -30,12 +30,14 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val lengthCard = ui.card(12)
     private val repeatCard = ui.card(12)
     private val permsSlot = FrameLayout(host)
+    private val albumSlot = ui.column(8)
 
     init {
         val folderCard = ui.card(10).apply {
             addView(ui.label("Куди зберігається"))
             addView(ui.title(MediaStoreWriter.FOLDER_LABEL, 17f))
             addView(ui.muted("Файли видно в «Моїх файлах» і в будь-якому плеєрі. Назва — «Виконавець — Назва», повтор отримує «(2)».", 13.5f))
+            addView(albumSlot)
             addView(ui.button("Відкрити папку", Ui.Kind.NORMAL) { openFolder() }, wrap())
         }
         val aboutCard = ui.card(8).apply {
@@ -97,6 +99,17 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             ui.choice(if (sec == 0) "Зберігати все" else "$sec с", v.minLengthSec == sec) { settings.minLengthSec = sec; renderChoices() }
         }))
         lengthCard.addView(ui.muted("Реклама й короткі уривки підуть в історію як «пропущено», без файлу.", 13.5f))
+
+        albumSlot.removeAllViews()
+        albumSlot.addView(ui.label("Папка для кожного альбому"))
+        albumSlot.addView(flow(listOf(true to "Так", false to "Ні").map { (on, text) ->
+            ui.choice(text, v.albumFolders == on) { settings.albumFolders = on; renderChoices() }
+        }))
+        albumSlot.addView(ui.muted(
+            if (v.albumFolders) "Пісні з альбому «Neon» підуть у «Track Catcher › Neon». Без альбому — просто в «Track Catcher»."
+            else "Усі пісні — в одну папку «Track Catcher».",
+            13.5f,
+        ))
 
         repeatCard.removeAllViews()
         repeatCard.addView(ui.label("Якщо пісня вже є"))
