@@ -89,3 +89,14 @@ class BuildContract(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BuiltInUpdateLinkTest(unittest.TestCase):
+    """T45: вбудоване посилання на файл версії — справжній ID файлу Google Диска."""
+
+    def test_built_in_manifest_id(self):
+        import re
+        src = (ROOT / "android/app/src/main/java/ua/faric/trackcatcher/ui/UpdateUi.kt").read_text(encoding="utf-8")
+        m = re.search(r'const val BUILT_IN_MANIFEST_ID = "([^"]*)"', src)
+        self.assertIsNotNone(m)
+        self.assertRegex(m.group(1), r"^[A-Za-z0-9_-]{25,}$")
