@@ -19,9 +19,13 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import java.io.File
+import android.os.SystemClock
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.LinkedBlockingQueue
 import ua.faric.trackcatcher.R
 import ua.faric.trackcatcher.TrackCatcherApp
+import ua.faric.trackcatcher.core.GapDetector
 import ua.faric.trackcatcher.core.Pcm
 import ua.faric.trackcatcher.core.TimeText
 import ua.faric.trackcatcher.core.TrackMeta
@@ -40,6 +44,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     private var projection: MediaProjection? = null
     private var record: AudioRecord? = null
     private var captureThread: Thread? = null
+    private var writerThread: Thread? = null
     private var tracker: NowPlayingTracker? = null
     private var queue: FinisherQueue? = null
     private var settings: Settings.Values? = null
@@ -70,6 +75,24 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     private var unobserve: (() -> Unit)? = null
 
     private data class TrackEvent(val meta: TrackMeta, val positionMs: Long?, val force: Boolean, val details: Boolean)
+
+    /**
+     * Труба між потоками: потік запису лише читає звук і кладе сюди; потік диска ріже й пише.
+     * Раніше обидва робили в одному потоці — коли диск «задумувався» (саме зберігалась
+     * попередня пісня на 48 МБ), Android викидав незабраний звук, і у файлі був «чирк» (14.10).
+     * Події шторки йдуть тією ж трубою — тож розріз стає точно між тими самими шматками звуку.
+     */
+    private sealed class Item {
+        class Audio(val buf: ShortArray, val n: Int) : Item()
+        class Event(val e: TrackEvent) : Item()
+        object End : Item()
+    }
+    private val pipe = LinkedBlockingQueue<Item>()
+    private val pool = ArrayBlockingQueue<ShortArray>(POOL_SIZE)
+    @Volatile private var tracksOpened = 0
+    @Volatile private var gaps = 0
+    @Volatile private var lostMs = 0L
+    @Volatile private var dropped = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -144,7 +167,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         val rec = try {
             AudioRecord.Builder()
                 .setAudioFormat(format)
-                .setBufferSizeInBytes(maxOf(minBuf * 4, Pcm.SAMPLE_RATE * Pcm.BYTES_PER_FRAME))
+                // Запас 4 с: стільки Android тримає звук, поки потік запису не забере його.
+                .setBufferSizeInBytes(maxOf(minBuf * 4, Pcm.SAMPLE_RATE * Pcm.BYTES_PER_FRAME * 4))
                 .setAudioPlaybackCaptureConfig(config)
                 .build()
         } catch (e: Exception) {
@@ -185,6 +209,11 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         running = true
         startedAtMs = System.currentTimeMillis()
         framesRead = 0L
+        tracksOpened = 0
+        gaps = 0
+        lostMs = 0L
+        dropped = 0
+        pipe.clear()
         lastReadAt = 0L
         lastLoudAt = startedAtMs
         main.postDelayed(watchdog, 1_000)
@@ -198,7 +227,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
             )
         }
         updateNotification()
-        captureThread = Thread({ captureLoop(rec, splitter) }, "track-catcher-capture").apply {
+        writerThread = Thread({ writerLoop(splitter) }, "track-catcher-writer").apply { start() }
+        captureThread = Thread({ captureLoop(rec) }, "track-catcher-capture").apply {
             priority = Thread.MAX_PRIORITY
             start()
         }
@@ -213,37 +243,91 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
 
     // ---------- запис ----------
 
-    private fun captureLoop(rec: AudioRecord, splitter: TrackSplitter) {
+    /** Потік запису: лише читає звук у Android і кладе в трубу. Нічого повільного тут бути не може. */
+    private fun captureLoop(rec: AudioRecord) {
         android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
-        val buf = ShortArray(Pcm.SAMPLE_RATE / 10 * Pcm.CHANNELS) // 100 мс
+        val chunk = Pcm.SAMPLE_RATE / 10 * Pcm.CHANNELS // 100 мс
+        val gapDetector = GapDetector()
         var lastUi = 0L
         var error: String? = null
         try {
             while (running) {
-                val n = rec.read(buf, 0, buf.size, AudioRecord.READ_BLOCKING)
+                val buf = pool.poll() ?: ShortArray(chunk)
+                val n = rec.read(buf, 0, chunk, AudioRecord.READ_BLOCKING)
                 if (n < 0) {
+                    pool.offer(buf)
                     error = "Запис звуку обірвався (код $n)"
                     break
                 }
-                drainEvents(splitter)
-                if (n == 0) continue
+                forwardEvents()
+                if (n == 0) {
+                    pool.offer(buf)
+                    continue
+                }
+                if (gapDetector.onRead(SystemClock.elapsedRealtime(), n / Pcm.CHANNELS)) {
+                    gaps = gapDetector.gaps
+                    lostMs = gapDetector.lostMs
+                }
                 val db = Pcm.rmsDb(buf, 0, n)
                 val now = System.currentTimeMillis()
                 framesRead += n / Pcm.CHANNELS
                 lastReadAt = now
                 lastDb = db
                 if (db > DEAD_DB) lastLoudAt = now
+                // Рівні — до того, як віддати шматок у трубу (далі ним володіє потік диска).
+                val showUi = now - lastUi >= 100
+                val l = if (showUi) Pcm.channelPeak(buf, n, 0) else 0f
+                val r = if (showUi) Pcm.channelPeak(buf, n, 1) else 0f
                 val paused = playerPaused
                 // На паузі тиша у файл не пишеться. Якщо плеєр «на паузі», а звук є — пишемо (плеєр міг збрехати).
-                if (!(paused && db < SILENT_DB)) splitter.onAudio(buf, n)
-                if (now - lastUi >= 100) {
+                if (!(paused && db < SILENT_DB)) {
+                    if (pipe.size < MAX_PIPE) {
+                        pipe.put(Item.Audio(buf, n))
+                    } else {
+                        // Диск стоїть уже хвилини — звук нема куди класти.
+                        dropped++
+                        pool.offer(buf)
+                    }
+                } else {
+                    pool.offer(buf)
+                }
+                if (showUi) {
                     lastUi = now
-                    val l = Pcm.channelPeak(buf, n, 0)
-                    val r = Pcm.channelPeak(buf, n, 1)
-                    RecorderHub.update { it.copy(levelL = l, levelR = r, tracks = splitter.segmentsOpened) }
+                    RecorderHub.update { it.copy(levelL = l, levelR = r, tracks = tracksOpened) }
                 }
             }
-            drainEvents(splitter)
+            forwardEvents()
+        } catch (e: Exception) {
+            error = "Помилка запису: ${e.message}"
+        } finally {
+            pipe.put(Item.End)
+        }
+        if (error != null) {
+            val msg = error
+            RecorderHub.update { it.copy(error = msg) }
+            main.post { stopRecording() }
+        }
+    }
+
+    /** Потік диска: ріже на пісні й пише шматки у файли. Може «задуматись» — звук чекає в трубі. */
+    private fun writerLoop(splitter: TrackSplitter) {
+        var error: String? = null
+        try {
+            loop@ while (true) {
+                when (val item = pipe.take()) {
+                    is Item.Audio -> {
+                        splitter.onAudio(item.buf, item.n)
+                        pool.offer(item.buf)
+                        tracksOpened = splitter.segmentsOpened
+                    }
+                    is Item.Event -> {
+                        val e = item.e
+                        if (e.details) splitter.onDetails(e.meta) else splitter.onTrackChange(e.meta, e.positionMs, e.force)
+                        tracksOpened = splitter.segmentsOpened
+                    }
+                    Item.End -> break@loop
+                }
+            }
         } catch (e: Exception) {
             error = if (e.message?.contains("ENOSPC") == true) "Немає місця на телефоні — запис зупинено." else "Помилка запису: ${e.message}"
         } finally {
@@ -281,7 +365,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         val dur = RecorderHub.state.meta?.durationMs ?: 0L
         // Позиція в плеєрі: якщо вона більша за тривалість — плеєр не повідомив, що почав пісню знову.
         val player = if (pos == null) "" else " · плеєр ${TimeText.clock(pos)}" + (if (dur > 0) " з ${TimeText.clock(dur)}" else "")
-        val diag = "Звук від Android: ${Pcm.framesToMs(framesRead) / 1000} с отримано · рівень $level$player"
+        val lost = if (gaps > 0 || dropped > 0) " · пропусків ${gaps + dropped} (~${lostMs + dropped * 100L} мс)" else " · пропусків 0"
+        val diag = "Звук від Android: ${Pcm.framesToMs(framesRead) / 1000} с отримано · рівень $level$player$lost"
         if (warn != RecorderHub.state.warning || diag != RecorderHub.state.diag) {
             RecorderHub.update { it.copy(warning = warn, diag = diag) }
         }
@@ -296,10 +381,11 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         }
     }
 
-    private fun drainEvents(splitter: TrackSplitter) {
+    /** Події шторки — у ту саму трубу, що й звук: різак побачить їх точно між тими самими шматками. */
+    private fun forwardEvents() {
         while (true) {
             val e = events.poll() ?: break
-            if (e.details) splitter.onDetails(e.meta) else splitter.onTrackChange(e.meta, e.positionMs, e.force)
+            pipe.put(Item.Event(e))
         }
     }
 
@@ -340,6 +426,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         main.removeCallbacks(watchdog)
         runCatching { record?.stop() }
         runCatching { captureThread?.join(3_000) }
+        // Потік диска дописує те, що ще в трубі (зазвичай миттєво).
+        runCatching { writerThread?.join(15_000) }
         cleanupCapture()
         HistoryDb.get(this).endSession(sessionId, System.currentTimeMillis())
         RecorderHub.update { it.copy(phase = RecorderHub.Phase.FINISHING, levelL = 0f, levelR = 0f, warning = null, diag = null) }
@@ -368,6 +456,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         runCatching { record?.release() }
         record = null
         captureThread = null
+        writerThread = null
         projection?.let { p -> runCatching { p.stop() } }
         projection = null
         events.clear()
@@ -386,6 +475,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
             running = false
             runCatching { record?.stop() }
             runCatching { captureThread?.join(2_000) }
+            runCatching { writerThread?.join(3_000) }
         }
         cleanupCapture()
         unobserve?.invoke()
@@ -490,6 +580,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         private const val NOTIF_ID = 42
         private const val SILENT_DB = -60.0
         private const val DEAD_DB = -70.0
+        private const val POOL_SIZE = 300 // 30 с звуку без нових масивів
+        private const val MAX_PIPE = 3_000 // 5 хв звуку в черзі на диск — далі вже нема сенсу чекати
 
         fun segmentsDir(context: Context) = File(context.filesDir, "segments")
 
