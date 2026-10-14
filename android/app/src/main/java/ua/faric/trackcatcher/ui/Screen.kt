@@ -15,4 +15,9 @@ abstract class Screen(val host: MainActivity) {
 
     /** Відновити вікно після повороту. true — ключ цього екрана. */
     open fun restoreDialog(key: String): Boolean = false
+
+    /** Екран хоче сам обробити «Назад» (напр. вийти з режиму вибору). */
+    open val wantsBack: Boolean get() = false
+
+    open fun handleBack() {}
 }

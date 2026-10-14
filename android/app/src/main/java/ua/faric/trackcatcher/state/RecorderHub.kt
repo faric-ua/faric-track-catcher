@@ -31,6 +31,11 @@ object RecorderHub {
         val diag: String? = null,
         val error: String? = null,
         val recent: List<Result> = emptyList(),
+        /** «Зупинитись після N пісень»: N (0 — без обмеження) і скільки пісень уже почалось. */
+        val limit: Int = 0,
+        val songs: Int = 0,
+        /** Спокійне повідомлення після запису (напр. «Записано 26 пісень — зупинено»). */
+        val notice: String? = null,
     ) {
         val saved: Int get() = complete + partial
     }

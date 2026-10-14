@@ -84,6 +84,14 @@ class FileSegmentSink(
             )
         }
 
+        override fun discard() {
+            if (closed) return
+            closed = true
+            runCatching { raf.close() }
+            pcm.delete()
+            sidecar.delete()
+        }
+
         private fun writeSidecar(end: SegmentEnd?, cutBySilence: Boolean) {
             runCatching {
                 sidecar.writeText(SegmentJob.sidecarJson(sessionId, start.index, meta, start.positionMs, end?.reason, cutBySilence))

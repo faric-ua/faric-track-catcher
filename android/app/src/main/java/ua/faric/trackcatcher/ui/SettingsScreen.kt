@@ -10,6 +10,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import ua.faric.trackcatcher.BuildConfig
 import ua.faric.trackcatcher.capture.MediaStoreWriter
+import ua.faric.trackcatcher.capture.TreeWriter
 import ua.faric.trackcatcher.core.OutputFormat
 import ua.faric.trackcatcher.core.RepeatPolicy
 import ua.faric.trackcatcher.core.SizeEstimate
@@ -32,14 +33,17 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val edgesCard = ui.card(12)
     private val permsSlot = FrameLayout(host)
     private val albumSlot = ui.column(8)
+    private val folderTitle = ui.title("", 17f)
+    private val folderHint = ui.muted("", 13.5f)
+    private val folderButtons = FlowLayout(host, ui.dp(8), ui.dp(8))
 
     init {
         val folderCard = ui.card(10).apply {
             addView(ui.label("Куди зберігається"))
-            addView(ui.title(MediaStoreWriter.FOLDER_LABEL, 17f))
-            addView(ui.muted("Файли видно в «Моїх файлах» і в будь-якому плеєрі. Назва — «Виконавець — Назва», повтор отримує «(2)».", 13.5f))
+            addView(folderTitle)
+            addView(folderHint)
             addView(albumSlot)
-            addView(ui.button("Відкрити папку", Ui.Kind.NORMAL) { openFolder() }, wrap())
+            addView(folderButtons, ui.matchWrap())
         }
         val aboutCard = ui.card(8).apply {
             addView(ui.label("Про застосунок"))
@@ -102,6 +106,8 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         lengthCard.addView(ui.muted("Реклама й короткі уривки підуть в історію як «пропущено», без файлу.", 13.5f))
 
         renderEdges(v)
+
+        renderFolder(v)
 
         albumSlot.removeAllViews()
         albumSlot.addView(ui.label("Папка для кожного альбому"))
@@ -177,7 +183,41 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         children.forEach { addView(it) }
     }
 
+    /** Своя папка (T29) чи «Музика»; кнопки «Відкрити», «Вибрати свою», «Повернути «Музику»». */
+    private fun renderFolder(v: Settings.Values) {
+        val tree = v.treeUri.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+        val ok = tree?.let { runCatching { TreeWriter(host, it).available() }.getOrDefault(false) } ?: true
+        folderTitle.text = if (tree == null) MediaStoreWriter.FOLDER_LABEL else TreeWriter.labelForTree(tree)
+        folderHint.text = when {
+            tree == null -> "Файли видно в «Моїх файлах» і в будь-якому плеєрі. Назва — «Виконавець — Назва», повтор отримує «(2)». " +
+                "Можна вибрати свою папку — і на карті пам'яті."
+            !ok -> "Своя папка зараз недоступна (карту вийнято чи дозвіл забрано) — пісні тимчасово йдуть у «Музика › Track Catcher»."
+            else -> "Своя папка: альбоми — папками всередині неї. Назва — «Виконавець — Назва», повтор отримує «(2)»."
+        }
+        folderHint.setTextColor(if (ok) Palette.muted else Palette.warning)
+        folderButtons.removeAllViews()
+        folderButtons.addView(ui.button("Відкрити папку", Ui.Kind.NORMAL) { openFolder() })
+        folderButtons.addView(ui.button(if (tree == null) "Вибрати свою папку" else "Змінити папку", Ui.Kind.PRIMARY) { host.pickFolder() })
+        if (tree != null) folderButtons.addView(ui.button("Повернути «Музику»", Ui.Kind.QUIET) { host.resetFolder() })
+    }
+
     private fun openFolder() {
+        val treeUri = settings.treeUri
+        if (treeUri.isNotBlank()) {
+            val tree = TreeWriter(host, Uri.parse(treeUri))
+            if (tree.isEmpty()) {
+                host.toast("Папка ще порожня: пісня зберігається, коли почнеться наступна або після «Зупинити»")
+                return
+            }
+            val view = Intent(Intent.ACTION_VIEW).setDataAndType(tree.rootDocument(), "vnd.android.document/directory")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            try {
+                host.startActivity(view)
+            } catch (e: Exception) {
+                host.toast("Відкрий «Мої файли» → ${TreeWriter.labelForTree(Uri.parse(treeUri))}")
+            }
+            return
+        }
         // Папку Android створює лише з першим файлом; без неї «Мої файли» відкривають «Завантаження».
         if (MediaStoreWriter(host).count() == 0) {
             host.toast("Папка ще порожня: пісня зберігається, коли почнеться наступна або після «Зупинити»")

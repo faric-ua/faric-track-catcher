@@ -82,6 +82,22 @@ class TrackSplitterTest {
     }
 
     @Test
+    fun stopAfterLimitDropsStartOfNextSong() {
+        // «Зупинитись після N пісень»: розріз між A і B — по тиші, а початок B у файл не йде.
+        val sink = MemorySink()
+        val s = TrackSplitter(sink)
+        s.onTrackChange(a, 0)
+        feed(s, TestAudio.tone(TestAudio.ms(3_000)))
+        feed(s, TestAudio.silence(TestAudio.ms(300)))
+        s.onTrackChange(b, 0)
+        feed(s, TestAudio.tone(TestAudio.ms(500), 660.0))
+        s.stop(discardCurrent = true)
+        assertEquals(2, sink.segments.size)
+        assertEquals(EndReason.TRACK_CHANGE, sink.segments[0].end!!.reason)
+        assertTrue(sink.segments[1].discarded)
+    }
+
+    @Test
     fun cutsAtSignalWhenNoSilence() {
         val sink = MemorySink()
         val s = TrackSplitter(sink)

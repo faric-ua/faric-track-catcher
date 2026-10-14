@@ -13,6 +13,11 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.text.InputType
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
+import ua.faric.trackcatcher.capture.MediaStoreWriter
+import ua.faric.trackcatcher.capture.TreeWriter
 import ua.faric.trackcatcher.core.TimeText
 import ua.faric.trackcatcher.core.TrackMeta
 import ua.faric.trackcatcher.data.Settings
@@ -64,6 +69,9 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val permsSlot = FrameLayout(host)
     private val guideButton = ui.button("Як записувати — інструкція", Ui.Kind.QUIET) { GuideActivity.open(host, "record") }
     private val recentCard = ui.card(10)
+    /** «Цей запис»: свій альбом (T39) і «Зупинитись після N пісень» (T40). */
+    private val planCard = ui.card(10)
+    private val settings = Settings(host)
     private val recentList = ui.column(8)
 
     private var unobserve: (() -> Unit)? = null
@@ -112,6 +120,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             // Альбомна: головна кнопка має бути видно без прокрутки — стан і кнопка ліворуч, пісня праворуч.
             val left = ui.column(12).apply {
                 addView(statusCard, ui.matchWrap())
+                addView(planCard, ui.matchWrap())
                 addView(mainButton, ui.matchWrap())
                 addView(nightButton, ui.matchWrap())
                 addView(nightHint, ui.matchWrap())
@@ -132,6 +141,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             val col = ui.column(12).apply {
                 addView(statusCard, ui.matchWrap())
                 addView(nowCard, ui.matchWrap())
+                addView(planCard, ui.matchWrap())
                 addView(mainButton, ui.matchWrap())
                 addView(nightButton, ui.matchWrap())
                 addView(nightHint, ui.matchWrap())
@@ -196,13 +206,140 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         diagLine.text = s.diag ?: ""
         meter.setLevels(s.levelL, s.levelR)
         renderRecent(s)
+        renderPlan(s)
+    }
+
+    // ---------- цей запис: альбом і ліміт пісень ----------
+
+    private var planKey = ""
+
+    private fun renderPlan(s: RecorderHub.State) {
+        val locked = s.phase != RecorderHub.Phase.IDLE
+        val useAlbum = settings.useCustomAlbum
+        val album = settings.customAlbum
+        val limit = settings.stopAfter
+        val key = "$locked|$useAlbum|$album|$limit"
+        if (key == planKey) return
+        planKey = key
+        planCard.removeAllViews()
+        planCard.addView(ui.label("Цей запис"))
+
+        planCard.addView(ui.title("Альбом", 15.5f))
+        val albumRow = FlowLayout(host, ui.dp(8), ui.dp(8))
+        albumRow.addView(ui.choice("Як у плеєрі", !useAlbum) { settings.useCustomAlbum = false; planKey = ""; renderPlan(RecorderHub.state) })
+        albumRow.addView(ui.choice(if (album.isBlank()) "Свій…" else "Свій: $album", useAlbum) { askAlbum() })
+        planCard.addView(albumRow, ui.matchWrap())
+
+        planCard.addView(ui.title("Зупинитись після", 15.5f))
+        val limitRow = FlowLayout(host, ui.dp(8), ui.dp(8))
+        limitRow.addView(ui.choice("Без обмеження", limit == 0) { settings.stopAfter = 0; planKey = ""; renderPlan(RecorderHub.state) })
+        limitRow.addView(ui.choice(if (limit == 0) "Кількість пісень…" else TimeText.plural(limit, "пісні", "пісень", "пісень"), limit > 0) { askLimit() })
+        planCard.addView(limitRow, ui.matchWrap())
+
+        planCard.addView(ui.muted(
+            buildString {
+                append(if (useAlbum && album.isNotBlank()) "Усі пісні підуть в альбом «$album» (папка й теги). " else "Альбом — як показує плеєр. ")
+                append(
+                    if (limit > 0) "Після ${limit}-ї пісні плеєр стане на паузу, а запис зупиниться сам."
+                    else "Запис іде, доки не натиснеш «Зупинити»."
+                )
+                if (locked) append(" Змінити можна після цього запису.")
+            },
+            13.5f,
+        ))
+        for (i in 0 until planCard.childCount) {
+            val c = planCard.getChildAt(i)
+            if (c is FlowLayout) for (j in 0 until c.childCount) c.getChildAt(j).isEnabled = !locked
+            if (c is FlowLayout) ui.setEnabled(c, !locked)
+        }
+    }
+
+    private fun input(text: String, number: Boolean): EditText = EditText(host).apply {
+        setText(text)
+        setSelection(text.length)
+        setTextColor(Palette.text)
+        setHintTextColor(Palette.faint)
+        textSize = 17f
+        isSingleLine = true
+        inputType = if (number) InputType.TYPE_CLASS_NUMBER else InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        imeOptions = EditorInfo.IME_ACTION_DONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI
+        background = ui.rounded(Palette.surfaceAlt, Palette.border, radiusDp = 12)
+        setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(10))
+        minHeight = ui.dp(Ui.MIN_TOUCH_DP)
+    }
+
+    /** Свій альбом: ввести назву або вибрати з папок, що вже є. */
+    private fun askAlbum() {
+        val field = input(settings.customAlbum, number = false).apply { hint = "Назва альбому, напр. Neon" }
+        val extra = ui.column(10)
+        extra.addView(field, ui.matchWrap())
+        val tree = settings.treeUri.takeIf { it.isNotBlank() }
+        val existing = if (tree != null) TreeWriter(host, android.net.Uri.parse(tree)).albumFolders() else MediaStoreWriter(host).albumFolders()
+        if (existing.isNotEmpty()) {
+            extra.addView(ui.muted("Уже є в «Track Catcher»:", 13f))
+            val row = FlowLayout(host, ui.dp(8), ui.dp(8))
+            existing.take(30).forEach { name -> row.addView(ui.choice(name, name == field.text.toString()) { field.setText(name); field.setSelection(name.length) }) }
+            extra.addView(row, ui.matchWrap())
+        }
+        val body = host.overlay.dialog(
+            title = "Свій альбом",
+            message = "Усі пісні цього запису підуть у папку альбому (у «Track Catcher» чи у твоїй папці), і назва альбому запишеться в самі файли.",
+            actions = listOf("Готово" to Ui.Kind.PRIMARY, "Скасувати" to Ui.Kind.QUIET),
+            onAction = { i ->
+                if (i == 0) {
+                    val name = field.text.toString().trim()
+                    if (name.isNotBlank()) {
+                        settings.customAlbum = name
+                        settings.useCustomAlbum = true
+                    }
+                }
+                host.overlay.dismiss()
+                planKey = ""
+                renderPlan(RecorderHub.state)
+            },
+            extra = extra,
+        )
+        host.overlay.show(KEY_ALBUM, body)
+    }
+
+    /** Скільки пісень записати, після чого — пауза плеєра й зупинка. */
+    private fun askLimit() {
+        val current = settings.stopAfter
+        val field = input(if (current > 0) current.toString() else "", number = true).apply { hint = "Напр. 26" }
+        val extra = ui.column(10)
+        extra.addView(field, ui.matchWrap())
+        val row = FlowLayout(host, ui.dp(8), ui.dp(8))
+        listOf(10, 12, 13, 15, 20, 26).forEach { n -> row.addView(ui.choice("$n", n == current) { field.setText("$n"); field.setSelection(field.text.length) }) }
+        extra.addView(row, ui.matchWrap())
+        val body = host.overlay.dialog(
+            title = "Зупинитись після",
+            message = "Скільки пісень записати. Після останньої Track Catcher поставить плеєр на паузу й сам зупинить запис.",
+            actions = listOf("Готово" to Ui.Kind.PRIMARY, "Скасувати" to Ui.Kind.QUIET),
+            onAction = { i ->
+                if (i == 0) {
+                    val n = field.text.toString().trim().toIntOrNull() ?: 0
+                    settings.stopAfter = n
+                }
+                host.overlay.dismiss()
+                planKey = ""
+                renderPlan(RecorderHub.state)
+            },
+            extra = extra,
+        )
+        host.overlay.show(KEY_LIMIT, body)
+    }
+
+    override fun restoreDialog(key: String): Boolean = when (key) {
+        KEY_ALBUM -> { askAlbum(); true }
+        KEY_LIMIT -> { askLimit(); true }
+        else -> false
     }
 
     private fun renderStatus(s: RecorderHub.State) {
         when (s.phase) {
             RecorderHub.Phase.IDLE -> {
                 statusTitle.text = "Готово до запису"
-                statusSub.text = "Увімкни музику в будь-якому плеєрі й натисни «Почати запис». Кожна пісня стане окремим файлом."
+                statusSub.text = s.notice ?: "Увімкни музику в будь-якому плеєрі й натисни «Почати запис». Кожна пісня стане окремим файлом."
             }
             RecorderHub.Phase.RECORDING -> {
                 val sb = SpannableStringBuilder("● ")
@@ -220,6 +357,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     private fun sessionLine(s: RecorderHub.State): String = buildString {
         append(TimeText.plural(s.tracks.coerceAtLeast(if (s.phase == RecorderHub.Phase.RECORDING) 1 else 0), "пісня", "пісні", "пісень"))
+        if (s.limit > 0 && s.phase == RecorderHub.Phase.RECORDING) append(" (").append(s.songs.coerceAtMost(s.limit)).append(" з ").append(s.limit).append(")")
         append(" · збережено ").append(s.saved)
         if (s.queued > 0) append(" · у черзі ").append(s.queued)
         if (s.failed > 0) append(" · невдало ").append(s.failed)
@@ -298,5 +436,10 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         } catch (e: Exception) {
             pkg
         }
+    }
+
+    companion object {
+        private const val KEY_ALBUM = "plan:album"
+        private const val KEY_LIMIT = "plan:limit"
     }
 }

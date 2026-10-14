@@ -7,6 +7,8 @@ import android.content.Intent
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.net.Uri
+import ua.faric.trackcatcher.data.Settings
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -192,6 +194,7 @@ class MainActivity : Activity() {
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime(),
             )
             frame.setPadding(b.left, b.top, b.right, b.bottom)
+            overlay.setSystemBars(b.left, b.top, b.right, b.bottom)
             WindowInsetsCompat.CONSUMED
         }
         setContentView(root)
@@ -243,6 +246,7 @@ class MainActivity : Activity() {
             s.onStart()
             s.onResume()
         }
+        if (::overlay.isInitialized) updateBackCallback()
     }
 
     /** Чорний екран на мінімальній яскравості: телефон не блокується сам — Android не зупинить запис. */
@@ -318,13 +322,24 @@ class MainActivity : Activity() {
 
     // ---------- «Назад» ----------
 
+    /** Екран змінив, чи хоче він «Назад» (режим вибору в історії). */
+    fun refreshBack() = updateBackCallback()
+
+    private fun backWanted(): Boolean = overlay.isShowing || screen?.wantsBack == true
+
+    private fun onBackAction() {
+        if (overlay.isShowing) overlay.dismiss() else screen?.handleBack()
+        updateBackCallback()
+    }
+
     private fun updateBackCallback() {
         if (Build.VERSION.SDK_INT < 33) return
-        val cb = (backCallback as? OnBackInvokedCallback) ?: OnBackInvokedCallback { overlay.dismiss() }.also { backCallback = it }
-        if (overlay.isShowing && !backRegistered) {
+        val cb = (backCallback as? OnBackInvokedCallback) ?: OnBackInvokedCallback { onBackAction() }.also { backCallback = it }
+        val want = backWanted()
+        if (want && !backRegistered) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb)
             backRegistered = true
-        } else if (!overlay.isShowing && backRegistered) {
+        } else if (!want && backRegistered) {
             onBackInvokedDispatcher.unregisterOnBackInvokedCallback(cb)
             backRegistered = false
         }
@@ -332,8 +347,8 @@ class MainActivity : Activity() {
 
     @Deprecated("Для Android 10–12; з 13 — OnBackInvokedCallback")
     override fun onBackPressed() {
-        if (overlay.isShowing) {
-            overlay.dismiss()
+        if (backWanted()) {
+            onBackAction()
         } else {
             @Suppress("DEPRECATION")
             super.onBackPressed()
@@ -394,12 +409,65 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_TREE) {
+            onFolderPicked(resultCode, data)
+            return
+        }
         if (requestCode != REQ_PROJECTION) return
         if (resultCode == RESULT_OK && data != null) {
             startForegroundService(CaptureService.startIntent(this, resultCode, data))
         } else {
             RecorderHub.update { it.copy(error = "Запис не почато: у вікні Android не натиснули «Почати».") }
         }
+    }
+
+    /** Своя папка (T29): вікно Android «Вибрати папку» — там видно й карту пам'яті. */
+    fun pickFolder() {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION,
+        )
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(i, REQ_TREE)
+        } catch (e: ActivityNotFoundException) {
+            toast("На цьому телефоні немає вікна вибору папки")
+        }
+    }
+
+    private fun onFolderPicked(resultCode: Int, data: Intent?) {
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null) return
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        try {
+            contentResolver.takePersistableUriPermission(uri, flags)
+        } catch (e: SecurityException) {
+            toast("Android не дав дозволу на цю папку — вибери іншу")
+            return
+        }
+        val settings = Settings(this)
+        val old = settings.treeUri
+        // Попередню свою папку відпускаємо — дозволів у застосунку не повинно накопичуватись.
+        if (old.isNotBlank() && old != uri.toString()) {
+            runCatching { contentResolver.releasePersistableUriPermission(Uri.parse(old), flags) }
+        }
+        settings.treeUri = uri.toString()
+        screen?.onResume()
+    }
+
+    /** Повернути «Музику» замість своєї папки. */
+    fun resetFolder() {
+        val settings = Settings(this)
+        val old = settings.treeUri
+        if (old.isNotBlank()) {
+            runCatching {
+                contentResolver.releasePersistableUriPermission(
+                    Uri.parse(old), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+        }
+        settings.treeUri = ""
+        screen?.onResume()
     }
 
     fun stopCapture() {
@@ -418,5 +486,6 @@ class MainActivity : Activity() {
         private const val REQ_PERMS = 10
         private const val REQ_PERMS_THEN_START = 11
         private const val REQ_PROJECTION = 20
+        private const val REQ_TREE = 30
     }
 }

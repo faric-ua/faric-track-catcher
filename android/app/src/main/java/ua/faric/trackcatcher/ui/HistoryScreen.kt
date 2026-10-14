@@ -36,6 +36,9 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private var filter: RecStatus? = state?.getString(KEY_FILTER)?.let { RecStatus.fromCode(it) }
     private var query: String = state?.getString(KEY_QUERY) ?: ""
     private var selectedId: Long = state?.getLong(KEY_SELECTED, 0L) ?: 0L
+    /** Режим вибору (T38): довге натискання на плитку. Порожньо — звичайний режим. */
+    private val picked = LinkedHashSet<Long>().apply { state?.getLongArray(KEY_PICKED)?.forEach { add(it) } }
+    private val pickBar = ui.card(10, fill = Palette.selectedFill, stroke = Palette.success)
 
     private val search = EditText(host).apply {
         hint = "Пошук: виконавець, назва, альбом"
@@ -70,6 +73,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             setPadding(ui.dp(16), ui.dp(12), ui.dp(16), ui.dp(4))
             addView(search, ui.matchWrap())
             addView(ui.hscroll(chips), ui.matchWrap())
+            addView(pickBar, ui.matchWrap())
         }
         val listColumn = ui.column().apply {
             addView(top, ui.matchWrap())
@@ -101,9 +105,19 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         filter?.let { out.putString(KEY_FILTER, it.code) }
         out.putString(KEY_QUERY, query)
         out.putLong(KEY_SELECTED, selectedId)
+        out.putLongArray(KEY_PICKED, picked.toLongArray())
     }
 
+    override val wantsBack: Boolean get() = picked.isNotEmpty()
+
+    override fun handleBack() = clearPicked()
+
     override fun restoreDialog(key: String): Boolean {
+        if (key == KEY_DELETE_MANY) {
+            if (picked.isEmpty()) return false
+            confirmDeleteMany()
+            return true
+        }
         val parts = key.split(":")
         val id = parts.getOrNull(1)?.toLongOrNull() ?: return false
         val row = db.get(id) ?: return false
@@ -120,11 +134,94 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
     }
 
+    // ---------- вибір і видалення кількох (T38) ----------
+
+    private fun togglePick(r: RecordingRow) {
+        if (!picked.remove(r.id)) picked += r.id
+        reload()
+        host.refreshBack()
+    }
+
+    private fun clearPicked() {
+        picked.clear()
+        reload()
+        host.refreshBack()
+    }
+
+    private fun renderPickBar() {
+        pickBar.removeAllViews()
+        // Записи, яких уже нема (видалено, фільтр), не рахуємо.
+        val all = db.list(null, "").associateBy { it.id }
+        picked.retainAll(all.keys)
+        pickBar.visibility = if (picked.isEmpty()) View.GONE else View.VISIBLE
+        if (picked.isEmpty()) return
+        val withFiles = picked.count { all[it]?.hasFile == true }
+        pickBar.addView(ui.numbers(ui.title("Вибрано: ${picked.size}", 16f)))
+        pickBar.addView(ui.muted(
+            if (withFiles > 0) "З файлом: $withFiles — файл теж буде видалено. Торкнись плитки — додати чи зняти." else "Торкнись плитки — додати чи зняти.",
+            13f,
+        ))
+        val actions = FlowLayout(host, ui.dp(8), ui.dp(8))
+        actions.addView(ui.button("Видалити (${picked.size})", Ui.Kind.DANGER) { confirmDeleteMany() })
+        if (rows.any { it.id !in picked }) actions.addView(ui.button("Вибрати всі видимі", Ui.Kind.NORMAL) {
+            rows.forEach { picked += it.id }
+            reload()
+        })
+        actions.addView(ui.button("Скасувати", Ui.Kind.QUIET) { clearPicked() })
+        pickBar.addView(actions, ui.matchWrap())
+    }
+
+    private fun confirmDeleteMany() {
+        val chosen = picked.mapNotNull { db.get(it) }
+        if (chosen.isEmpty()) return
+        val withFiles = chosen.count { it.hasFile }
+        val message = buildString {
+            append("З історії зникне ").append(TimeText.plural(chosen.size, "запис", "записи", "записів")).append(".")
+            if (withFiles > 0) {
+                append(" Разом з ними з телефона буде видалено файли ")
+                append(TimeText.plural(withFiles, "пісні", "пісень", "пісень")).append(" (MP3 / WAV).")
+            } else {
+                append(" Файлів у них нема — видаляються лише записи.")
+            }
+            append(" Повернути не вийде.")
+        }
+        val body = host.overlay.dialog(
+            title = if (chosen.size == 1) "Видалити запис?" else "Видалити ${chosen.size} записів?",
+            message = message,
+            actions = listOf("Видалити" to Ui.Kind.DANGER, "Скасувати" to Ui.Kind.QUIET),
+            onAction = { i -> if (i == 0) deleteMany(chosen) else host.overlay.dismiss() },
+        )
+        host.overlay.show(KEY_DELETE_MANY, body)
+    }
+
+    private fun deleteMany(chosen: List<RecordingRow>) {
+        val store = MediaStoreWriter(host)
+        val gone = ArrayList<Long>()
+        var stuck = 0
+        for (r in chosen) {
+            if (InAppPlayer.uri != null && (InAppPlayer.uri == r.mp3Uri || InAppPlayer.uri == r.wavUri)) InAppPlayer.stop()
+            var ok = true
+            for (uri in listOfNotNull(r.mp3Uri, r.wavUri)) {
+                // Файл уже прибрали в «Моїх файлах» — теж добре; не вдалося видалити — запис лишаємо.
+                if (!store.delete(uri) && store.stillThere(uri)) ok = false
+            }
+            if (ok) gone += r.id else stuck++
+        }
+        db.delete(gone)
+        picked.removeAll(gone.toSet())
+        if (selectedId in gone) selectedId = 0L
+        host.overlay.dismiss()
+        if (stuck > 0) host.toast("Не вдалося видалити файли ${TimeText.plural(stuck, "запису", "записів", "записів")} — вони лишились в історії.")
+        reload()
+        host.refreshBack()
+    }
+
     // ---------- список ----------
 
     private fun reload() {
         rows = db.list(filter, query)
         renderChips(db.counts())
+        renderPickBar()
         list.removeAllViews()
         if (rows.isEmpty()) {
             list.addView(ui.card(8).apply {
@@ -197,7 +294,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     }
 
     private fun rowView(r: RecordingRow): View {
-        val selected = detailPane != null && r.id == selectedId
+        val picking = picked.isNotEmpty()
+        val selected = if (picking) r.id in picked else detailPane != null && r.id == selectedId
         val box = ui.row(12).apply {
             gravity = Gravity.TOP
             setPadding(ui.dp(12), ui.dp(12), ui.dp(12), ui.dp(12))
@@ -208,7 +306,18 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             isClickable = true
             isFocusable = true
             contentDescription = r.displayName + ", " + r.status.label + if (selected) Ui.SELECTED_SUFFIX else ""
-            setOnClickListener { if (detailPane == null) showDetailDialog(r) else select(r) }
+            setOnClickListener {
+                when {
+                    picking -> togglePick(r)
+                    detailPane == null -> showDetailDialog(r)
+                    else -> select(r)
+                }
+            }
+            // Довге натискання — вибрати (далі торкання додає/знімає інші плитки).
+            setOnLongClickListener {
+                togglePick(r)
+                true
+            }
         }
         box.addView(thumb(r, 48), LinearLayout.LayoutParams(ui.dp(48), ui.dp(48)))
         val texts = ui.column(3)
@@ -405,5 +514,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         private const val KEY_FILTER = "filter"
         private const val KEY_QUERY = "query"
         private const val KEY_SELECTED = "selected"
+        private const val KEY_PICKED = "picked"
+        private const val KEY_DELETE_MANY = "deletemany:0"
     }
 }

@@ -33,6 +33,10 @@ class MemorySink : SegmentSink {
         override fun close(end: SegmentEnd) {
             this.end = end
         }
+        var discarded = false
+        override fun discard() {
+            discarded = true
+        }
     }
 
     val segments = mutableListOf<Seg>()

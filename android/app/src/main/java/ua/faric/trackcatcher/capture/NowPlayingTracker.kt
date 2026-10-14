@@ -111,6 +111,12 @@ class NowPlayingTracker(
 
     fun positionMs(): Long? = active?.let { position(it.playbackState) }
 
+    /** Поставити на паузу плеєр, що грає («Зупинитись після N пісень»). false — плеєра не видно. */
+    fun pausePlayer(): Boolean {
+        val c = active ?: return false
+        return runCatching { c.transportControls.pause() }.isSuccess
+    }
+
     private fun sync(list: List<MediaController>) {
         val own = app.packageName
         val fresh = list.filter { it.packageName != own }

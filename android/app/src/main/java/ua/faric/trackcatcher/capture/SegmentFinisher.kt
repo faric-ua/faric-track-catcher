@@ -1,6 +1,7 @@
 package ua.faric.trackcatcher.capture
 
 import android.content.Context
+import android.net.Uri
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
@@ -31,7 +32,7 @@ import ua.faric.trackcatcher.encode.Mp3Encoder
  */
 class SegmentFinisher(context: Context) {
     private val app = context.applicationContext
-    private val store = MediaStoreWriter(app)
+    private val mediaStore = MediaStoreWriter(app)
     private val db = HistoryDb.get(app)
 
     fun finish(job: SegmentJob, settings: Settings.Values): RecordingRow {
@@ -56,15 +57,35 @@ class SegmentFinisher(context: Context) {
         var wav: MediaStoreWriter.Saved? = null
         var bitrate = 0
         if (verdict.status == RecStatus.COMPLETE || verdict.status == RecStatus.PARTIAL) {
-            try {
-                val base = FileNames.baseName(job.meta)
-                val dir = FileNames.folderFor(job.meta, settings.albumFolders)
-                val fade = EdgeFade.frames(fadeMs = settings.fadeMs)
-                if (settings.format.wav) wav = writeWav(job, stats, base, dir, fade)
+            val base = FileNames.baseName(job.meta)
+            val dir = FileNames.folderFor(job.meta, settings.albumFolders)
+            val fade = EdgeFade.frames(fadeMs = settings.fadeMs)
+            fun saveTo(store: AudioStore) {
+                if (settings.format.wav) wav = writeWav(store, job, stats, base, dir, fade)
                 if (settings.format.mp3) {
                     bitrate = settings.mp3Bitrate
-                    mp3 = writeMp3(job, stats, base, dir, fade, settings.mp3Bitrate, lengthMs)
+                    mp3 = writeMp3(store, job, stats, base, dir, fade, settings.mp3Bitrate, lengthMs)
                 }
+            }
+            // Своя папка (T29). Недоступна (карту вийняли, дозвіл забрали) — пісня не губиться: іде в «Музику».
+            val tree = settings.treeUri.takeIf { it.isNotBlank() }?.let { runCatching { TreeWriter(app, Uri.parse(it)) }.getOrNull() }
+            var note: String? = null
+            try {
+                if (tree != null && tree.available()) {
+                    try {
+                        saveTo(tree)
+                    } catch (e: Exception) {
+                        listOfNotNull(wav, mp3).forEach { mediaStore.delete(it.uri) }
+                        wav = null
+                        mp3 = null
+                        note = "не вдалося записати у свою папку — збережено в «Музику»"
+                        saveTo(mediaStore)
+                    }
+                } else {
+                    if (settings.treeUri.isNotBlank()) note = "своя папка недоступна — збережено в «Музику»"
+                    saveTo(mediaStore)
+                }
+                note?.let { verdict = verdict.copy(reasons = verdict.reasons + it) }
             } catch (e: Exception) {
                 verdict = Verdict(RecStatus.FAILED, listOf(saveError(e)))
             }
@@ -111,7 +132,7 @@ class SegmentFinisher(context: Context) {
         return row.copy(id = id)
     }
 
-    private fun writeWav(job: SegmentJob, stats: AudioStats, base: String, dir: String, fade: Int): MediaStoreWriter.Saved {
+    private fun writeWav(store: AudioStore, job: SegmentJob, stats: AudioStats, base: String, dir: String, fade: Int): MediaStoreWriter.Saved {
         val name = FileNames.unique(base, "wav") { store.exists(it, dir) }
         val dataBytes = stats.keptFrames * Pcm.BYTES_PER_FRAME
         return store.write(name, "audio/x-wav", dir) { out ->
@@ -120,7 +141,7 @@ class SegmentFinisher(context: Context) {
         }
     }
 
-    private fun writeMp3(job: SegmentJob, stats: AudioStats, base: String, dir: String, fade: Int, kbps: Int, lengthMs: Long): MediaStoreWriter.Saved {
+    private fun writeMp3(store: AudioStore, job: SegmentJob, stats: AudioStats, base: String, dir: String, fade: Int, kbps: Int, lengthMs: Long): MediaStoreWriter.Saved {
         val name = FileNames.unique(base, "mp3") { store.exists(it, dir) }
         return store.write(name, "audio/mpeg", dir) { out: OutputStream ->
             out.write(Id3v2.build(job.meta, lengthMs, Artwork.readJpeg(job.meta.artworkPath)))
