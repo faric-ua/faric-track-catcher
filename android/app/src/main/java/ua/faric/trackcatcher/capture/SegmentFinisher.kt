@@ -57,8 +57,8 @@ class SegmentFinisher(context: Context) {
         var wav: MediaStoreWriter.Saved? = null
         var bitrate = 0
         if (verdict.status == RecStatus.COMPLETE || verdict.status == RecStatus.PARTIAL) {
-            val base = FileNames.baseName(job.meta)
-            val dir = FileNames.folderFor(job.meta, settings.albumFolders)
+            val base = FileNames.baseName(job.meta, settings.plainNames)
+            val dir = FileNames.folderFor(job.meta, settings.albumFolders, settings.plainNames)
             val fade = EdgeFade.frames(fadeMs = settings.fadeMs)
             fun saveTo(store: AudioStore) {
                 if (settings.format.wav) wav = writeWav(store, job, stats, base, dir, fade)
