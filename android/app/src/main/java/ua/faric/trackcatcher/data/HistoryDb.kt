@@ -31,6 +31,8 @@ data class RecordingRow(
     val wavName: String?,
     val wavSize: Long,
     val cutBySilence: Boolean,
+    /** Скільки місць, де звук упирався в стелю (піки обрізано). -1 — не рахувалось (записи до v0.1.11). */
+    val clips: Int = -1,
 ) {
     val displayName: String
         get() = when {
@@ -51,7 +53,7 @@ data class SessionRow(
 
 /** Історія записів — SQLite на телефоні. Нічого не видаляється мовчки. */
 class HistoryDb private constructor(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, "history.db", null, 1) {
+    SQLiteOpenHelper(context.applicationContext, "history.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -77,12 +79,16 @@ class HistoryDb private constructor(context: Context) :
                 artwork_path TEXT,
                 mp3_uri TEXT, mp3_name TEXT, mp3_size INTEGER NOT NULL DEFAULT 0, mp3_bitrate INTEGER NOT NULL DEFAULT 0,
                 wav_uri TEXT, wav_name TEXT, wav_size INTEGER NOT NULL DEFAULT 0,
-                cut_by_silence INTEGER NOT NULL DEFAULT 0)""",
+                cut_by_silence INTEGER NOT NULL DEFAULT 0,
+                clips INTEGER NOT NULL DEFAULT -1)""",
         )
         db.execSQL("CREATE INDEX recordings_created ON recordings(created_at)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // v2 (0.1.11): лічильник перевантажень. Старі записи лишаються, у них -1 — «не рахувалось».
+        if (oldVersion < 2) db.execSQL("ALTER TABLE recordings ADD COLUMN clips INTEGER NOT NULL DEFAULT -1")
+    }
 
     fun startSession(startedAt: Long, formatLabel: String): Long =
         writableDatabase.insert("sessions", null, ContentValues().apply {
@@ -116,6 +122,7 @@ class HistoryDb private constructor(context: Context) :
             put("wav_name", r.wavName)
             put("wav_size", r.wavSize)
             put("cut_by_silence", if (r.cutBySilence) 1 else 0)
+            put("clips", r.clips)
         })
         changed()
         return id
@@ -193,6 +200,7 @@ class HistoryDb private constructor(context: Context) :
             mp3Uri = sn("mp3_uri"), mp3Name = sn("mp3_name"), mp3Size = l("mp3_size"), mp3Bitrate = l("mp3_bitrate").toInt(),
             wavUri = sn("wav_uri"), wavName = sn("wav_name"), wavSize = l("wav_size"),
             cutBySilence = l("cut_by_silence") != 0L,
+            clips = c.getColumnIndex("clips").let { i -> if (i >= 0) c.getInt(i) else -1 },
         )
     }
 

@@ -54,8 +54,13 @@ class TrackSplitter(
 
     private data class Pending(val eventFrame: Long, val meta: TrackMeta, val positionMs: Long?)
 
-    /** [force] — та сама пісня почалась знову (повтор) — теж новий файл. */
-    fun onTrackChange(meta: TrackMeta, positionMs: Long?, force: Boolean = false) {
+    /**
+     * [force] — та сама пісня почалась знову (повтор) — теж новий файл.
+     * [aheadFrames] — на скільки кадрів сигнал пізніший за вже отриманий звук: потік запису
+     * може відставати від Android, і тоді сигнал зі шторки стосується звуку, який ще не дочитано.
+     * Без цієї поправки розріз ставав раніше, ніж треба, — «нова пісня почалась, а стара ще грає» (14.10).
+     */
+    fun onTrackChange(meta: TrackMeta, positionMs: Long?, force: Boolean = false, aheadFrames: Long = 0L) {
         if (current == null) {
             pending = null
             open(meta, totalFrames, positionMs)
@@ -68,7 +73,7 @@ class TrackSplitter(
         } else if (!force && currentMeta?.sameTrack(meta) == true) {
             return
         }
-        pending = Pending(totalFrames, meta, positionMs)
+        pending = Pending(totalFrames + aheadFrames.coerceAtLeast(0L), meta, positionMs)
     }
 
     /** Подробиці тієї самої пісні — оновлюємо, не ріжемо. */
@@ -109,12 +114,12 @@ class TrackSplitter(
             return
         }
         val lowest = maxOf(currentStart, ring.startFrame)
-        var cut = p.eventFrame
+        var cut = p.eventFrame.coerceAtMost(totalFrames)
         var bySilence = false
         if (useSilence) {
             val from = maxOf(p.eventFrame - windowFrames, lowest)
             val to = totalFrames
-            if (to - from >= sampleRate / 10) {
+            if (to - from >= sampleRate / 10 && p.eventFrame in from..to) {
                 val window = ring.copy(from, to)
                 val r = SilenceCut.findCut(window, channels, sampleRate, (p.eventFrame - from).toInt())
                 cut = from + r.frame

@@ -19,13 +19,15 @@ class EdgeFadeTest {
 
     @Test
     fun startsAndEndsAtZeroMiddleUntouched() {
-        val total = 4_800 // 0,1 с
+        val total = 96_000 // 2 с
         val buf = pcm(total, 20_000)
         EdgeFade.apply(buf, buf.size, 0, total.toLong())
         assertEquals(0, sample(buf, 0))
         assertEquals(0, sample(buf, total - 1, 1))
-        assertEquals(20_000, sample(buf, 2_400))
-        assertTrue(sample(buf, 240) in 9_900..10_100) // середина входу — пів гучності
+        assertEquals(20_000, sample(buf, 48_000))
+        assertTrue(sample(buf, 12_000) in 9_900..10_100) // 0,25 с — середина наростання, пів гучності
+        assertTrue(sample(buf, total - 12_001) in 9_900..10_100) // 0,25 с до кінця — пів гучності
+        assertEquals(20_000, sample(buf, 24_000)) // після 0,5 с — повна
     }
 
     @Test
