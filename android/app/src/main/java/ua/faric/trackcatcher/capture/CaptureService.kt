@@ -85,7 +85,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
                 userStop = true
                 stopRecording()
             }
-            ACTION_RECOVER -> recoverOrphans()
+            ACTION_RECOVER -> recoverOrphans(stopWhenNothing = true)
         }
         return START_NOT_STICKY
     }
@@ -162,7 +162,9 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         val db = HistoryDb.get(this)
         sessionId = db.startSession(System.currentTimeMillis(), values.label)
         queue = FinisherQueue(this) { main.post { onQueueIdle() } }
-        recoverOrphans()
+        // Тут НЕ можна зупиняти службу, якщо шматків немає: v0.1.0–0.1.3 тут закривали службу — вона
+        // закривалась одразу після старту, звуку не було, а екран показував «Записую» (M30s, 14.10).
+        recoverOrphans(stopWhenNothing = false)
 
         val segmentsDir = segmentsDir(this)
         val splitter = TrackSplitter(FileSegmentSink(segmentsDir, sessionId) { job -> queue?.submit(job, values) })
@@ -320,6 +322,10 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     private fun stopRecording() {
         if (!running) {
             if (!stopping && queue?.busy != true) {
+                // Запису вже немає (служба закривалась) — повернути екран у «Готово», а не висіти в «Записую».
+                if (RecorderHub.state.phase != RecorderHub.Phase.IDLE) {
+                    RecorderHub.update { it.copy(phase = RecorderHub.Phase.IDLE, levelL = 0f, levelR = 0f, warning = null, diag = null) }
+                }
                 stopForegroundCompat()
                 stopSelf()
             }
@@ -364,7 +370,15 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     }
 
     override fun onDestroy() {
+        main.removeCallbacks(watchdog)
         if (running) {
+            // Служба закривається посеред запису (система чи помилка) — сказати про це, а не висіти в «Записую».
+            RecorderHub.update {
+                it.copy(
+                    phase = RecorderHub.Phase.IDLE, levelL = 0f, levelR = 0f, warning = null, diag = null,
+                    error = "Запис зупинився: Android закрив фонову службу. Записане до цього збережеться при наступному запуску.",
+                )
+            }
             running = false
             runCatching { record?.stop() }
             runCatching { captureThread?.join(2_000) }
@@ -378,14 +392,14 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     // ---------- відновлення ----------
 
     /** Шматки, що лишились після закриття застосунку, — зберегти як «неповні». */
-    private fun recoverOrphans() {
+    private fun recoverOrphans(stopWhenNothing: Boolean) {
         val dir = segmentsDir(this)
         val orphans = dir.listFiles { f -> f.name.endsWith(".json") }
             ?.filter { !it.name.startsWith("s$sessionId-") || sessionId == 0L }
             ?.mapNotNull { SegmentJob.fromSidecar(it) }
             .orEmpty()
         if (orphans.isEmpty()) {
-            if (!running && !stopping && recoveryQueue == null) stopSelf()
+            if (stopWhenNothing && !running && !stopping && recoveryQueue == null) stopSelf()
             return
         }
         val values = settings ?: Settings(this).snapshot()
