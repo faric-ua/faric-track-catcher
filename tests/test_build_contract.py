@@ -48,6 +48,17 @@ class BuildContract(unittest.TestCase):
         self.assertIn("::error title=Android build::", CI)
         self.assertIn("::notice title=APK_SHA256::", CI)
 
+    def test_start_never_stops_own_service(self):
+        """Регрес v0.1.0–0.1.3: recoverOrphans() на старті робив stopSelf() — служба запису закривалась."""
+        svc = (ROOT / "android/app/src/main/java/ua/faric/trackcatcher/capture/CaptureService.kt").read_text(encoding="utf-8")
+        start = svc[svc.index("private fun startRecording"):svc.index("private fun failStart")]
+        self.assertIn("recoverOrphans(stopWhenNothing = false)", start)
+        self.assertNotIn("stopSelf()", start.replace("failStart", ""))
+        rec = svc[svc.index("private fun recoverOrphans"):]
+        self.assertIn("if (stopWhenNothing &&", rec)
+        destroy = svc[svc.index("override fun onDestroy"):svc.index("override fun onDestroy") + 900]
+        self.assertIn("Phase.IDLE", destroy)
+
     def test_guide_served_via_asset_loader(self):
         g = (ROOT / "android/app/src/main/java/ua/faric/trackcatcher/ui/GuideActivity.kt").read_text(encoding="utf-8")
         self.assertIn("WebViewAssetLoader", g)
