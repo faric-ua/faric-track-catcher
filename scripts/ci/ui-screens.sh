@@ -47,6 +47,29 @@ start --es tab HISTORY --es dialog detail:3
 shot p05-history-detail
 start --es tab HISTORY --es dialog delete:3
 shot p06-delete-confirm
+adb shell input keyevent KEYCODE_BACK
+# Вибір плиток (T38): довге натискання на першу плитку, потім торкання другої.
+start --es tab HISTORY
+sleep 3
+adb shell input swipe 540 760 540 760 1200
+sleep 1
+adb shell input tap 540 1000
+shot p06b-history-picked
+start --es tab HISTORY --es dialog deletemany:0
+shot p06c-delete-many-confirm
+adb shell input keyevent KEYCODE_BACK
+adb shell input keyevent KEYCODE_BACK
+# «Цей запис» (T39, T40): вікна свого альбому й ліміту пісень.
+start --es tab RECORD --es dialog plan:album
+shot p06d-plan-album
+adb shell input keyevent KEYCODE_BACK
+start --es tab RECORD --es dialog plan:limit
+shot p06e-plan-limit
+adb shell input keyevent KEYCODE_BACK
+start --es tab RECORD
+sleep 2
+adb shell input swipe 540 1700 540 700 300
+shot p06f-record-plan-card
 rotate 1
 shot l01-delete-confirm-after-rotation
 adb shell input keyevent KEYCODE_BACK
@@ -58,6 +81,10 @@ start --es tab SETTINGS
 shot l04-settings-two-pane
 rotate 0
 shot p07-settings
+adb shell input swipe 540 1800 540 300 300
+sleep 1
+adb shell input swipe 540 1800 540 300 300
+shot p07b-settings-edges-folder
 # інструкція користувача (окреме вікно; singleTop — розділи змінюються без закриття)
 guide() { adb shell am start -n "$PKG/ua.faric.trackcatcher.ui.GuideActivity" --es section "$1" >/dev/null; }
 guide home
@@ -76,6 +103,8 @@ start --es tab RECORD
 shot p08-record-font130 4
 start --es tab SETTINGS
 shot p09-settings-font130
+start --es tab HISTORY --es dialog detail:3
+shot p10-detail-font130
 rotate 1
 start --es tab HISTORY
 shot l05-history-font130

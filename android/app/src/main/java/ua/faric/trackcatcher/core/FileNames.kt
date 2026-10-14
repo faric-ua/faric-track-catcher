@@ -23,6 +23,17 @@ object FileNames {
         return ROOT_DIR + sanitize(meta.album, 80) + "/"
     }
 
+    /**
+     * Своя папка (T29): id документа Android → слова.
+     * «primary:Records/Neon» → «Пам'ять телефона › Records › Neon»; «1A2B-3C4D:Music/X» → «Карта пам'яті › Music › X».
+     */
+    fun documentLabel(documentId: String): String {
+        val volume = documentId.substringBefore(':')
+        val path = documentId.substringAfter(':', "").trim('/')
+        val head = if (volume == "primary") "Пам'ять телефона" else "Карта пам'яті"
+        return (listOf(head) + path.split('/').filter { it.isNotBlank() }).joinToString(" › ")
+    }
+
     /** «Music/Track Catcher/Neon/» → «Музика › Track Catcher › Neon». */
     fun folderLabel(relativeDir: String): String {
         val parts = relativeDir.trim('/').split('/').filter { it.isNotBlank() }

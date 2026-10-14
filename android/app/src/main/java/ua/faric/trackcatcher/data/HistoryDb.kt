@@ -170,6 +170,20 @@ class HistoryDb private constructor(context: Context) :
             arrayOf(RecStatus.COMPLETE.code, artist.trim().lowercase(), title.trim().lowercase()),
         ).use { it.moveToFirst() }
 
+    /** Видалити записи з історії (власник вибрав і підтвердив — T38). */
+    fun delete(ids: Collection<Long>) {
+        if (ids.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            for (id in ids) db.delete("recordings", "id=?", arrayOf(id.toString()))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        changed()
+    }
+
     /** Файл видалено власником: запис в історії лишається з поміткою. */
     fun markFileDeleted(id: Long, mp3: Boolean, wav: Boolean) {
         val r = get(id) ?: return

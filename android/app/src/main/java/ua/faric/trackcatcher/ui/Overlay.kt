@@ -15,6 +15,12 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
     var key: String? = null
         private set
     private var layer: View? = null
+    private var panel: View? = null
+    /** Системні панелі (рядок стану згори, кнопки внизу): вікно не заходить під них (T41, faric 14.10). */
+    private var barLeft = 0
+    private var barTop = 0
+    private var barRight = 0
+    private var barBottom = 0
 
     val isShowing: Boolean get() = layer != null
 
@@ -40,12 +46,11 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
         panel.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val widthDp = host.context.resources.configuration.screenWidthDp
         val panelW = minOf(ui.dp(560), (ui.dp(widthDp) * 0.92f).toInt())
-        scrim.addView(panel, FrameLayout.LayoutParams(panelW, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER).apply {
-            topMargin = ui.dp(24)
-            bottomMargin = ui.dp(24)
-        })
+        scrim.addView(panel, FrameLayout.LayoutParams(panelW, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         host.addView(scrim, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         layer = scrim
+        this.panel = panel
+        placePanel()
         onChange(key)
     }
 
@@ -59,9 +64,30 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
         onChange(key)
     }
 
+    /** Відступи системних панелей змінились (поворот, клавіатура) — переставити вікно. */
+    fun setSystemBars(left: Int, top: Int, right: Int, bottom: Int) {
+        barLeft = left
+        barTop = top
+        barRight = right
+        barBottom = bottom
+        placePanel()
+    }
+
+    private fun placePanel() {
+        val p = panel ?: return
+        val lp = p.layoutParams as? FrameLayout.LayoutParams ?: return
+        // Вікно — між системними панелями з запасом 16 dp; вище не влазить — прокручується всередині.
+        lp.leftMargin = barLeft
+        lp.rightMargin = barRight
+        lp.topMargin = barTop + ui.dp(16)
+        lp.bottomMargin = barBottom + ui.dp(16)
+        p.layoutParams = lp
+    }
+
     fun dismiss(notify: Boolean = true) {
         layer?.let { host.removeView(it) }
         layer = null
+        panel = null
         key = null
         if (notify) onChange(null)
     }

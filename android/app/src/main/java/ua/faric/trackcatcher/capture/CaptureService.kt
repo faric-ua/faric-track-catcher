@@ -55,6 +55,13 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     @Volatile private var playerPaused = false
     @Volatile private var userStop = false
 
+    // «Зупинитись після N пісень» (T40) і свій альбом (T39) — лише головний потік.
+    private var limit = 0
+    private var songsStarted = 0
+    private var limitReached = false
+    private var customAlbum = ""
+    @Volatile private var discardLast = false
+
     // Діагностика (пише потік запису, читає сторож у головному потоці).
     @Volatile private var framesRead = 0L
     @Volatile private var lastReadAt = 0L
@@ -92,7 +99,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     private sealed class Item {
         class Audio(val buf: ShortArray, val n: Int) : Item()
         class Event(val e: TrackEvent, val aheadFrames: Long) : Item()
-        object End : Item()
+        /** Кінець запису; [discardLast] — початок пісні після ліміту «N пісень» не зберігати. */
+        class End(val discardLast: Boolean) : Item()
     }
     private val pipe = LinkedBlockingQueue<Item>()
     private val pool = ArrayBlockingQueue<ShortArray>(POOL_SIZE)
@@ -196,6 +204,11 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
 
         val values = Settings(this).snapshot()
         settings = values
+        limit = values.stopAfter
+        songsStarted = 0
+        limitReached = false
+        discardLast = false
+        customAlbum = values.customAlbum
         val db = HistoryDb.get(this)
         sessionId = db.startSession(System.currentTimeMillis(), values.label)
         queue = FinisherQueue(this) { main.post { onQueueIdle() } }
@@ -210,7 +223,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         tracker = t
         t.start()
         // start() уже повідомив поточну пісню через onTrack; якщо плеєра не видно — «невідома».
-        if (t.meta == null) events.add(TrackEvent(TrackMeta(sourcePackage = t.sourcePackage ?: ""), null, force = false, details = false))
+        if (t.meta == null) events.add(TrackEvent(withAlbum(TrackMeta(sourcePackage = t.sourcePackage ?: "")), null, force = false, details = false))
         playerPaused = t.hasPlayer && !t.playing
 
         try {
@@ -238,8 +251,11 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
                 phase = RecorderHub.Phase.RECORDING,
                 sessionId = sessionId,
                 startedAt = System.currentTimeMillis(),
-                meta = t.meta,
+                meta = t.meta?.let { withAlbum(it) },
                 playing = t.playing,
+                limit = limit,
+                songs = songsStarted,
+                notice = null,
             )
         }
         updateNotification()
@@ -317,7 +333,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         } catch (e: Exception) {
             error = "Помилка запису: ${e.message}"
         } finally {
-            pipe.put(Item.End)
+            pipe.put(Item.End(discardLast))
         }
         if (error != null) {
             val msg = error
@@ -329,6 +345,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     /** Потік диска: ріже на пісні й пише шматки у файли. Може «задуматись» — звук чекає в трубі. */
     private fun writerLoop(splitter: TrackSplitter) {
         var error: String? = null
+        var discard = false
         try {
             loop@ while (true) {
                 when (val item = pipe.take()) {
@@ -342,14 +359,17 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
                         if (e.details) splitter.onDetails(e.meta) else splitter.onTrackChange(e.meta, e.positionMs, e.force, item.aheadFrames)
                         tracksOpened = splitter.segmentsOpened
                     }
-                    Item.End -> break@loop
+                    is Item.End -> {
+                        discard = item.discardLast
+                        break@loop
+                    }
                 }
             }
         } catch (e: Exception) {
             error = if (e.message?.contains("ENOSPC") == true) "Немає місця на телефоні — запис зупинено." else "Помилка запису: ${e.message}"
         } finally {
             try {
-                splitter.stop()
+                splitter.stop(discardCurrent = discard)
             } catch (e: Exception) {
                 if (error == null) error = "Помилка під час зупинки: ${e.message}"
             }
@@ -442,14 +462,41 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     // ---------- шторка ----------
 
     override fun onTrack(meta: TrackMeta, positionMs: Long?, restart: Boolean) {
-        events.add(TrackEvent(meta, positionMs, force = restart, details = false))
-        RecorderHub.update { it.copy(meta = meta) }
+        if (limitReached) return // ліміт досягнуто — далі нічого не ріжемо, лише зупиняємось
+        val m = withAlbum(meta)
+        events.add(TrackEvent(m, positionMs, force = restart, details = false))
+        if (!meta.isUnknown) songsStarted++
+        RecorderHub.update { it.copy(meta = m, songs = songsStarted) }
         updateNotification()
+        if (running && limit > 0 && songsStarted > limit) reachLimit()
     }
 
     override fun onDetails(meta: TrackMeta) {
-        events.add(TrackEvent(meta, null, force = false, details = true))
-        RecorderHub.update { it.copy(meta = meta) }
+        if (limitReached) return
+        val m = withAlbum(meta)
+        events.add(TrackEvent(m, null, force = false, details = true))
+        RecorderHub.update { it.copy(meta = m) }
+    }
+
+    /** Свій альбом (T39): усі пісні запису йдуть в один альбом — і в папку, і в теги. */
+    private fun withAlbum(meta: TrackMeta): TrackMeta = if (customAlbum.isBlank()) meta else meta.copy(album = customAlbum)
+
+    /**
+     * Почалась (N+1)-а пісня: N-у вже записано. Плеєр — на паузу, через 2,5 с (щоб різак знайшов
+     * тишу чи обрив між піснями) — зупинка; початок (N+1)-ї у файл не йде.
+     */
+    private fun reachLimit() {
+        limitReached = true
+        tracker?.pausePlayer()
+        val done = TimeText.plural(limit, "пісню", "пісні", "пісень")
+        RecorderHub.update { it.copy(notice = "Записано $done — плеєр на паузі, запис зупинено.") }
+        main.postDelayed({
+            if (running) {
+                discardLast = true
+                userStop = true
+                stopRecording()
+            }
+        }, 2_500)
     }
 
     override fun onPlaying(playing: Boolean) {

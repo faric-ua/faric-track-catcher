@@ -25,4 +25,11 @@ class FileNamesFolderTest {
         assertEquals("Музика › Track Catcher › Neon", FileNames.folderLabel("Music/Track Catcher/Neon/"))
         assertEquals("Музика › Track Catcher", FileNames.folderLabel("Music/Track Catcher/"))
     }
+
+    @Test
+    fun ownFolderLabel() {
+        assertEquals("Пам'ять телефона › Records › Neon", FileNames.documentLabel("primary:Records/Neon"))
+        assertEquals("Карта пам'яті › Music", FileNames.documentLabel("1A2B-3C4D:Music"))
+        assertEquals("Карта пам'яті", FileNames.documentLabel("1A2B-3C4D:"))
+    }
 }

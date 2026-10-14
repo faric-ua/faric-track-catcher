@@ -21,6 +21,12 @@ class Settings(context: Context) {
         val fadeMs: Int = 500,
         /** Зсув сигналу «нова пісня», мс: «+» — розріз пізніше, «−» — раніше. */
         val cutShiftMs: Int = 0,
+        /** Свій альбом для всіх пісень запису (T39); порожньо — як у плеєрі. */
+        val customAlbum: String = "",
+        /** Зупинитись після стількох пісень (T40); 0 — без обмеження. */
+        val stopAfter: Int = 0,
+        /** Своя папка (T29): дозвіл Android на папку; порожньо — «Музика › Track Catcher». */
+        val treeUri: String = "",
     ) {
         val label: String
             get() = when (format) {
@@ -62,7 +68,29 @@ class Settings(context: Context) {
         get() = prefs.getInt(KEY_CUT_SHIFT_MS, 0)
         set(v) = prefs.edit().putInt(KEY_CUT_SHIFT_MS, v).apply()
 
-    fun snapshot() = Values(format, mp3Bitrate, minLengthSec, repeat, albumFolders, trimEdges, fadeMs, cutShiftMs)
+    /** Свій альбом увімкнено (назва лишається в пам'яті, навіть коли вимкнено). */
+    var useCustomAlbum: Boolean
+        get() = prefs.getBoolean(KEY_USE_ALBUM, false)
+        set(v) = prefs.edit().putBoolean(KEY_USE_ALBUM, v).apply()
+
+    var customAlbum: String
+        get() = prefs.getString(KEY_ALBUM, "") ?: ""
+        set(v) = prefs.edit().putString(KEY_ALBUM, v.trim()).apply()
+
+    var stopAfter: Int
+        get() = prefs.getInt(KEY_STOP_AFTER, 0)
+        set(v) = prefs.edit().putInt(KEY_STOP_AFTER, v.coerceIn(0, MAX_STOP_AFTER)).apply()
+
+    fun snapshot() = Values(
+        format, mp3Bitrate, minLengthSec, repeat, albumFolders, trimEdges, fadeMs, cutShiftMs,
+        customAlbum = if (useCustomAlbum) customAlbum else "",
+        stopAfter = stopAfter,
+        treeUri = treeUri,
+    )
+
+    var treeUri: String
+        get() = prefs.getString(KEY_TREE, "") ?: ""
+        set(v) = prefs.edit().putString(KEY_TREE, v).apply()
 
     companion object {
         private const val KEY_FORMAT = "format"
@@ -73,6 +101,11 @@ class Settings(context: Context) {
         private const val KEY_TRIM_EDGES = "trim_edges"
         private const val KEY_FADE_MS = "fade_ms"
         private const val KEY_CUT_SHIFT_MS = "cut_shift_ms"
+        private const val KEY_USE_ALBUM = "use_custom_album"
+        private const val KEY_ALBUM = "custom_album"
+        private const val KEY_STOP_AFTER = "stop_after"
+        private const val KEY_TREE = "tree_uri"
+        const val MAX_STOP_AFTER = 999
         const val TRIM_EDGE_MS = 1_000
         val FADE_CHOICES = listOf(0, 100, 250, 500, 1_000, 2_000)
         val SHIFT_CHOICES = listOf(-1_000, -500, -200, 0, 200, 500, 1_000)

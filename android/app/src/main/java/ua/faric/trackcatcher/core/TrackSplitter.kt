@@ -15,6 +15,9 @@ interface SegmentHandle {
 
     /** Плеєр дописав подробиці (альбом, обкладинку, тривалість) уже під час пісні. */
     fun updateMeta(meta: TrackMeta) {}
+
+    /** Викинути шматок без збереження (початок пісні після ліміту «N пісень»). */
+    fun discard() = close(SegmentEnd(EndReason.STOP, false))
 }
 
 fun interface SegmentSink {
@@ -103,9 +106,13 @@ class TrackSplitter(
         if (p != null && totalFrames >= p.eventFrame + windowFrames) resolve(p, useSilence = true)
     }
 
-    fun stop() {
+    /**
+     * [discardCurrent] — «Зупинитись після N пісень»: розріз між N-ю і (N+1)-ю піснею вже зроблено,
+     * а початок (N+1)-ї у файл не йде.
+     */
+    fun stop(discardCurrent: Boolean = false) {
         pending?.let { resolve(it, useSilence = true) }
-        current?.close(SegmentEnd(EndReason.STOP, false))
+        if (discardCurrent) current?.discard() else current?.close(SegmentEnd(EndReason.STOP, false))
         current = null
         currentMeta = null
     }
