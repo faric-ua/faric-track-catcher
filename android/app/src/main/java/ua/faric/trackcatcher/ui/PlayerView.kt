@@ -14,8 +14,8 @@ import android.widget.TextView
 import ua.faric.trackcatcher.core.TimeText
 
 /**
- * Картка плеєра в подробицях запису: «❚❚ Пауза / ▶ Грати», смуга (торкнись або потягни — перемотка),
- * «1:12 / 4:21», «Інший плеєр». Слухає [InAppPlayer]; зникла з екрана — плеєр зупиняється.
+ * Картка плеєра в подробицях запису: «❚❚ Пауза / ▶ Грати», «Інший плеєр», смуга (торкнись або
+ * потягни — перемотка), під нею «1:12» ліворуч і «−3:09» праворуч. Слухає [InAppPlayer]; зникла з екрана — плеєр зупиняється.
  */
 @SuppressLint("ViewConstructor")
 class PlayerView(
@@ -26,7 +26,10 @@ class PlayerView(
 ) : LinearLayout(context) {
     private val handler = Handler(Looper.getMainLooper())
     private val toggle: TextView
-    private val time: TextView = ui.numbers(ui.text("0:00 / 0:00", 14f, Palette.muted))
+    // Під смугою: ліворуч — скільки зіграно, праворуч — скільки ще лишилось (faric 14.10 04:41:
+    // «4:5 / 8 / 5:39» у три рядки поміж кнопок читалось погано).
+    private val elapsed: TextView = ui.numbers(ui.text("0:00", 14f, Palette.text))
+    private val remaining: TextView = ui.numbers(ui.text("−0:00", 14f, Palette.muted))
     private val bar = ProgressTrack(context, ui) { ms -> InAppPlayer.seekTo(ms) }
     private val message: TextView = ui.text("", 13.5f, Palette.danger)
     private val listener: () -> Unit = { render() }
@@ -42,12 +45,16 @@ class PlayerView(
         background = ui.rounded(Palette.surfaceAlt, Palette.border, radiusDp = 14)
         setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10))
         toggle = ui.button("❚❚ Пауза", Ui.Kind.PRIMARY) { InAppPlayer.toggle(context) }
-        val top = ui.row(12).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+        val top = FlowLayout(context, ui.dp(8), ui.dp(8))
         top.addView(toggle)
-        top.addView(time, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
         top.addView(ui.button("Інший плеєр", Ui.Kind.QUIET) { InAppPlayer.pause(); onExternal() })
         addView(top, ui.matchWrap())
         addView(bar, LayoutParams(LayoutParams.MATCH_PARENT, ui.dp(Ui.MIN_TOUCH_DP)))
+        val times = ui.row(8).apply { setPadding(ui.dp(8), 0, ui.dp(8), 0) }
+        times.addView(elapsed, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+        remaining.textAlignment = TEXT_ALIGNMENT_VIEW_END
+        times.addView(remaining, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+        addView(times, ui.matchWrap())
         addView(message, ui.matchWrap())
         message.visibility = GONE
         contentDescription = "Плеєр запису"
@@ -77,7 +84,10 @@ class PlayerView(
         toggle.text = if (playing) "❚❚ Пауза" else "▶︎ Грати"
         val pos = if (mine) InAppPlayer.positionMs else 0L
         val dur = if (mine) InAppPlayer.durationMs else 0L
-        time.text = if (mine && !InAppPlayer.prepared && err == null) "відкриваю…" else "${TimeText.clock(pos)} / ${TimeText.clock(dur)}"
+        val opening = mine && !InAppPlayer.prepared && err == null
+        elapsed.text = if (opening) "відкриваю…" else TimeText.clock(pos)
+        remaining.text = if (opening || dur <= 0) "" else "−" + TimeText.clock((dur - pos).coerceAtLeast(0L))
+        elapsed.contentDescription = "Зіграно ${TimeText.clock(pos)} з ${TimeText.clock(dur)}"
         bar.set(pos, dur)
     }
 }

@@ -9,6 +9,7 @@ import java.io.OutputStream
 import java.io.RandomAccessFile
 import ua.faric.trackcatcher.core.AudioStats
 import ua.faric.trackcatcher.core.Classifier
+import ua.faric.trackcatcher.core.EdgeFade
 import ua.faric.trackcatcher.core.FileNames
 import ua.faric.trackcatcher.core.Id3v2
 import ua.faric.trackcatcher.core.LevelAnalysis
@@ -129,12 +130,18 @@ class SegmentFinisher(context: Context) {
         RandomAccessFile(file, "r").use { raf ->
             raf.seek(stats.startFrame * Pcm.BYTES_PER_FRAME)
             var left = stats.keptFrames * Pcm.BYTES_PER_FRAME
+            var frame = 0L
             while (left > 0) {
                 val want = minOf(left, buf.size.toLong()).toInt()
                 val n = raf.read(buf, 0, want)
                 if (n <= 0) break
                 val whole = n - n % Pcm.BYTES_PER_FRAME
-                if (whole > 0) sink(buf, whole)
+                if (whole > 0) {
+                    // 10 мс плавного входу й виходу — без «чирку» на краях файлу.
+                    EdgeFade.apply(buf, whole, frame, stats.keptFrames)
+                    sink(buf, whole)
+                    frame += whole / Pcm.BYTES_PER_FRAME
+                }
                 left -= n
             }
         }
