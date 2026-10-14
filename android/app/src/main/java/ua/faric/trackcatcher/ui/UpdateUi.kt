@@ -229,7 +229,8 @@ class UpdateUi(private val host: MainActivity) {
         showPublishSheet()
     }
 
-    private fun pasteLink(key: String): Boolean {
+    /** Посилання з буфера → ID файлу; немає — вікно з поясненням і null. */
+    private fun linkFromClipboard(): String? {
         val text = runCatching {
             val clip = (host.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.primaryClip
             if (clip != null && clip.itemCount > 0) clip.getItemAt(0).coerceToText(host)?.toString().orEmpty() else ""
@@ -243,6 +244,20 @@ class UpdateUi(private val host: MainActivity) {
                     "«Усі, хто має посилання» → «Копіювати посилання». Потім повернись сюди й натисни кнопку ще раз.$shown",
                 offerLink = false,
             )
+        }
+        return id
+    }
+
+    /** Кроки 3–4 автора. Те саме посилання в обох кроках — помилка (T46). */
+    private fun pasteLink(key: String): Boolean {
+        val id = linkFromClipboard() ?: return false
+        val other = prefs.getString(if (key == KEY_APK_ID) KEY_JSON_ID else KEY_APK_ID, "").orEmpty()
+        if (id == other) {
+            showProblem(
+                "Це те саме посилання, що вже вставлене в " + (if (key == KEY_APK_ID) "кроці 4" else "кроці 3") + ".\n\n" +
+                    "Крок 3 — посилання на «${DriveUpdate.APK_FILE_NAME}», крок 4 — на «${DriveUpdate.VERSION_FILE_NAME}».",
+                offerLink = false,
+            )
             return false
         }
         val edit = prefs.edit().putString(key, id)
@@ -250,6 +265,13 @@ class UpdateUi(private val host: MainActivity) {
         edit.apply()
         host.toast("Посилання вставлено")
         return true
+    }
+
+    /** Посилання для перевірки: зберігається лише тоді, коли за ним справді файл версії (T46). */
+    private fun checkPastedLink() {
+        val id = linkFromClipboard() ?: return
+        host.toast("Посилання вставлено")
+        check(quiet = false, pasted = id)
     }
 
     private fun shareLink(jsonId: String) {
@@ -372,9 +394,15 @@ class UpdateUi(private val host: MainActivity) {
         check(quiet = true)
     }
 
-    fun check(quiet: Boolean) {
-        val id = manifestId()
-        if (id == null) {
+    /**
+     * [pasted] — щойно вставлене посилання: перевіряється лише воно й зберігається, тільки якщо за ним
+     * файл версії. Інакше — збережене, а якщо воно не на файл версії (напр. на APK, T46), воно
+     * забувається й пробується вбудоване в застосунок.
+     */
+    fun check(quiet: Boolean, pasted: String? = null) {
+        val saved = prefs.getString(KEY_MANIFEST_ID, "")?.takeIf { it.isNotBlank() }
+        val candidates = DriveUpdate.manifestCandidates(pasted, saved, BUILT_IN_MANIFEST_ID)
+        if (candidates.isEmpty()) {
             if (!quiet) askForLink()
             return
         }
@@ -383,17 +411,28 @@ class UpdateUi(private val host: MainActivity) {
             return
         }
         Updater.busy = true
-        if (!quiet) host.toast("Перевіряю оновлення…")
+        if (!quiet && pasted == null) host.toast("Перевіряю оновлення…")
         val pkg = host.packageName
+        val store = prefs
         Thread({
             var manifest: DriveUpdate.Manifest? = null
             var problem: String? = null
-            try {
-                manifest = DriveUpdate.Manifest.parse(DriveHttp.readText(id, 64 * 1024))
-            } catch (e: IllegalArgumentException) {
-                problem = e.message
-            } catch (e: Exception) {
-                problem = e.message ?: "Немає зв'язку з Google Диском."
+            for (id in candidates) {
+                try {
+                    manifest = DriveUpdate.Manifest.parse(DriveHttp.readText(id, 64 * 1024))
+                    if (pasted != null) store.edit().putString(KEY_MANIFEST_ID, id).apply()
+                    problem = null
+                    break
+                } catch (e: DriveUpdate.WrongFileException) {
+                    problem = e.message
+                    if (pasted == null && id == saved) store.edit().remove(KEY_MANIFEST_ID).apply()
+                } catch (e: IllegalArgumentException) {
+                    problem = e.message
+                    break
+                } catch (e: Exception) {
+                    problem = e.message ?: "Немає зв'язку з Google Диском."
+                    break
+                }
             }
             Updater.busy = false
             val found = manifest
@@ -417,7 +456,7 @@ class UpdateUi(private val host: MainActivity) {
             actions = listOf("Вставити посилання" to Ui.Kind.PRIMARY, "Скасувати" to Ui.Kind.QUIET),
             onAction = { i ->
                 host.overlay.dismiss()
-                if (i == 0 && pasteLink(KEY_MANIFEST_ID)) check(quiet = false)
+                if (i == 0) checkPastedLink()
             },
         )
         host.overlay.show(KEY_DIALOG_LINK, body)
@@ -435,7 +474,7 @@ class UpdateUi(private val host: MainActivity) {
             onAction = { i ->
                 host.overlay.dismiss()
                 Updater.problem = null
-                if (offerLink && i == 0 && pasteLink(KEY_MANIFEST_ID)) check(quiet = false)
+                if (offerLink && i == 0) checkPastedLink()
             },
         )
         host.overlay.show(KEY_DIALOG_PROBLEM, body)

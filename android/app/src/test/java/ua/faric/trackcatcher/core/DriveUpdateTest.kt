@@ -58,11 +58,51 @@ class DriveUpdateTest {
 
     @Test
     fun badManifests() {
-        assertMessage("<!doctype html><html>", "не читається")
+        assertMessage("<!doctype html><html>", "не файл версії")
         assertMessage("{\"format\":\"dorama-update/1\"}", "інший формат")
         assertMessage("{\"format\":\"track-catcher-update/1\",\"package\":\"$pkg\"}", "неповний")
-        assertMessage("{\"format\":\"track-catcher-update/1\",\"a\":{\"b\":1}}", "не читається")
-        assertMessage("{\"format\":\"track-catcher-update/1\"} хвіст", "не читається")
+        assertMessage("{\"format\":\"track-catcher-update/1\",\"a\":{\"b\":1}}", "не файл версії")
+        assertMessage("{\"format\":\"track-catcher-update/1\"} хвіст", "не файл версії")
+    }
+
+    /** T46: не той файл — посилання забувається; «ще не опубліковано» / «неповний» — ні (це справа автора). */
+    @Test
+    fun wrongFileIsSeparate() {
+        assertTrue(isWrongFile("<!doctype html><html>"))
+        assertTrue(isWrongFile("{\"format\":\"dorama-update/1\"}"))
+        assertTrue(isWrongFile("PK\u0003\u0004бінарне"))
+        assertFalse(isWrongFile(DriveUpdate.PLACEHOLDER))
+        assertFalse(isWrongFile("{\"format\":\"track-catcher-update/1\",\"package\":\"$pkg\"}"))
+    }
+
+    /** T46 (14.10 22:19): faric вставив посилання на APK → «Файл на Диску завеликий (6,1 МБ)» без пояснення. */
+    @Test
+    fun apkLinkMessageExplains() {
+        val text = DriveUpdate.linkIsApkMessage(6_420_826)
+        assertTrue(text, text.contains("APK, 6,1 МБ") || text.contains("APK, 6.1 МБ"))
+        assertTrue(text.contains(DriveUpdate.VERSION_FILE_NAME))
+        assertTrue(text.contains("Поділитися посиланням на оновлення"))
+        assertFalse(DriveUpdate.linkIsApkMessage(-1).contains("МБ)"))
+    }
+
+    @Test
+    fun candidatesOrder() {
+        val built = "B".repeat(33)
+        assertEquals(listOf(id), DriveUpdate.manifestCandidates(id, "S".repeat(33), built))
+        assertEquals(listOf("S".repeat(33), built), DriveUpdate.manifestCandidates(null, "S".repeat(33), built))
+        assertEquals(listOf(built), DriveUpdate.manifestCandidates(null, built, built))
+        assertEquals(listOf(built), DriveUpdate.manifestCandidates(" ", "", built))
+        assertEquals(emptyList<String>(), DriveUpdate.manifestCandidates(null, null, ""))
+    }
+
+    private fun isWrongFile(text: String): Boolean = try {
+        DriveUpdate.Manifest.parse(text)
+        fail("мало не прочитатись: $text")
+        false
+    } catch (e: DriveUpdate.WrongFileException) {
+        true
+    } catch (e: IllegalArgumentException) {
+        false
     }
 
     @Test
