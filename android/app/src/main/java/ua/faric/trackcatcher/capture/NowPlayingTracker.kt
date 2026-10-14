@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import androidx.core.app.NotificationManagerCompat
+import ua.faric.trackcatcher.core.LoopDetector
 import ua.faric.trackcatcher.core.TrackMeta
 
 /**
@@ -18,7 +19,12 @@ import ua.faric.trackcatcher.core.TrackMeta
  * Стежить за всіма плеєрами; активний — той, що грає.
  * Усі виклики й події — у головному потоці.
  */
-class NowPlayingTracker(context: Context, private val listener: Listener) {
+class NowPlayingTracker(
+    context: Context,
+    private val listener: Listener,
+    /** Служба запису: щосекунди перевіряти повтор однієї пісні (плеєр може про нього мовчати). */
+    private val watchLoops: Boolean = false,
+) {
     interface Listener {
         /** Нова пісня (або та сама почалась спочатку — [restart]). */
         fun onTrack(meta: TrackMeta, positionMs: Long?, restart: Boolean)
@@ -36,6 +42,14 @@ class NowPlayingTracker(context: Context, private val listener: Listener) {
     private val watched = LinkedHashMap<MediaSession.Token, Watch>()
     private var active: MediaController? = null
     private var started = false
+    private val loops = LoopDetector()
+    private val loopPoll = object : Runnable {
+        override fun run() {
+            if (!started) return
+            checkLoop()
+            handler.postDelayed(this, 1_000)
+        }
+    }
 
     var meta: TrackMeta? = null
         private set
@@ -48,7 +62,7 @@ class NowPlayingTracker(context: Context, private val listener: Listener) {
     val sourcePackage: String? get() = active?.packageName
 
     private inner class Watch(val controller: MediaController) : MediaController.Callback() {
-        var lastPos = -1L
+        var lastState: PlaybackState? = null
 
         override fun onMetadataChanged(metadata: MediaMetadata?) = handleMeta(controller, metadata)
 
@@ -70,6 +84,7 @@ class NowPlayingTracker(context: Context, private val listener: Listener) {
             msm.addOnActiveSessionsChangedListener(sessionsListener, component, handler)
             started = true
             refresh()
+            if (watchLoops) handler.postDelayed(loopPoll, 1_000)
             true
         } catch (e: SecurityException) {
             false
@@ -150,7 +165,8 @@ class NowPlayingTracker(context: Context, private val listener: Listener) {
             return
         }
         meta = next
-        watched[c.sessionToken]?.lastPos = -1L
+        watched[c.sessionToken]?.lastState = null
+        loops.reset()
         listener.onTrack(next, position(c.playbackState), restart = false)
     }
 
@@ -163,7 +179,10 @@ class NowPlayingTracker(context: Context, private val listener: Listener) {
         val w = watched[c.sessionToken]
         if (w != null && pos != null) {
             val m = meta
-            if (isPlaying(s) && m != null && w.lastPos > 20_000 && pos < 3_000) {
+            // Порівнюємо з тим, де пісня МАЛА Б бути зараз (за попереднім станом), — багато плеєрів
+            // не шлють позицію щосекунди, тож «останнє повідомлення» могло бути 0 з самого старту.
+            val predictedPrev = position(w.lastState)
+            if (isPlaying(s) && m != null && LoopDetector.wrapped(predictedPrev, pos)) {
                 // Та сама пісня почалась спочатку? Чекаємо 1,5 с: якщо назва не змінилась — це повтор.
                 handler.postDelayed({
                     val now = positionMs()
@@ -172,9 +191,19 @@ class NowPlayingTracker(context: Context, private val listener: Listener) {
                     }
                 }, 1_500)
             }
-            w.lastPos = pos
+            w.lastState = s
+            loops.reset()
         }
         setPlaying(isPlaying(s))
+    }
+
+    /** Плеєр мовчить, а пісня мала б уже закінчитись — отже, грає знову (повтор однієї пісні). */
+    private fun checkLoop() {
+        val m = meta ?: return
+        if (!playing) return
+        val est = positionMs() ?: return
+        val newPos = loops.check(est, m.durationMs) ?: return
+        listener.onTrack(m, newPos, restart = true)
     }
 
     private fun setPlaying(p: Boolean) {

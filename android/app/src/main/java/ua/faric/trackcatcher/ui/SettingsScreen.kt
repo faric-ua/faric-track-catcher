@@ -123,6 +123,11 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     }
 
     private fun openFolder() {
+        // Папку Android створює лише з першим файлом; без неї «Мої файли» відкривають «Завантаження».
+        if (MediaStoreWriter(host).count() == 0) {
+            host.toast("Папка ще порожня: пісня зберігається, коли почнеться наступна або після «Зупинити»")
+            return
+        }
         val uri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3AMusic%2FTrack%20Catcher")
         val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "vnd.android.document/directory")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
