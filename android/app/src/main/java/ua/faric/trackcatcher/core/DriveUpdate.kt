@@ -21,6 +21,26 @@ object DriveUpdate {
     const val APK_FILE_NAME = "Track Catcher.apk"
     const val VERSION_FILE_NAME = "track-catcher-onovlennia.json"
 
+    /**
+     * Посилання вставили не на файл версії (T46, 14.10 22:19: faric вставив посилання на сам APK —
+     * «Файл на Диску завеликий (6,1 МБ)»). Таке посилання не зберігається, а вже збережене — забувається.
+     */
+    class WrongFileException(message: String) : IllegalArgumentException(message)
+
+    const val LINK_HINT = "Потрібне посилання саме на маленький файл версії «$VERSION_FILE_NAME», не на APK. " +
+        "Найпростіше: на телефоні автора «Опублікувати цю версію на Диск» → «Поділитися посиланням на оновлення»."
+
+    fun linkIsApkMessage(size: Long): String =
+        "За цим посиланням — сам застосунок (APK" + (if (size > 0) ", ${formatMb(size)}" else "") + "), а не файл версії.\n\n$LINK_HINT"
+
+    /**
+     * Які файли версії пробувати по черзі: вставлене зараз — лише його; інакше збережене, потім
+     * вбудоване в застосунок (якщо збережене виявиться не тим файлом).
+     */
+    fun manifestCandidates(pasted: String?, saved: String?, builtIn: String): List<String> =
+        if (!pasted.isNullOrBlank()) listOf(pasted)
+        else listOfNotNull(saved?.takeIf { it.isNotBlank() }, builtIn.takeIf { it.isNotBlank() }).distinct()
+
     private val BARE_ID = Regex("^[A-Za-z0-9_-]{20,80}$")
     private val PATH_ID = Regex("/(?:file/)?d/([A-Za-z0-9_-]{20,80})")
     private val QUERY_ID = Regex("[?&]id=([A-Za-z0-9_-]{20,80})")
@@ -109,13 +129,11 @@ object DriveUpdate {
                 val json = try {
                     MiniJson.parseFlat(text.orEmpty())
                 } catch (e: IllegalArgumentException) {
-                    throw IllegalArgumentException("Файл версії на Диску не читається (це не файл оновлень Track Catcher).")
+                    throw WrongFileException("За цим посиланням — не файл версії Track Catcher.\n\n$LINK_HINT")
                 }
                 if (json["format"] != FORMAT) {
-                    throw IllegalArgumentException(
-                        if (json["format"] == "track-catcher-update/0") "Автор ще не опублікував жодної версії."
-                        else "Це не файл оновлень Track Catcher (інший формат).",
-                    )
+                    if (json["format"] == "track-catcher-update/0") throw IllegalArgumentException("Автор ще не опублікував жодної версії.")
+                    throw WrongFileException("Це не файл оновлень Track Catcher (інший формат).\n\n$LINK_HINT")
                 }
                 val pkg = json["package"] as? String ?: ""
                 val code = (json["versionCode"] as? Long) ?: -1L

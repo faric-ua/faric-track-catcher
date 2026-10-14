@@ -43,7 +43,10 @@ object DriveHttp {
             if (code == 401 || code == 403 || code == 404) throw IOException(NOT_PUBLIC)
             if (code !in 200..299) throw IOException("Google Диск відповів кодом $code. Спробуй пізніше.")
             val total = c.contentLengthLong
-            if (total > maxBytes) throw IOException("Файл на Диску завеликий (${DriveUpdate.formatMb(total)}).")
+            if (total > maxBytes) {
+                if (!expectApk) throw DriveUpdate.WrongFileException(DriveUpdate.linkIsApkMessage(total))
+                throw IOException("Файл на Диску завеликий (${DriveUpdate.formatMb(total)}).")
+            }
             val sha = DriveUpdate.newSha256()
             return c.inputStream.use { input ->
                 val buffer = ByteArray(64 * 1024)
@@ -57,9 +60,13 @@ object DriveHttp {
                         checkedHead = true
                         if (DriveUpdate.looksLikeHtml(c.contentType, buffer, n)) throw IOException(NOT_PUBLIC)
                         if (expectApk && !DriveUpdate.looksLikeApk(buffer, n)) throw IOException("На Диску за цим посиланням не APK-файл.")
+                        if (!expectApk && DriveUpdate.looksLikeApk(buffer, n)) throw DriveUpdate.WrongFileException(DriveUpdate.linkIsApkMessage(total))
                     }
                     done += n
-                    if (done > maxBytes) throw IOException("Файл на Диску завеликий.")
+                    if (done > maxBytes) {
+                        if (!expectApk) throw DriveUpdate.WrongFileException(DriveUpdate.linkIsApkMessage(-1))
+                        throw IOException("Файл на Диску завеликий.")
+                    }
                     sha.update(buffer, 0, n)
                     out.write(buffer, 0, n)
                     if (progress != null && done - lastReport >= 256 * 1024) {
