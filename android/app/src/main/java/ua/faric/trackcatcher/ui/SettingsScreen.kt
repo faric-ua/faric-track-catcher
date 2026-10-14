@@ -110,6 +110,16 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         renderFolder(v)
 
         albumSlot.removeAllViews()
+        albumSlot.addView(ui.label("Смайлики в назві файлу"))
+        albumSlot.addView(flow(listOf(true to "Прибирати", false to "Лишати").map { (on, text) ->
+            ui.choice(text, v.plainNames == on) { settings.plainNames = on; renderChoices() }
+        }))
+        albumSlot.addView(ui.muted(
+            if (v.plainNames) "«🎵 TRACK 02 — VELVET TEMPLE. 🏛» → файл «Saney — TRACK 02 — VELVET TEMPLE.wav»: відкриється будь-де (магнітола, старий плеєр, комп'ютер). " +
+                "Усередині файлу назва лишається зі смайликами — плеєри її так і покажуть."
+            else "Назва файлу — як у плеєрі, зі смайликами. Деякі магнітоли й старі плеєри покажуть «?» або не відкриють такий файл.",
+            13.5f,
+        ))
         albumSlot.addView(ui.label("Папка для кожного альбому"))
         albumSlot.addView(flow(listOf(true to "Так", false to "Ні").map { (on, text) ->
             ui.choice(text, v.albumFolders == on) { settings.albumFolders = on; renderChoices() }

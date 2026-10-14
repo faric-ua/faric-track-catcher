@@ -13,14 +13,46 @@ object FileNames {
         return s.ifBlank { FALLBACK }
     }
 
-    fun baseName(meta: TrackMeta): String = sanitize(meta.displayName())
+    /**
+     * [plain] — без смайликів і невидимих символів (T36, faric 14.10 08:18: «за замовчуванням усі прибирай»).
+     * Теги всередині файлу лишаються як є — їх це не стосується.
+     */
+    fun baseName(meta: TrackMeta, plain: Boolean = false): String {
+        if (!plain) return sanitize(meta.displayName())
+        val artist = stripSymbols(meta.artist)
+        val title = stripSymbols(meta.title)
+        // Назва складалась лише зі смайликів — краще зі смайликами, ніж «Без назви».
+        if (artist.isBlank() && title.isBlank()) return sanitize(meta.displayName())
+        return sanitize(TrackMeta(artist, title).displayName())
+    }
+
+    /**
+     * Прибрати смайлики, знаки-символи й невидимі службові символи (з'єднувачі, варіанти, відтінки шкіри).
+     * Літери будь-якої мови, цифри й розділові знаки лишаються.
+     */
+    fun stripSymbols(raw: String): String {
+        val sb = StringBuilder(raw.length)
+        var i = 0
+        while (i < raw.length) {
+            val cp = raw.codePointAt(i)
+            i += Character.charCount(cp)
+            val t = Character.getType(cp)
+            val drop = t == Character.OTHER_SYMBOL.toInt() || t == Character.FORMAT.toInt() ||
+                t == Character.PRIVATE_USE.toInt() || t == Character.UNASSIGNED.toInt() ||
+                t == Character.SURROGATE.toInt() || t == Character.ENCLOSING_MARK.toInt() ||
+                cp in 0xFE00..0xFE0F || cp in 0xE0100..0xE01EF || cp in 0x1F3FB..0x1F3FF || cp in 0xE0000..0xE007F
+            if (drop) sb.append(' ') else sb.appendCodePoint(cp)
+        }
+        return spaces.replace(sb, " ").trim()
+    }
 
     const val ROOT_DIR = "Music/Track Catcher/"
 
     /** Папка для файлу: «Music/Track Catcher/Альбом/» або просто «Music/Track Catcher/», якщо альбому нема. */
-    fun folderFor(meta: TrackMeta, albumFolders: Boolean): String {
+    fun folderFor(meta: TrackMeta, albumFolders: Boolean, plain: Boolean = false): String {
         if (!albumFolders || meta.album.isBlank()) return ROOT_DIR
-        return ROOT_DIR + sanitize(meta.album, 80) + "/"
+        val album = if (plain) stripSymbols(meta.album).ifBlank { meta.album } else meta.album
+        return ROOT_DIR + sanitize(album, 80) + "/"
     }
 
     /**

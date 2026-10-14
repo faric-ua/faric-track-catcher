@@ -27,6 +27,8 @@ class Settings(context: Context) {
         val stopAfter: Int = 0,
         /** Своя папка (T29): дозвіл Android на папку; порожньо — «Музика › Track Catcher». */
         val treeUri: String = "",
+        /** Без смайликів у назвах файлів і папок (T36); теги — як є. */
+        val plainNames: Boolean = true,
     ) {
         val label: String
             get() = when (format) {
@@ -86,7 +88,12 @@ class Settings(context: Context) {
         customAlbum = if (useCustomAlbum) customAlbum else "",
         stopAfter = stopAfter,
         treeUri = treeUri,
+        plainNames = plainNames,
     )
+
+    var plainNames: Boolean
+        get() = prefs.getBoolean(KEY_PLAIN_NAMES, true)
+        set(v) = prefs.edit().putBoolean(KEY_PLAIN_NAMES, v).apply()
 
     var treeUri: String
         get() = prefs.getString(KEY_TREE, "") ?: ""
@@ -105,6 +112,7 @@ class Settings(context: Context) {
         private const val KEY_ALBUM = "custom_album"
         private const val KEY_STOP_AFTER = "stop_after"
         private const val KEY_TREE = "tree_uri"
+        private const val KEY_PLAIN_NAMES = "plain_names"
         const val MAX_STOP_AFTER = 999
         const val TRIM_EDGE_MS = 1_000
         val FADE_CHOICES = listOf(0, 100, 250, 500, 1_000, 2_000)
