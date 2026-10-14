@@ -609,9 +609,10 @@ class UpdateUi(private val host: MainActivity) {
     companion object {
         /**
          * Вбудоване посилання на файл версії на Диску автора — щоб інші телефони перевіряли без вставляння.
-         * Порожньо, поки faric не створив файли (вставляється наступною версією).
+         * Файл `track-catcher-onovlennia.json` на Диску faric (створено 14.10.2026 21:55, доступ «усі з посиланням»).
+         * Не змінювати: «Опублікувати зараз» пише в той самий файл, тож ID і посилання сталі.
          */
-        const val BUILT_IN_MANIFEST_ID = ""
+        const val BUILT_IN_MANIFEST_ID = "15QLo2sf2CWvNcoyJ_6p6B5wsqxvgIUUZ"
 
         const val REQ_APK = 40
         const val REQ_JSON = 41
