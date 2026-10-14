@@ -13,6 +13,8 @@ class Settings(context: Context) {
         val mp3Bitrate: Int,
         val minLengthSec: Int,
         val repeat: RepeatPolicy,
+        /** Кожен альбом — своя папка всередині «Track Catcher» (faric, 14.10). */
+        val albumFolders: Boolean = true,
     ) {
         val label: String
             get() = when (format) {
@@ -38,13 +40,18 @@ class Settings(context: Context) {
         get() = RepeatPolicy.fromCode(prefs.getString(KEY_REPEAT, null))
         set(v) = prefs.edit().putString(KEY_REPEAT, v.code).apply()
 
-    fun snapshot() = Values(format, mp3Bitrate, minLengthSec, repeat)
+    var albumFolders: Boolean
+        get() = prefs.getBoolean(KEY_ALBUM_FOLDERS, true)
+        set(v) = prefs.edit().putBoolean(KEY_ALBUM_FOLDERS, v).apply()
+
+    fun snapshot() = Values(format, mp3Bitrate, minLengthSec, repeat, albumFolders)
 
     companion object {
         private const val KEY_FORMAT = "format"
         private const val KEY_BITRATE = "mp3_bitrate"
         private const val KEY_MIN_LENGTH = "min_length_sec"
         private const val KEY_REPEAT = "repeat"
+        private const val KEY_ALBUM_FOLDERS = "album_folders"
         val MIN_LENGTH_CHOICES = listOf(0, 15, 30, 45, 60)
     }
 }

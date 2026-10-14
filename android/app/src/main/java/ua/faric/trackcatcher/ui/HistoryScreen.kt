@@ -295,7 +295,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         formats(r).takeIf { it.isNotBlank() }?.let { facts.addView(ui.fact("Формат", it)) }
         r.mp3Name?.let { facts.addView(ui.fact("Файл MP3", "$it · ${TimeText.size(r.mp3Size)}")) }
         r.wavName?.let { facts.addView(ui.fact("Файл WAV", "$it · ${TimeText.size(r.wavSize)}")) }
-        if (r.hasFile) facts.addView(ui.fact("Папка", MediaStoreWriter.FOLDER_LABEL))
+        if (r.hasFile) {
+            val folder = (r.mp3Uri ?: r.wavUri)?.let { MediaStoreWriter(host).folderLabel(it) } ?: MediaStoreWriter.FOLDER_LABEL
+            facts.addView(ui.fact("Папка", folder))
+        }
         facts.addView(ui.fact("Розріз", if (r.cutBySilence) "по тиші між піснями" else "по сигналу зі шторки"))
         if (r.sourcePackage.isNotBlank()) facts.addView(ui.fact("Плеєр", appLabel(r.sourcePackage)))
         facts.addView(ui.fact("Коли", TimeText.dateTime(r.createdAt)))
