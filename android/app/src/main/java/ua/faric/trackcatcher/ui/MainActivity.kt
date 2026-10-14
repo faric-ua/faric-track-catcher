@@ -299,6 +299,8 @@ class MainActivity : Activity() {
         unobserveHub = null
         screen?.onStop()
         tracker.stop()
+        // Застосунок сховали — пауза (поворот екрана не рахується: плеєр грає далі).
+        if (!isChangingConfigurations) InAppPlayer.pause()
         super.onStop()
     }
 
@@ -366,6 +368,7 @@ class MainActivity : Activity() {
     }
 
     fun startCapture() {
+        InAppPlayer.stop() // власне прослуховування не повинно ставити на паузу плеєр, який записуємо
         if (RecorderHub.state.phase != RecorderHub.Phase.IDLE) return
         if (!Perms.recordAudio(this)) {
             requestRuntimePermissions(thenStart = true)

@@ -23,6 +23,7 @@ import ua.faric.trackcatcher.core.TimeText
 import ua.faric.trackcatcher.data.HistoryDb
 import ua.faric.trackcatcher.data.RecordingRow
 import ua.faric.trackcatcher.data.SessionRow
+import ua.faric.trackcatcher.state.RecorderHub
 
 /**
  * «Історія»: усі записи з позначкою повний / неповний / невдало / пропущено, пошук, фільтр.
@@ -304,9 +305,20 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         facts.addView(ui.fact("Коли", TimeText.dateTime(r.createdAt)))
         box.addView(facts, ui.matchWrap())
 
+        // Плеєр усередині застосунку; якщо цей запис уже грає (поворот, оновлення списку) — показуємо одразу.
+        val playerSlot = FrameLayout(host)
+        box.addView(playerSlot, ui.matchWrap())
+        fun showPlayer(uri: String, mime: String) {
+            playerSlot.removeAllViews()
+            playerSlot.addView(PlayerView(host, ui, uri) { playExternal(uri, mime) }, ui.matchWrap())
+        }
+        listOfNotNull(r.mp3Uri?.let { it to "audio/mpeg" }, r.wavUri?.let { it to "audio/x-wav" })
+            .firstOrNull { it.first == InAppPlayer.uri }?.let { showPlayer(it.first, it.second) }
+
         val actions = FlowLayout(host, ui.dp(8), ui.dp(8))
-        r.mp3Uri?.let { uri -> actions.addView(ui.button(if (r.wavUri != null) "▶ Слухати MP3" else "▶ Слухати", Ui.Kind.PRIMARY) { play(uri, "audio/mpeg") }) }
-        r.wavUri?.let { uri -> actions.addView(ui.button(if (r.mp3Uri != null) "▶ Слухати WAV" else "▶ Слухати", Ui.Kind.PRIMARY) { play(uri, "audio/x-wav") }) }
+        val both = r.mp3Uri != null && r.wavUri != null
+        r.mp3Uri?.let { uri -> actions.addView(ui.button(if (both) "▶\uFE0E Слухати MP3" else "▶\uFE0E Слухати", Ui.Kind.PRIMARY) { listen(uri, "audio/mpeg", ::showPlayer) }) }
+        r.wavUri?.let { uri -> actions.addView(ui.button(if (both) "▶\uFE0E Слухати WAV" else "▶\uFE0E Слухати", Ui.Kind.PRIMARY) { listen(uri, "audio/x-wav", ::showPlayer) }) }
         if (r.hasFile) {
             actions.addView(ui.button("Поділитись", Ui.Kind.NORMAL) { share(r) })
             actions.addView(ui.button("Видалити файл", Ui.Kind.DANGER) { confirmDelete(r) })
@@ -319,7 +331,17 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         return box
     }
 
-    private fun play(uri: String, mime: String) {
+    private fun listen(uri: String, mime: String, show: (String, String) -> Unit) {
+        if (RecorderHub.state.phase == RecorderHub.Phase.RECORDING) {
+            // Наш звук забрав би «фокус» — плеєр, який записуємо, став би на паузу.
+            host.toast("Іде запис — послухаєш після «Зупинити»: інакше плеєр, який записуєш, стане на паузу")
+            return
+        }
+        show(uri, mime)
+        InAppPlayer.play(host, uri)
+    }
+
+    private fun playExternal(uri: String, mime: String) {
         val i = Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(uri), mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         try {
             host.startActivity(i)
@@ -359,6 +381,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     }
 
     private fun delete(r: RecordingRow) {
+        if (InAppPlayer.uri != null && (InAppPlayer.uri == r.mp3Uri || InAppPlayer.uri == r.wavUri)) InAppPlayer.stop()
         val store = MediaStoreWriter(host)
         val mp3 = r.mp3Uri?.let { store.delete(it) } ?: false
         val wav = r.wavUri?.let { store.delete(it) } ?: false
