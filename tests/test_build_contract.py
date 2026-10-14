@@ -75,6 +75,17 @@ class BuildContract(unittest.TestCase):
         self.assertIn("BIND_NOTIFICATION_LISTENER_SERVICE", MANIFEST)
         self.assertIn('android:allowBackup="false"', MANIFEST)
 
+    def test_drive_update_setup(self):
+        # Оновлення з Google Диска (faric 14.10 20:22): інтернет, встановлення, FileProvider лише для cache/updates.
+        for perm in ("INTERNET", "REQUEST_INSTALL_PACKAGES"):
+            self.assertIn(f"android.permission.{perm}", MANIFEST)
+        self.assertIn('android:authorities="${applicationId}.updates"', MANIFEST)
+        paths = (ROOT / "android/app/src/main/res/xml/update_paths.xml").read_text(encoding="utf-8")
+        self.assertIn('<cache-path name="updates" path="updates/" />', paths)
+        ui = (ROOT / "android/app/src/main/java/ua/faric/trackcatcher/ui/UpdateUi.kt").read_text(encoding="utf-8")
+        self.assertIn('packageName + ".updates"', ui)
+        self.assertIn("checkDownloaded", ui)  # APK перевіряється до вікна встановлення
+
 
 if __name__ == "__main__":
     unittest.main()
