@@ -36,8 +36,11 @@ class TrackSplitter(
     private val sampleRate: Int = Pcm.SAMPLE_RATE,
     private val channels: Int = Pcm.CHANNELS,
     windowMs: Int = 2_000,
+    /** Налаштування «Зсув розрізу»: сигнал зі шторки зсувається на стільки мс (+ пізніше, − раніше). */
+    shiftMs: Int = 0,
 ) {
     private val windowFrames = (sampleRate.toLong() * windowMs / 1000).toInt()
+    private val shiftFrames = sampleRate.toLong() * shiftMs.coerceIn(-MAX_SHIFT_MS, MAX_SHIFT_MS) / 1000
     private val ring = ShortRing(windowFrames * 3 + sampleRate, channels)
     private var current: SegmentHandle? = null
     private var currentMeta: TrackMeta? = null
@@ -73,7 +76,8 @@ class TrackSplitter(
         } else if (!force && currentMeta?.sameTrack(meta) == true) {
             return
         }
-        pending = Pending(totalFrames + aheadFrames.coerceAtLeast(0L), meta, positionMs)
+        val at = totalFrames + aheadFrames.coerceAtLeast(0L) + shiftFrames
+        pending = Pending(at.coerceAtLeast(maxOf(currentStart, ring.startFrame)), meta, positionMs)
     }
 
     /** Подробиці тієї самої пісні — оновлюємо, не ріжемо. */
@@ -141,5 +145,9 @@ class TrackSplitter(
         current = sink.open(meta, SegmentStart(nextIndex++, startFrame, positionMs))
         currentMeta = meta
         currentStart = startFrame
+    }
+
+    companion object {
+        const val MAX_SHIFT_MS = 2_000
     }
 }

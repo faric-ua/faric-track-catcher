@@ -29,6 +29,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val qualityCard = ui.card(12)
     private val lengthCard = ui.card(12)
     private val repeatCard = ui.card(12)
+    private val edgesCard = ui.card(12)
     private val permsSlot = FrameLayout(host)
     private val albumSlot = ui.column(8)
 
@@ -50,11 +51,11 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             addView(ui.text("MP3 — LAME 3.98.4 у Java-версії jump3r (LGPL-2.1).", 12.5f, Palette.faint))
             addView(ui.text("github.com/faric-ua/faric-track-catcher", 12.5f, Palette.faint))
         }
-        val all = listOf(formatCard, qualityCard, lengthCard, repeatCard, folderCard, permsSlot, aboutCard)
+        val all = listOf(formatCard, qualityCard, lengthCard, repeatCard, edgesCard, folderCard, permsSlot, aboutCard)
         view = if (ui.twoPane) {
             val left = ui.column(12)
             val right = ui.column(12)
-            listOf(formatCard, qualityCard, lengthCard, repeatCard).forEach { left.addView(it, ui.matchWrap()) }
+            listOf(formatCard, qualityCard, lengthCard, repeatCard, edgesCard).forEach { left.addView(it, ui.matchWrap()) }
             listOf(folderCard, permsSlot, aboutCard).forEach { right.addView(it, ui.matchWrap()) }
             ui.scroll(ui.row(12).apply {
                 gravity = Gravity.TOP
@@ -100,6 +101,8 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }))
         lengthCard.addView(ui.muted("Реклама й короткі уривки підуть в історію як «пропущено», без файлу.", 13.5f))
 
+        renderEdges(v)
+
         albumSlot.removeAllViews()
         albumSlot.addView(ui.label("Папка для кожного альбому"))
         albumSlot.addView(flow(listOf(true to "Так", false to "Ні").map { (on, text) ->
@@ -129,6 +132,45 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             OutputFormat.WAV -> "4 хв пісні ≈ $wav. Без втрат — точно як грало, але займає багато місця."
             OutputFormat.BOTH -> "4 хв пісні ≈ $mp3 + $wav. Два файли на кожну пісню."
         }
+    }
+
+    /** «Краї пісні» (faric 14.10 05:29–05:31): зрізати по 1 с, наростання/затухання, зсув розрізу. */
+    private fun renderEdges(v: Settings.Values) {
+        edgesCard.removeAllViews()
+        edgesCard.addView(ui.label("Краї пісні"))
+        edgesCard.addView(ui.muted("Діє з наступного запису.", 13f))
+
+        edgesCard.addView(ui.title("Зрізати по 1 с на початку й у кінці", 15.5f))
+        edgesCard.addView(flow(listOf(false to "Ні", true to "Так").map { (on, text) ->
+            ui.choice(text, v.trimEdges == on) { settings.trimEdges = on; renderChoices() }
+        }))
+        edgesCard.addView(ui.muted("Прибирає хвіст попередньої пісні й «чирк» перемикання, але й 1 с самої пісні.", 13.5f))
+
+        edgesCard.addView(ui.title("Наростання й затухання", 15.5f))
+        edgesCard.addView(flow(Settings.FADE_CHOICES.map { ms ->
+            ui.choice(if (ms == 0) "Без" else secs(ms), v.fadeMs == ms) { settings.fadeMs = ms; renderChoices() }
+        }))
+        edgesCard.addView(ui.muted("Гучність плавно росте з нуля на початку файлу й спадає до нуля в кінці.", 13.5f))
+
+        edgesCard.addView(ui.title("Зсув розрізу", 15.5f))
+        edgesCard.addView(flow(Settings.SHIFT_CHOICES.map { ms ->
+            ui.choice(if (ms == 0) "0" else (if (ms > 0) "+" else "−") + secs(Math.abs(ms)), v.cutShiftMs == ms) { settings.cutShiftMs = ms; renderChoices() }
+        }))
+        edgesCard.addView(ui.muted(
+            when {
+                v.cutShiftMs > 0 -> "Розріз пізніше: якщо на початку файлу чути кінець попередньої пісні."
+                v.cutShiftMs < 0 -> "Розріз раніше: якщо в кінці файлу чути початок наступної пісні."
+                else -> "«+» — якщо на початку чути кінець попередньої пісні; «−» — якщо в кінці чути початок наступної."
+            },
+            13.5f,
+        ))
+    }
+
+    /** 500 → «0,5 с», 1000 → «1 с». */
+    private fun secs(ms: Int): String {
+        val whole = ms / 1000
+        val rest = ms % 1000
+        return if (rest == 0) "$whole с" else "$whole," + (rest / 10).toString().padStart(2, '0').trimEnd('0') + " с"
     }
 
     private fun flow(children: List<View>): FlowLayout = FlowLayout(host, ui.dp(8), ui.dp(8)).apply {

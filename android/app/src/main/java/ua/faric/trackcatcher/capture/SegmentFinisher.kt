@@ -37,9 +37,11 @@ class SegmentFinisher(context: Context) {
     fun finish(job: SegmentJob, settings: Settings.Values): RecordingRow {
         val totalFrames = job.pcmFile.length() / Pcm.BYTES_PER_FRAME
         val clips = ClipCounter()
-        val stats = LevelAnalysis.trim(blockLevels(job.pcmFile, clips), totalFrames)
+        val trimmed = LevelAnalysis.trim(blockLevels(job.pcmFile, clips), totalFrames)
+        // Статус — за записаним звуком; «Зрізати краї» лише вкорочує файл.
+        var verdict = Classifier.classify(job.meta, Pcm.framesToMs(trimmed.keptFrames), trimmed.audibleMs, job.startPositionMs, job.endReason, settings.minLengthSec)
+        val stats = if (settings.trimEdges) LevelAnalysis.trimEdges(trimmed, Settings.TRIM_EDGE_MS) else trimmed
         val lengthMs = Pcm.framesToMs(stats.keptFrames)
-        var verdict = Classifier.classify(job.meta, lengthMs, stats.audibleMs, job.startPositionMs, job.endReason, settings.minLengthSec)
         if (job.recovered && verdict.status == RecStatus.PARTIAL || job.recovered && verdict.status == RecStatus.COMPLETE) {
             verdict = Verdict(RecStatus.PARTIAL, verdict.reasons + "застосунок закрився під час запису")
         }
@@ -57,10 +59,11 @@ class SegmentFinisher(context: Context) {
             try {
                 val base = FileNames.baseName(job.meta)
                 val dir = FileNames.folderFor(job.meta, settings.albumFolders)
-                if (settings.format.wav) wav = writeWav(job, stats, base, dir)
+                val fade = EdgeFade.frames(fadeMs = settings.fadeMs)
+                if (settings.format.wav) wav = writeWav(job, stats, base, dir, fade)
                 if (settings.format.mp3) {
                     bitrate = settings.mp3Bitrate
-                    mp3 = writeMp3(job, stats, base, dir, settings.mp3Bitrate, lengthMs)
+                    mp3 = writeMp3(job, stats, base, dir, fade, settings.mp3Bitrate, lengthMs)
                 }
             } catch (e: Exception) {
                 verdict = Verdict(RecStatus.FAILED, listOf(saveError(e)))
@@ -108,27 +111,27 @@ class SegmentFinisher(context: Context) {
         return row.copy(id = id)
     }
 
-    private fun writeWav(job: SegmentJob, stats: AudioStats, base: String, dir: String): MediaStoreWriter.Saved {
+    private fun writeWav(job: SegmentJob, stats: AudioStats, base: String, dir: String, fade: Int): MediaStoreWriter.Saved {
         val name = FileNames.unique(base, "wav") { store.exists(it, dir) }
         val dataBytes = stats.keptFrames * Pcm.BYTES_PER_FRAME
         return store.write(name, "audio/x-wav", dir) { out ->
             out.write(WavHeader.build(dataBytes, info = WavHeader.infoFor(job.meta)))
-            copyRange(job.pcmFile, stats) { buf, n -> out.write(buf, 0, n) }
+            copyRange(job.pcmFile, stats, fade) { buf, n -> out.write(buf, 0, n) }
         }
     }
 
-    private fun writeMp3(job: SegmentJob, stats: AudioStats, base: String, dir: String, kbps: Int, lengthMs: Long): MediaStoreWriter.Saved {
+    private fun writeMp3(job: SegmentJob, stats: AudioStats, base: String, dir: String, fade: Int, kbps: Int, lengthMs: Long): MediaStoreWriter.Saved {
         val name = FileNames.unique(base, "mp3") { store.exists(it, dir) }
         return store.write(name, "audio/mpeg", dir) { out: OutputStream ->
             out.write(Id3v2.build(job.meta, lengthMs, Artwork.readJpeg(job.meta.artworkPath)))
             Mp3Encoder(bitrateKbps = kbps).use { enc ->
-                copyRange(job.pcmFile, stats) { buf, n -> enc.encode(buf, 0, n, out) }
+                copyRange(job.pcmFile, stats, fade) { buf, n -> enc.encode(buf, 0, n, out) }
                 enc.finish(out)
             }
         }
     }
 
-    private fun copyRange(file: File, stats: AudioStats, sink: (ByteArray, Int) -> Unit) {
+    private fun copyRange(file: File, stats: AudioStats, fadeFrames: Int, sink: (ByteArray, Int) -> Unit) {
         val buf = ByteArray(Mp3Encoder.CHUNK_FRAMES * Pcm.BYTES_PER_FRAME)
         RandomAccessFile(file, "r").use { raf ->
             raf.seek(stats.startFrame * Pcm.BYTES_PER_FRAME)
@@ -140,8 +143,8 @@ class SegmentFinisher(context: Context) {
                 if (n <= 0) break
                 val whole = n - n % Pcm.BYTES_PER_FRAME
                 if (whole > 0) {
-                    // 10 мс плавного входу й виходу — без «чирку» на краях файлу.
-                    EdgeFade.apply(buf, whole, frame, stats.keptFrames)
+                    // Плавне наростання й затухання (налаштування, типово 0,5 с) — без «чирку» на краях файлу.
+                    EdgeFade.apply(buf, whole, frame, stats.keptFrames, fadeFrames)
                     sink(buf, whole)
                     frame += whole / Pcm.BYTES_PER_FRAME
                 }
