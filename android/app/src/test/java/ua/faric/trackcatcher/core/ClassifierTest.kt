@@ -44,7 +44,7 @@ class ClassifierTest {
     fun silenceBeforeMusicIsSkippedNotFailed() {
         val v = Classifier.classify(TrackMeta(), 12_000, 0, null, EndReason.TRACK_CHANGE, 30)
         assertEquals(RecStatus.SKIPPED, v.status)
-        assertEquals("тиша — музика ще не грала", v.reasonText)
+        assertEquals("тиша — нічого не грало", v.reasonText)
     }
 
     @Test

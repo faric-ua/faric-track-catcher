@@ -49,6 +49,20 @@ class TrackSplitterTest {
     }
 
     @Test
+    fun sameTitleDifferentDurationIsSplit() {
+        // AIMP, плейлист «Neon»: «Velocity» 3:43, потім інша «Velocity» 3:04.
+        val sink = MemorySink()
+        val s = TrackSplitter(sink)
+        s.onTrackChange(TrackMeta("faric", "Velocity", durationMs = 223_000), 0)
+        feed(s, TestAudio.tone(TestAudio.ms(3_000)))
+        s.onTrackChange(TrackMeta("faric", "Velocity", durationMs = 184_000), 0)
+        feed(s, TestAudio.tone(TestAudio.ms(3_000), 660.0))
+        s.stop()
+        assertEquals(2, sink.segments.size)
+        assertEquals(184_000L, sink.segments[1].meta.durationMs)
+    }
+
+    @Test
     fun cutsAtSignalWhenNoSilence() {
         val sink = MemorySink()
         val s = TrackSplitter(sink)

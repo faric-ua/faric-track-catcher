@@ -157,6 +157,7 @@ class NowPlayingTracker(
                 durationMs = if (next.durationMs > 0) next.durationMs else prev.durationMs,
                 artworkPath = next.artworkPath ?: prev.artworkPath,
                 sourcePackage = next.sourcePackage,
+                mediaId = next.mediaId.ifBlank { prev.mediaId },
             )
             if (merged != prev) {
                 meta = merged
@@ -220,12 +221,13 @@ class NowPlayingTracker(
             ?: m.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
             ?: m.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE) ?: ""
         val album = m.getString(MediaMetadata.METADATA_KEY_ALBUM) ?: ""
+        val mediaId = m.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) ?: ""
         val duration = m.getLong(MediaMetadata.METADATA_KEY_DURATION).coerceAtLeast(0L)
         val bitmap = m.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: m.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: m.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
         val art = bitmap?.let { Artwork.save(app, artist, title, album, it) }
-        return TrackMeta(artist.trim(), title.trim(), album.trim(), duration, c.packageName, art)
+        return TrackMeta(artist.trim(), title.trim(), album.trim(), duration, c.packageName, art, mediaId.trim())
     }
 
     companion object {
