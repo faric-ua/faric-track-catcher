@@ -32,6 +32,23 @@ tc_prop() {
   sed -n "s/^$1=//p" "$TC_PROPS" 2>/dev/null | head -n 1
 }
 
+# Відкрити папку пам'яті телефона в «Моїх файлах». Аргумент — шлях від /storage/emulated/0,
+# напр. "Documents/Track Catcher/apk/v0.1.4". Три спроби, як у Renault (A26 і M30s відкривають по-різному).
+tc_open_dir() {
+  local enc uri
+  enc="$(printf '%s' "$1" | sed 's/%/%25/g; s/ /%20/g; s#/#%2F#g')"
+  uri="content://com.android.externalstorage.documents/document/primary%3A$enc"
+  if am start -a android.intent.action.VIEW -d "$uri" -t vnd.android.document/directory 2>&1 | grep -qi "error"; then
+    :
+  else
+    return 0
+  fi
+  if am start -a android.intent.action.OPEN_DOCUMENT_TREE --eu android.provider.extra.INITIAL_URI "$uri" 2>&1 | grep -qi "error"; then
+    return 1
+  fi
+  return 0
+}
+
 tc_open() {
   # Відкрити файл (APK → встановлення).
   if command -v termux-open >/dev/null 2>&1; then

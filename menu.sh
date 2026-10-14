@@ -56,6 +56,7 @@ while true; do
   echo "  2 — Встановити нову версію з GitHub"
   echo " 10 — Вікно встановлення сховалось? Відкрити ще раз"
   echo "  5 — Встановити версію, зібрану на іншому телефоні"
+  echo " 13 — Відкрити папку з останнім APK"
   echo
   echo " ЩОДНЯ"
   echo "  1 — Оновити це меню"
@@ -108,6 +109,7 @@ while true; do
     8) run_tool tc-signing-backup.sh ;;
     9) run_tool tc-widget.sh ;;
     10) run_tool tc-reopen-install.sh ;;
+    13) run_tool tc-open-apk-folder.sh ;;
     11) run_tool tc-local-build.sh ;;
     12)
       clear
