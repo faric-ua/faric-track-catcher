@@ -27,6 +27,8 @@ object RecorderHub {
         val skipped: Int = 0,
         val queued: Int = 0,
         val warning: String? = null,
+        /** Діагностика звуку: чи надходить і якого рівня (видно під індикатором). */
+        val diag: String? = null,
         val error: String? = null,
         val recent: List<Result> = emptyList(),
     ) {

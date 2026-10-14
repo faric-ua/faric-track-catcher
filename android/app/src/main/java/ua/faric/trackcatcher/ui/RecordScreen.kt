@@ -28,6 +28,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val statusTitle = ui.title("", 22f)
     private val statusSub = ui.numbers(ui.muted("", 14f))
     private val meter = LevelMeterView(host, ui)
+    private val diagLine = ui.numbers(ui.text("", 12.5f, Palette.faint))
     private val warning = ui.text("", 14f, Palette.warning).apply {
         background = ui.rounded(Palette.warningFill, Palette.warning, radiusDp = 12)
         setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10))
@@ -49,7 +50,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val npExtra = ui.numbers(ui.text("", 13f, Palette.faint)).apply { maxLines = 2 }
 
     private val mainButton = ui.button("", Ui.Kind.REC, large = true) { onMain() }
-    private val nightButton = ui.button("☾ Нічний екран — щоб телефон не заблокувався", Ui.Kind.PRIMARY) { host.showNightScreen() }
+    private val nightButton = ui.button("☾\uFE0E Нічний екран — щоб телефон не заблокувався", Ui.Kind.PRIMARY) { host.showNightScreen() }
     private val nightHint = ui.text(
         "Android 15+ зупиняє запис, коли екран блокується. Увімкни музику, повернись сюди й натисни «Нічний екран» — " +
             "екран стане чорним і майже без підсвітки, а запис ітиме далі.",
@@ -88,6 +89,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             addView(statusTitle)
             addView(statusSub)
             addView(meter, ui.matchWrap())
+            addView(diagLine)
             addView(warning)
             addView(errorBox)
         }
@@ -190,6 +192,8 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         errorBox.visibility = if (s.error != null) View.VISIBLE else View.GONE
         errorText.text = s.error ?: ""
         meter.visibility = if (s.phase == RecorderHub.Phase.RECORDING) View.VISIBLE else View.GONE
+        diagLine.visibility = if (s.phase == RecorderHub.Phase.RECORDING && s.diag != null) View.VISIBLE else View.GONE
+        diagLine.text = s.diag ?: ""
         meter.setLevels(s.levelL, s.levelR)
         renderRecent(s)
     }
