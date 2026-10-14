@@ -63,6 +63,25 @@ class TrackSplitterTest {
     }
 
     @Test
+    fun lateReaderCutsWhereSignalReallyWas() {
+        // Потік запису відстає на 1,5 с: сигнал приходить, коли дочитано лише 5,0 с,
+        // а справжня тиша між піснями — на 6,0–6,4 с. Розріз має бути в тиші, а не на 5,0.
+        val sink = MemorySink()
+        val s = TrackSplitter(sink)
+        s.onTrackChange(a, 0)
+        feed(s, TestAudio.tone(TestAudio.ms(5_000)))
+        s.onTrackChange(b, 0, aheadFrames = TestAudio.ms(1_500).toLong())
+        feed(s, TestAudio.tone(TestAudio.ms(1_000)))          // A ще грає до 6,0 с
+        feed(s, TestAudio.silence(TestAudio.ms(400)))         // тиша 6,0–6,4
+        feed(s, TestAudio.tone(TestAudio.ms(4_000), 660.0))   // B
+        s.stop()
+        assertEquals(2, sink.segments.size)
+        val cutMs = Pcm.framesToMs(sink.segments[0].frames)
+        assertTrue("розріз $cutMs мс", cutMs in 6_050..6_350)
+        assertTrue(sink.segments[0].end!!.cutBySilence)
+    }
+
+    @Test
     fun cutsAtSignalWhenNoSilence() {
         val sink = MemorySink()
         val s = TrackSplitter(sink)

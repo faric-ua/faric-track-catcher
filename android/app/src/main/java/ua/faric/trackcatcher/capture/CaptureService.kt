@@ -74,7 +74,14 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     private var recoveryQueue: FinisherQueue? = null
     private var unobserve: (() -> Unit)? = null
 
-    private data class TrackEvent(val meta: TrackMeta, val positionMs: Long?, val force: Boolean, val details: Boolean)
+    private data class TrackEvent(
+        val meta: TrackMeta,
+        val positionMs: Long?,
+        val force: Boolean,
+        val details: Boolean,
+        /** Коли сигнал прийшов (System.nanoTime — та сама шкала, що й AudioTimestamp). */
+        val atNanos: Long = System.nanoTime(),
+    )
 
     /**
      * Труба між потоками: потік запису лише читає звук і кладе сюди; потік диска ріже й пише.
@@ -84,7 +91,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
      */
     private sealed class Item {
         class Audio(val buf: ShortArray, val n: Int) : Item()
-        class Event(val e: TrackEvent) : Item()
+        class Event(val e: TrackEvent, val aheadFrames: Long) : Item()
         object End : Item()
     }
     private val pipe = LinkedBlockingQueue<Item>()
@@ -93,6 +100,12 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     @Volatile private var gaps = 0
     @Volatile private var lostMs = 0L
     @Volatile private var dropped = 0
+    /** Скільки звуку Android уже зібрав, а потік запису ще не прочитав (мс); -1 — Android не каже. */
+    @Volatile private var readerLagMs = -1L
+    private val stamp = android.media.AudioTimestamp()
+    private var capturedFrames = 0L
+    /** Найменше відставання за сесію — «нуль» шкали (якщо Android рахує кадри не з нуля, це його прибирає). */
+    private var minRawLag = Long.MAX_VALUE
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -213,6 +226,9 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         gaps = 0
         lostMs = 0L
         dropped = 0
+        readerLagMs = -1L
+        capturedFrames = 0L
+        minRawLag = Long.MAX_VALUE
         pipe.clear()
         lastReadAt = 0L
         lastLoudAt = startedAtMs
@@ -259,7 +275,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
                     error = "Запис звуку обірвався (код $n)"
                     break
                 }
-                forwardEvents()
+                if (n > 0) capturedFrames += n / Pcm.CHANNELS
+                forwardEvents(rec)
                 if (n == 0) {
                     pool.offer(buf)
                     continue
@@ -296,7 +313,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
                     RecorderHub.update { it.copy(levelL = l, levelR = r, tracks = tracksOpened) }
                 }
             }
-            forwardEvents()
+            forwardEvents(rec)
         } catch (e: Exception) {
             error = "Помилка запису: ${e.message}"
         } finally {
@@ -322,7 +339,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
                     }
                     is Item.Event -> {
                         val e = item.e
-                        if (e.details) splitter.onDetails(e.meta) else splitter.onTrackChange(e.meta, e.positionMs, e.force)
+                        if (e.details) splitter.onDetails(e.meta) else splitter.onTrackChange(e.meta, e.positionMs, e.force, item.aheadFrames)
                         tracksOpened = splitter.segmentsOpened
                     }
                     Item.End -> break@loop
@@ -366,7 +383,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         // Позиція в плеєрі: якщо вона більша за тривалість — плеєр не повідомив, що почав пісню знову.
         val player = if (pos == null) "" else " · плеєр ${TimeText.clock(pos)}" + (if (dur > 0) " з ${TimeText.clock(dur)}" else "")
         val lost = if (gaps > 0 || dropped > 0) " · пропусків ${gaps + dropped} (~${lostMs + dropped * 100L} мс)" else " · пропусків 0"
-        val diag = "Звук від Android: ${Pcm.framesToMs(framesRead) / 1000} с отримано · рівень $level$player$lost"
+        val lag = readerLagMs.let { if (it >= 0) " · затримка $it мс" else "" }
+        val diag = "Звук від Android: ${Pcm.framesToMs(framesRead) / 1000} с отримано · рівень $level$player$lost$lag"
         if (warn != RecorderHub.state.warning || diag != RecorderHub.state.diag) {
             RecorderHub.update { it.copy(warning = warn, diag = diag) }
         }
@@ -381,12 +399,44 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         }
     }
 
-    /** Події шторки — у ту саму трубу, що й звук: різак побачить їх точно між тими самими шматками. */
-    private fun forwardEvents() {
+    /**
+     * Події шторки — у ту саму трубу, що й звук. Плюс поправка: Android каже (AudioTimestamp),
+     * який кадр він зібрав у яку мить, тож знаємо, на скільки сигнал зі шторки «попереду» вже
+     * прочитаного звуку. Без неї розріз ставав раніше, ніж закінчувалась пісня.
+     */
+    private fun forwardEvents(rec: AudioRecord) {
+        if (events.isEmpty()) {
+            updateLag(rec)
+            return
+        }
+        val ok = updateLag(rec)
         while (true) {
             val e = events.poll() ?: break
-            pipe.put(Item.Event(e))
+            var ahead = 0L
+            if (ok) {
+                val frameAtEvent = stamp.framePosition + (e.atNanos - stamp.nanoTime) * Pcm.SAMPLE_RATE / 1_000_000_000L
+                ahead = (frameAtEvent - capturedFrames - minRawLag).coerceIn(0L, MAX_AHEAD_FRAMES)
+            }
+            pipe.put(Item.Event(e, ahead))
         }
+    }
+
+    /** Наскільки потік запису відстає від Android. false — Android не дав мітки часу. */
+    private fun updateLag(rec: AudioRecord): Boolean {
+        val ok = try {
+            rec.getTimestamp(stamp, android.media.AudioTimestamp.TIMEBASE_MONOTONIC) == AudioRecord.SUCCESS
+        } catch (e: Exception) {
+            false
+        }
+        if (!ok) {
+            readerLagMs = -1L
+            return false
+        }
+        val nowFrame = stamp.framePosition + (System.nanoTime() - stamp.nanoTime) * Pcm.SAMPLE_RATE / 1_000_000_000L
+        val raw = nowFrame - capturedFrames
+        if (raw < minRawLag) minRawLag = raw
+        readerLagMs = ((raw - minRawLag) * 1000L / Pcm.SAMPLE_RATE).coerceAtLeast(0L)
+        return true
     }
 
     // ---------- шторка ----------
@@ -582,6 +632,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         private const val DEAD_DB = -70.0
         private const val POOL_SIZE = 300 // 30 с звуку без нових масивів
         private const val MAX_PIPE = 3_000 // 5 хв звуку в черзі на диск — далі вже нема сенсу чекати
+        private const val MAX_AHEAD_FRAMES = Pcm.SAMPLE_RATE * 5L // поправка не більше 5 с
 
         fun segmentsDir(context: Context) = File(context.filesDir, "segments")
 

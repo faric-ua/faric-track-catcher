@@ -9,6 +9,7 @@ import java.io.OutputStream
 import java.io.RandomAccessFile
 import ua.faric.trackcatcher.core.AudioStats
 import ua.faric.trackcatcher.core.Classifier
+import ua.faric.trackcatcher.core.ClipCounter
 import ua.faric.trackcatcher.core.EdgeFade
 import ua.faric.trackcatcher.core.FileNames
 import ua.faric.trackcatcher.core.Id3v2
@@ -35,7 +36,8 @@ class SegmentFinisher(context: Context) {
 
     fun finish(job: SegmentJob, settings: Settings.Values): RecordingRow {
         val totalFrames = job.pcmFile.length() / Pcm.BYTES_PER_FRAME
-        val stats = LevelAnalysis.trim(blockLevels(job.pcmFile), totalFrames)
+        val clips = ClipCounter()
+        val stats = LevelAnalysis.trim(blockLevels(job.pcmFile, clips), totalFrames)
         val lengthMs = Pcm.framesToMs(stats.keptFrames)
         var verdict = Classifier.classify(job.meta, lengthMs, stats.audibleMs, job.startPositionMs, job.endReason, settings.minLengthSec)
         if (job.recovered && verdict.status == RecStatus.PARTIAL || job.recovered && verdict.status == RecStatus.COMPLETE) {
@@ -80,6 +82,7 @@ class SegmentFinisher(context: Context) {
             mp3Uri = mp3?.uri, mp3Name = mp3?.name, mp3Size = mp3?.size ?: 0L, mp3Bitrate = bitrate,
             wavUri = wav?.uri, wavName = wav?.name, wavSize = wav?.size ?: 0L,
             cutBySilence = job.cutBySilence,
+            clips = clips.events.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
         )
         // Порожній шматок (менше секунди тиші — напр. «Стоп» одразу після «Почати») в історію не пишемо.
         val empty = verdict.status == RecStatus.SKIPPED && lengthMs < 1_000 && stats.audibleMs == 0L
@@ -148,7 +151,7 @@ class SegmentFinisher(context: Context) {
     }
 
     /** Рівень кожних 10 мс (dBFS). */
-    private fun blockLevels(file: File): DoubleArray {
+    private fun blockLevels(file: File, clips: ClipCounter): DoubleArray {
         val blockFrames = LevelAnalysis.blockFrames()
         val blockBytes = blockFrames * Pcm.BYTES_PER_FRAME
         val total = (file.length() / blockBytes).toInt() + 1
@@ -167,6 +170,7 @@ class SegmentFinisher(context: Context) {
                 if (read < Pcm.BYTES_PER_FRAME) break
                 val samples = Pcm.bytesToShorts(bytes, 0, read - read % 2, shorts)
                 out[count++] = Pcm.rmsDb(shorts, 0, samples)
+                clips.feed(shorts, samples - samples % Pcm.CHANNELS)
                 if (read < blockBytes) break
             }
         }

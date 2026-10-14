@@ -301,6 +301,9 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             facts.addView(ui.fact("Папка", folder))
         }
         facts.addView(ui.fact("Розріз", if (r.cutBySilence) "по тиші між піснями" else "по сигналу зі шторки"))
+        if (r.clips >= 0 && r.hasFile) {
+            facts.addView(ui.fact("Перевантаження", if (r.clips == 0) "немає" else "${r.clips} — пісня надто гучна, піки обрізано (можливий «чирк»)"))
+        }
         if (r.sourcePackage.isNotBlank()) facts.addView(ui.fact("Плеєр", appLabel(r.sourcePackage)))
         facts.addView(ui.fact("Коли", TimeText.dateTime(r.createdAt)))
         box.addView(facts, ui.matchWrap())
