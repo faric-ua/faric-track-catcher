@@ -50,6 +50,20 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     @Volatile private var playerPaused = false
     @Volatile private var userStop = false
 
+    // Діагностика (пише потік запису, читає сторож у головному потоці).
+    @Volatile private var framesRead = 0L
+    @Volatile private var lastReadAt = 0L
+    @Volatile private var lastLoudAt = 0L
+    @Volatile private var lastDb = Pcm.SILENT_DB
+    private var startedAtMs = 0L
+    private val watchdog = object : Runnable {
+        override fun run() {
+            if (!running) return
+            checkAudio()
+            main.postDelayed(this, 1_000)
+        }
+    }
+
     private var sessionId = 0L
     private var lastNotified = ""
     private var recoveryQueue: FinisherQueue? = null
@@ -167,6 +181,11 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
             return
         }
         running = true
+        startedAtMs = System.currentTimeMillis()
+        framesRead = 0L
+        lastReadAt = 0L
+        lastLoudAt = startedAtMs
+        main.postDelayed(watchdog, 1_000)
         RecorderHub.update {
             RecorderHub.State(
                 phase = RecorderHub.Phase.RECORDING,
@@ -195,7 +214,6 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     private fun captureLoop(rec: AudioRecord, splitter: TrackSplitter) {
         android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
         val buf = ShortArray(Pcm.SAMPLE_RATE / 10 * Pcm.CHANNELS) // 100 мс
-        var silentMs = 0L
         var lastUi = 0L
         var error: String? = null
         try {
@@ -208,25 +226,19 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
                 drainEvents(splitter)
                 if (n == 0) continue
                 val db = Pcm.rmsDb(buf, 0, n)
+                val now = System.currentTimeMillis()
+                framesRead += n / Pcm.CHANNELS
+                lastReadAt = now
+                lastDb = db
+                if (db > DEAD_DB) lastLoudAt = now
                 val paused = playerPaused
                 // На паузі тиша у файл не пишеться. Якщо плеєр «на паузі», а звук є — пишемо (плеєр міг збрехати).
                 if (!(paused && db < SILENT_DB)) splitter.onAudio(buf, n)
-                val frames = n / Pcm.CHANNELS
-                silentMs = if (!paused && db < DEAD_DB) silentMs + Pcm.framesToMs(frames.toLong()) else 0L
-                val now = System.currentTimeMillis()
                 if (now - lastUi >= 100) {
                     lastUi = now
                     val l = Pcm.channelPeak(buf, n, 0)
                     val r = Pcm.channelPeak(buf, n, 1)
-                    val trackerPlaying = !paused && tracker?.hasPlayer == true
-                    val warn = if (trackerPlaying && silentMs > 5_000) {
-                        "Плеєр грає, а звуку немає ${silentMs / 1000} с. Можливо, цей застосунок не дає себе записувати."
-                    } else {
-                        null
-                    }
-                    RecorderHub.update {
-                        it.copy(levelL = l, levelR = r, tracks = splitter.segmentsOpened, warning = warn)
-                    }
+                    RecorderHub.update { it.copy(levelL = l, levelR = r, tracks = splitter.segmentsOpened) }
                 }
             }
             drainEvents(splitter)
@@ -243,6 +255,38 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
             val msg = error
             RecorderHub.update { it.copy(error = msg) }
             main.post { stopRecording() }
+        }
+    }
+
+    /**
+     * Сторож у головному потоці (працює, навіть якщо читання звуку «застрягло»):
+     * чи надходить звук від Android і чи він не порожній, коли плеєр грає.
+     */
+    private fun checkAudio() {
+        val now = System.currentTimeMillis()
+        val sinceStart = (now - startedAtMs) / 1000
+        val noDataSec = if (lastReadAt == 0L) sinceStart else (now - lastReadAt) / 1000
+        val playing = !playerPaused && tracker?.hasPlayer == true
+        val quietSec = (now - lastLoudAt) / 1000
+        val app = appName(RecorderHub.state.meta?.sourcePackage)
+        val warn = when {
+            noDataSec >= 3 -> "Android не віддає звук уже $noDataSec с (жодного шматка). Зупини запис і почни знову."
+            playing && quietSec >= 5 -> "$app грає, а звук порожній уже $quietSec с — схоже, $app не дає себе записувати. Спробуй інший плеєр."
+            else -> null
+        }
+        val level = if (lastDb <= Pcm.SILENT_DB + 1) "тиша" else "%d dB".format(Math.round(lastDb))
+        val diag = "Звук від Android: ${Pcm.framesToMs(framesRead) / 1000} с отримано · рівень $level"
+        if (warn != RecorderHub.state.warning || diag != RecorderHub.state.diag) {
+            RecorderHub.update { it.copy(warning = warn, diag = diag) }
+        }
+    }
+
+    private fun appName(pkg: String?): String {
+        if (pkg.isNullOrBlank()) return "Плеєр"
+        return try {
+            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+        } catch (e: Exception) {
+            "Плеєр"
         }
     }
 
@@ -283,11 +327,12 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         }
         running = false
         stopping = true
+        main.removeCallbacks(watchdog)
         runCatching { record?.stop() }
         runCatching { captureThread?.join(3_000) }
         cleanupCapture()
         HistoryDb.get(this).endSession(sessionId, System.currentTimeMillis())
-        RecorderHub.update { it.copy(phase = RecorderHub.Phase.FINISHING, levelL = 0f, levelR = 0f, warning = null) }
+        RecorderHub.update { it.copy(phase = RecorderHub.Phase.FINISHING, levelL = 0f, levelR = 0f, warning = null, diag = null) }
         // Після зупинки звук уже не пишеться — лишається лише збереження.
         enterForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, notification("Зберігаю останні пісні…", ""))
         if (queue?.busy != true) onQueueIdle()
