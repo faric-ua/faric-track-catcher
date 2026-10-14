@@ -16,11 +16,28 @@ class SilenceCutTest {
     }
 
     @Test
-    fun ignoresTooShortDips() {
-        val audio = TestAudio.tone(TestAudio.ms(1_000)) + TestAudio.silence(TestAudio.ms(30)) + TestAudio.tone(TestAudio.ms(1_000))
+    fun shortQuietDipIsNotACut() {
+        // Коротке притихання (не нуль) — це музика, не пауза й не обрив.
+        val audio = TestAudio.tone(TestAudio.ms(1_000)) + TestAudio.tone(TestAudio.ms(30), amp = 600) + TestAudio.tone(TestAudio.ms(1_000))
         val r = SilenceCut.findCut(audio, 2, Pcm.SAMPLE_RATE, TestAudio.ms(500))
         assertFalse(r.bySilence)
         assertEquals(TestAudio.ms(500), r.frame)
+    }
+
+    @Test
+    fun shortDigitalGapIsAHardSwitch() {
+        // 30 мс нуля — коротше за «тишу» (60 мс), але це обрив: ріжемо в ньому (v0.1.12).
+        val audio = TestAudio.tone(TestAudio.ms(1_000)) + TestAudio.silence(TestAudio.ms(30)) + TestAudio.tone(TestAudio.ms(1_000))
+        val r = SilenceCut.findCut(audio, 2, Pcm.SAMPLE_RATE, TestAudio.ms(500))
+        assertTrue(r.bySilence)
+        assertEquals(TestAudio.ms(1_015).toDouble(), r.frame.toDouble(), TestAudio.ms(4).toDouble())
+    }
+
+    @Test
+    fun hardGapTooFarFromSignalIsIgnored() {
+        val audio = TestAudio.tone(TestAudio.ms(2_000)) + TestAudio.silence(TestAudio.ms(20)) + TestAudio.tone(TestAudio.ms(500))
+        val r = SilenceCut.findCut(audio, 2, Pcm.SAMPLE_RATE, TestAudio.ms(500))
+        assertFalse(r.bySilence)
     }
 
     @Test

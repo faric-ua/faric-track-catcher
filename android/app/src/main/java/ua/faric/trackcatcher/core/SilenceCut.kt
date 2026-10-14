@@ -84,7 +84,8 @@ object SilenceCut {
             if (b - start < minBlocks) continue
             val center = (start + b) * blockFrames / 2
             val dist = Math.abs(center - target).toLong()
-            if (dist < bestDist) {
+            // Обрив далі за 1 с від сигналу — швидше пауза всередині пісні, ніж перемикання.
+            if (dist <= sampleRate.toLong() * HARD_MAX_DIST_MS / 1000 && dist < bestDist) {
                 best = center
                 bestDist = dist
             }
@@ -95,4 +96,5 @@ object SilenceCut {
     const val HARD_DB = -58.0
     const val HARD_BLOCK_MS = 2
     const val HARD_MIN_MS = 6
+    const val HARD_MAX_DIST_MS = 1_000
 }
