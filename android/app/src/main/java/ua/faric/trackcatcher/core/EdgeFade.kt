@@ -8,7 +8,7 @@ package ua.faric.trackcatcher.core
 object EdgeFade {
     const val FADE_MS = 500
 
-    fun frames(sampleRate: Int = Pcm.SAMPLE_RATE) = sampleRate * FADE_MS / 1000
+    fun frames(sampleRate: Int = Pcm.SAMPLE_RATE, fadeMs: Int = FADE_MS) = (sampleRate.toLong() * fadeMs / 1000).toInt()
 
     /**
      * Обробляє шматок 16-бітного стерео PCM (little-endian) у [buf] довжиною [lengthBytes].

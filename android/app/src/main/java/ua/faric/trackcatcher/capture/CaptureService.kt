@@ -204,7 +204,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         recoverOrphans(stopWhenNothing = false)
 
         val segmentsDir = segmentsDir(this)
-        val splitter = TrackSplitter(FileSegmentSink(segmentsDir, sessionId) { job -> queue?.submit(job, values) })
+        val splitter = TrackSplitter(FileSegmentSink(segmentsDir, sessionId) { job -> queue?.submit(job, values) }, shiftMs = values.cutShiftMs)
 
         val t = NowPlayingTracker(this, this, watchLoops = true)
         tracker = t

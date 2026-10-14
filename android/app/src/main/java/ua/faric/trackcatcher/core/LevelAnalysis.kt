@@ -31,4 +31,17 @@ object LevelAnalysis {
         val audible = blockDb.count { it > SILENCE_DB } * BLOCK_MS.toLong()
         return AudioStats(totalFrames, start, end, audible, peak)
     }
+
+    /**
+     * Зрізати ще [edgeMs] з початку й кінця (налаштування «Зрізати краї»). Якщо після цього
+     * лишиться менше 1 с — не зрізаємо (короткий шматок і так піде в «пропущено»).
+     */
+    fun trimEdges(stats: AudioStats, edgeMs: Int, sampleRate: Int = Pcm.SAMPLE_RATE): AudioStats {
+        if (edgeMs <= 0) return stats
+        val edge = sampleRate.toLong() * edgeMs / 1000
+        val start = stats.startFrame + edge
+        val end = stats.endFrame - edge
+        if (end - start < sampleRate) return stats
+        return stats.copy(startFrame = start, endFrame = end)
+    }
 }
