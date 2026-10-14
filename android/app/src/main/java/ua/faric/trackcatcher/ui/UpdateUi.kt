@@ -166,6 +166,13 @@ class UpdateUi(private val host: MainActivity) {
                 13f,
             ))
         }
+        if (jsonLink && BUILT_IN_MANIFEST_ID.isNotBlank() && jsonId != BUILT_IN_MANIFEST_ID) {
+            box.addView(ui.text(
+                "Увага: файл версії не той, що вбудований у застосунок. Телефони без вставленого посилання цієї " +
+                    "публікації не побачать — скажи про це в чаті Track Catcher (вбудоване посилання треба замінити).",
+                13.5f, Palette.warning,
+            ))
+        }
         val ready = apkReady && jsonReady && apkLink
         val publish = ui.button("Опублікувати зараз", Ui.Kind.PRIMARY, large = true) { publish() }
         ui.setEnabled(publish, ready)
@@ -648,10 +655,11 @@ class UpdateUi(private val host: MainActivity) {
     companion object {
         /**
          * Вбудоване посилання на файл версії на Диску автора — щоб інші телефони перевіряли без вставляння.
-         * Файл `track-catcher-onovlennia.json` на Диску faric (створено 14.10.2026 21:55, доступ «усі з посиланням»).
-         * Не змінювати: «Опублікувати зараз» пише в той самий файл, тож ID і посилання сталі.
+         * Файл `track-catcher-onovlennia.json` на Диску faric (створено 14.10.2026 22:48, доступ «усі з посиланням»).
+         * T47: перший файл (15QLo…, 21:55) лишився на 0.1.15 — 22:48 телефон автора створив файл версії заново,
+         * і «Опублікувати зараз» пише вже в новий. Якщо автор створить файл ще раз — вікно публікації попередить.
          */
-        const val BUILT_IN_MANIFEST_ID = "15QLo2sf2CWvNcoyJ_6p6B5wsqxvgIUUZ"
+        const val BUILT_IN_MANIFEST_ID = "1y8g6jMvN68x8aGN1HbuE4EoJCEtIJFqr"
 
         const val REQ_APK = 40
         const val REQ_JSON = 41
