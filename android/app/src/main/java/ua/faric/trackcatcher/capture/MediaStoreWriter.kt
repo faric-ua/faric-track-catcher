@@ -51,6 +51,19 @@ class MediaStoreWriter(context: Context) {
         return Saved(uri.toString(), actualName, size)
     }
 
+    /** Скільки наших файлів уже лежить у Music/Track Catcher/ (0 — папки ще нема). */
+    fun count(): Int = try {
+        resolver.query(
+            collection,
+            arrayOf(MediaStore.MediaColumns._ID),
+            "${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+            arrayOf(RELATIVE_DIR),
+            null,
+        )?.use { it.count } ?: 0
+    } catch (e: Exception) {
+        0
+    }
+
     fun delete(uri: String): Boolean = try {
         resolver.delete(Uri.parse(uri), null, null) > 0
     } catch (e: Exception) {

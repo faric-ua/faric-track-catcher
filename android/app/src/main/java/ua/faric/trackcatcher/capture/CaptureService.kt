@@ -169,7 +169,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         val segmentsDir = segmentsDir(this)
         val splitter = TrackSplitter(FileSegmentSink(segmentsDir, sessionId) { job -> queue?.submit(job, values) })
 
-        val t = NowPlayingTracker(this, this)
+        val t = NowPlayingTracker(this, this, watchLoops = true)
         tracker = t
         t.start()
         // start() уже повідомив поточну пісню через onTrack; якщо плеєра не видно — «невідома».
@@ -277,7 +277,11 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
             else -> null
         }
         val level = if (lastDb <= Pcm.SILENT_DB + 1) "тиша" else "%d dB".format(Math.round(lastDb))
-        val diag = "Звук від Android: ${Pcm.framesToMs(framesRead) / 1000} с отримано · рівень $level"
+        val pos = tracker?.positionMs()
+        val dur = RecorderHub.state.meta?.durationMs ?: 0L
+        // Позиція в плеєрі: якщо вона більша за тривалість — плеєр не повідомив, що почав пісню знову.
+        val player = if (pos == null) "" else " · плеєр ${TimeText.clock(pos)}" + (if (dur > 0) " з ${TimeText.clock(dur)}" else "")
+        val diag = "Звук від Android: ${Pcm.framesToMs(framesRead) / 1000} с отримано · рівень $level$player"
         if (warn != RecorderHub.state.warning || diag != RecorderHub.state.diag) {
             RecorderHub.update { it.copy(warning = warn, diag = diag) }
         }
