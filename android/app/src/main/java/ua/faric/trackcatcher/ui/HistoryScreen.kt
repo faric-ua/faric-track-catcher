@@ -18,6 +18,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import ua.faric.trackcatcher.capture.MediaStoreWriter
+import ua.faric.trackcatcher.core.Playlist
 import ua.faric.trackcatcher.core.RecStatus
 import ua.faric.trackcatcher.core.TimeText
 import ua.faric.trackcatcher.data.HistoryDb
@@ -36,6 +37,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private var filter: RecStatus? = state?.getString(KEY_FILTER)?.let { RecStatus.fromCode(it) }
     private var query: String = state?.getString(KEY_QUERY) ?: ""
     private var selectedId: Long = state?.getLong(KEY_SELECTED, 0L) ?: 0L
+    /** Є і MP3, і WAV — який слухати в плеєрі. */
+    private var listenWav: Boolean = state?.getBoolean(KEY_LISTEN_WAV, false) ?: false
     /** Режим вибору (T38): довге натискання на плитку. Порожньо — звичайний режим. */
     private val picked = LinkedHashSet<Long>().apply { state?.getLongArray(KEY_PICKED)?.forEach { add(it) } }
     private val pickBar = ui.card(10, fill = Palette.selectedFill, stroke = Palette.success)
@@ -91,20 +94,25 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
     }
 
+    private val finished: (String) -> Unit = { uri -> onFinished(uri) }
+
     override fun onStart() {
         unobserve = HistoryDb.observe { reload() }
+        InAppPlayer.onFinished = finished
         reload()
     }
 
     override fun onStop() {
         unobserve?.invoke()
         unobserve = null
+        if (InAppPlayer.onFinished === finished) InAppPlayer.onFinished = null
     }
 
     override fun save(out: Bundle) {
         filter?.let { out.putString(KEY_FILTER, it.code) }
         out.putString(KEY_QUERY, query)
         out.putLong(KEY_SELECTED, selectedId)
+        out.putBoolean(KEY_LISTEN_WAV, listenWav)
         out.putLongArray(KEY_PICKED, picked.toLongArray())
     }
 
@@ -251,7 +259,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             } else {
                 pane.addView(ui.card(8).apply {
                     addView(ui.label("Подробиці"))
-                    addView(ui.muted("Вибери запис ліворуч — тут буде все про нього: тривалість, формат, файл, чому неповний. І кнопки «Слухати», «Поділитись».", 14f))
+                    addView(ui.muted("Вибери запис ліворуч — тут буде все про нього: тривалість, формат, файл, чому неповний. І плеєр: ⏮ ▶ ⏭, «Поділитись».", 14f))
                 }, ui.matchWrap())
             }
         }
@@ -417,40 +425,89 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         facts.addView(ui.fact("Коли", TimeText.dateTime(r.createdAt)))
         box.addView(facts, ui.matchWrap())
 
-        // Плеєр усередині застосунку; якщо цей запис уже грає (поворот, оновлення списку) — показуємо одразу.
-        val playerSlot = FrameLayout(host)
-        box.addView(playerSlot, ui.matchWrap())
-        fun showPlayer(uri: String, mime: String) {
-            playerSlot.removeAllViews()
-            playerSlot.addView(PlayerView(host, ui, uri) { playExternal(uri, mime) }, ui.matchWrap())
-        }
-        listOfNotNull(r.mp3Uri?.let { it to "audio/mpeg" }, r.wavUri?.let { it to "audio/x-wav" })
-            .firstOrNull { it.first == InAppPlayer.uri }?.let { showPlayer(it.first, it.second) }
-
-        val actions = FlowLayout(host, ui.dp(8), ui.dp(8))
-        val both = r.mp3Uri != null && r.wavUri != null
-        r.mp3Uri?.let { uri -> actions.addView(ui.button(if (both) "▶\uFE0E Слухати MP3" else "▶\uFE0E Слухати", Ui.Kind.PRIMARY) { listen(uri, "audio/mpeg", ::showPlayer) }) }
-        r.wavUri?.let { uri -> actions.addView(ui.button(if (both) "▶\uFE0E Слухати WAV" else "▶\uFE0E Слухати", Ui.Kind.PRIMARY) { listen(uri, "audio/x-wav", ::showPlayer) }) }
+        // Плеєр (v0.1.17, faric 15.10 15:36): одразу видно смугу й ⏮ ▶ ⏭; ⏮/⏭ — сусідні записи історії.
         if (r.hasFile) {
+            val both = r.mp3Uri != null && r.wavUri != null
+            if (both) {
+                // Обидва формати — вибір, який слухати (зелена рамка, без галочок).
+                val formats = ui.row(8)
+                formats.addView(ui.muted("Слухати:", 14f))
+                listOf(false to "MP3", true to "WAV").forEach { (wav, label) ->
+                    formats.addView(ui.choice(label, listenWav == wav) {
+                        if (listenWav == wav) return@choice
+                        val wasPlaying = InAppPlayer.playing && isPlaying(r)
+                        listenWav = wav
+                        reopen(r)
+                        if (wasPlaying) listen(r)
+                    })
+                }
+                box.addView(formats, ui.matchWrap())
+            }
+            val uri = playUri(r)!!
+            val prev = neighbor(r, next = false)
+            val next = neighbor(r, next = true)
+            box.addView(PlayerView(
+                host, ui, uri, r.lengthMs,
+                onPlay = { listen(r) },
+                onPrevious = prev?.let { p -> { go(p) } },
+                onNext = next?.let { n -> { go(n) } },
+            ), ui.matchWrap())
+
+            val actions = FlowLayout(host, ui.dp(8), ui.dp(8))
             actions.addView(ui.button("Поділитись", Ui.Kind.NORMAL) { share(r) })
+            actions.addView(ui.button("Інший плеєр", Ui.Kind.NORMAL) { InAppPlayer.pause(); playExternal(uri, playMime(r)) })
             actions.addView(ui.button("Видалити файл", Ui.Kind.DANGER) { confirmDelete(r) })
-        }
-        if (inDialog) actions.addView(ui.button("Закрити", Ui.Kind.QUIET) { host.overlay.dismiss() })
-        box.addView(actions, ui.matchWrap())
-        if (!r.hasFile && r.status != RecStatus.COMPLETE && r.status != RecStatus.PARTIAL) {
+            box.addView(actions, ui.matchWrap())
+        } else if (r.status != RecStatus.COMPLETE && r.status != RecStatus.PARTIAL) {
             box.addView(ui.muted("Файлу немає — запис не зберігався (див. причину вище).", 13f))
         }
+        // «Закрити» — окремо, широка, в самому низу (faric 15.10: «внизу кнопочка широка на всю»).
+        if (inDialog) box.addView(ui.button("Закрити", Ui.Kind.QUIET, large = true) { host.overlay.dismiss() }, ui.matchWrap())
         return box
     }
 
-    private fun listen(uri: String, mime: String, show: (String, String) -> Unit) {
+    // ---------- плеєр: формат, сусіди, «грати далі» ----------
+
+    private fun playUri(r: RecordingRow): String? = if (listenWav) r.wavUri ?: r.mp3Uri else r.mp3Uri ?: r.wavUri
+
+    private fun playMime(r: RecordingRow): String = if (playUri(r) == r.wavUri) "audio/x-wav" else "audio/mpeg"
+
+    private fun isPlaying(r: RecordingRow): Boolean = InAppPlayer.uri != null && (InAppPlayer.uri == r.mp3Uri || InAppPlayer.uri == r.wavUri)
+
+    private fun neighbor(r: RecordingRow, next: Boolean): RecordingRow? {
+        val id = Playlist.neighbor(rows.map { it.id }, { id -> rows.firstOrNull { it.id == id }?.hasFile == true }, r.id, next)
+        return id?.let { found -> rows.firstOrNull { it.id == found } }
+    }
+
+    /** Показати подробиці [r] там, де вони зараз (вікно або права колонка). */
+    private fun reopen(r: RecordingRow) {
+        if (detailPane == null) showDetailDialog(r) else select(r)
+    }
+
+    /** ⏮ / ⏭: відкрити сусіда; якщо грало — грати й його (як у плеєрі). */
+    private fun go(to: RecordingRow) {
+        val wasPlaying = InAppPlayer.playing
+        reopen(to)
+        if (wasPlaying) listen(to)
+    }
+
+    /** Пісня дограла: якщо її подробиці відкриті — відкрити наступну й грати далі. */
+    private fun onFinished(doneUri: String) {
+        val done = rows.firstOrNull { it.mp3Uri == doneUri || it.wavUri == doneUri } ?: return
+        val shown = if (detailPane == null) host.overlay.key == "detail:${done.id}" else selectedId == done.id
+        if (!shown) return
+        val next = neighbor(done, next = true) ?: return
+        reopen(next)
+        listen(next)
+    }
+
+    private fun listen(r: RecordingRow) {
         if (RecorderHub.state.phase == RecorderHub.Phase.RECORDING) {
             // Наш звук забрав би «фокус» — плеєр, який записуємо, став би на паузу.
             host.toast("Іде запис — послухаєш після «Зупинити»: інакше плеєр, який записуєш, стане на паузу")
             return
         }
-        show(uri, mime)
-        InAppPlayer.play(host, uri)
+        playUri(r)?.let { InAppPlayer.play(host, it) }
     }
 
     private fun playExternal(uri: String, mime: String) {
@@ -514,6 +571,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         private const val KEY_FILTER = "filter"
         private const val KEY_QUERY = "query"
         private const val KEY_SELECTED = "selected"
+        private const val KEY_LISTEN_WAV = "listen_wav"
         private const val KEY_PICKED = "picked"
         private const val KEY_DELETE_MANY = "deletemany:0"
     }
