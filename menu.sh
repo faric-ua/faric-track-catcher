@@ -30,6 +30,27 @@ pause_menu() {
   read -r -p "Натисни Enter, щоб повернутись у меню…" _
 }
 
+# Шапка меню: велика назва між смужками (власник 2026-10-16 02:12 — «щоб одразу видно, яке це меню»).
+# Букви — з напівблоків ▀▄█ (шрифт 3×5, згенеровано скриптом), ширина 37 знаків.
+# Вузький екран (< 37 знаків) — проста шапка одним рядком.
+show_banner() {
+  local c="\033[1;35m" d="\033[0;35m" z="\033[0m" cols
+  cols="$(stty size 2>/dev/null | cut -d' ' -f2)"
+  local line="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  if [ "${cols:-80}" -ge 37 ] 2>/dev/null; then
+    echo -e "${d}${line}${z}"
+    echo -e "${c}         ▀█▀ █▀▄ █▀█ █▀▀ █ █${z}"
+    echo -e "${c}          █  █▀▄ █▀█ █   █▀▄${z}"
+    echo -e "${c}          ▀  ▀ ▀ ▀ ▀ ▀▀▀ ▀ ▀${z}"
+    echo -e "${c}     █▀▀ █▀█ ▀█▀ █▀▀ █ █ █▀▀ █▀▄${z}"
+    echo -e "${c}     █   █▀█  █  █   █▀█ █▀  █▀▄${z}"
+    echo -e "${c}     ▀▀▀ ▀ ▀  ▀  ▀▀▀ ▀ ▀ ▀▀▀ ▀ ▀${z}"
+    echo -e "${d}${line}${z}"
+  else
+    echo -e "${c}━━ TRACK CATCHER ━━${z}"
+  fi
+}
+
 run_tool() {
   clear
   bash "$TOOLS/$1"
@@ -46,7 +67,7 @@ while true; do
   version="$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' "$REPO/android/app/build.gradle.kts" 2>/dev/null | head -n 1)"
   code="$(sed -n 's/^ *versionCode = \([0-9]*\)$/\1/p' "$REPO/android/app/build.gradle.kts" 2>/dev/null | head -n 1)"
   inst="$(installed_build)"
-  echo "Track Catcher · меню"
+  show_banner
   echo "$(git branch --show-current 2>/dev/null) · $(git rev-parse --short HEAD 2>/dev/null) · нова версія v${version:-?} (build ${code:-?})"
   if [ -n "$inst" ]; then
     if [ "$inst" = "$code" ]; then echo "На телефоні: build $inst — найновіша"; else echo "На телефоні: build $inst — є новіша, пункт 2"; fi

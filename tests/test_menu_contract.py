@@ -152,5 +152,19 @@ class SyncBehaviour(unittest.TestCase):
         self.assertEqual(before, git(self.phone, "rev-parse", "HEAD"))
 
 
+class MenuBanner(unittest.TestCase):
+    """Шапка з великою назвою між смужками (faric 2026-10-16 02:12) — і влазить у вузький екран телефона."""
+
+    def test_banner_shown_and_fits_phone(self):
+        menu = MENU
+        self.assertIn("show_banner() {", menu)
+        self.assertRegex(menu, r"while true; do\n  clear\n(?:.*\n){0,6}?  show_banner\n")
+        body = menu.split("show_banner() {", 1)[1].split("\n}\n", 1)[0]
+        art = re.findall(r'echo -e "\$\{c\}( [^"$]*)\$\{z\}"', body)
+        self.assertEqual(6, len(art), "дві назви по три рядки")
+        for line in art:
+            self.assertLessEqual(len(line), 37, line)
+
+
 if __name__ == "__main__":
     unittest.main()
