@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
+import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -99,6 +100,10 @@ class UpdateUi(private val host: MainActivity) {
             13.5f,
         ))
         addView(ui.button("Перевірити оновлення", Ui.Kind.PRIMARY) { check(quiet = false) }, ui.matchWrap())
+        if (manifestId() != null) {
+            // T54: змінити посилання можна завжди, а не лише після помилки перевірки.
+            addView(ui.button("Інше посилання на оновлення", Ui.Kind.QUIET) { askForLink() }, ui.matchWrap())
+        }
         addView(ui.title("Перевіряти самому раз на день", 15.5f))
         val auto = prefs.getBoolean(KEY_AUTO, true)
         val choices = ArrayList<Pair<Boolean, TextView>>()
@@ -498,19 +503,28 @@ class UpdateUi(private val host: MainActivity) {
                     "перевірить, що він справжній, і відкриє вікно Android «Оновити». Записи, історія й налаштування лишаються.",
                 listOf("Завантажити й встановити" to Ui.Kind.PRIMARY, "Не зараз" to Ui.Kind.QUIET),
             )
-            DriveUpdate.Verdict.SAME -> Triple("У тебе остання версія", "Встановлено $mine — така сама, як на Диску.", listOf("Закрити" to Ui.Kind.QUIET))
-            DriveUpdate.Verdict.OLDER -> Triple("У тебе новіша версія", "Встановлено $mine, на Диску старіша: $theirs.", listOf("Закрити" to Ui.Kind.QUIET))
+            DriveUpdate.Verdict.SAME -> Triple(
+                "У тебе остання версія",
+                "Встановлено $mine — така сама, як на Диску.$OTHER_LINK_HINT",
+                listOf("Інше посилання" to Ui.Kind.NORMAL, "Закрити" to Ui.Kind.QUIET),
+            )
+            DriveUpdate.Verdict.OLDER -> Triple(
+                "У тебе новіша версія",
+                "Встановлено $mine, на Диску старіша: $theirs.$OTHER_LINK_HINT",
+                listOf("Інше посилання" to Ui.Kind.NORMAL, "Закрити" to Ui.Kind.QUIET),
+            )
             DriveUpdate.Verdict.OTHER_PACKAGE -> Triple(
                 "Інший варіант застосунку",
                 "На Диску версія для ${m.packageName}, а в тебе ${host.packageName}.",
-                listOf("Закрити" to Ui.Kind.QUIET),
+                listOf("Інше посилання" to Ui.Kind.NORMAL, "Закрити" to Ui.Kind.QUIET),
             )
         }
-        val newer = actions.size == 2
+        val newer = DriveUpdate.compare(m, host.packageName, BuildConfig.VERSION_CODE.toLong()) == DriveUpdate.Verdict.NEWER
         val body = host.overlay.dialog(title, message, actions, onAction = { i ->
             host.overlay.dismiss()
             Updater.verdict = null
-            if (newer && i == 0) download(m)
+            // T54: «Інше посилання» — і коли перевірка вдала (раніше лише після помилки — старий файл версії був тупиком).
+            if (newer && i == 0) download(m) else if (!newer && i == 0) checkPastedLink()
         })
         host.overlay.show(KEY_DIALOG_VERDICT, body)
     }
@@ -627,7 +641,10 @@ class UpdateUi(private val host: MainActivity) {
             Updater.progressButton = null
             host.overlay.dismiss()
         }
-        box.addView(close, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        // «Закрити» — у правий кут вікна, ближче до правої руки (faric 16.10, T53).
+        box.addView(close, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            gravity = Gravity.END
+        })
         Updater.progressView = status
         Updater.progressButton = close
         host.overlay.show(KEY_DIALOG_PROGRESS, box, dismissOnOutside = false)
@@ -659,6 +676,9 @@ class UpdateUi(private val host: MainActivity) {
          * T47: перший файл (15QLo…, 21:55) лишився на 0.1.15 — 22:48 телефон автора створив файл версії заново,
          * і «Опублікувати зараз» пише вже в новий. Якщо автор створить файл ще раз — вікно публікації попередить.
          */
+        /** Підказка у вікні «остання / новіша версія» (T54). */
+        private const val OTHER_LINK_HINT =
+            "\n\nАвтор казав, що є новіша? Скопіюй посилання від нього й натисни «Інше посилання»."
         const val BUILT_IN_MANIFEST_ID = "1y8g6jMvN68x8aGN1HbuE4EoJCEtIJFqr"
 
         const val REQ_APK = 40
