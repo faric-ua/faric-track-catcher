@@ -102,7 +102,7 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
         if (notify) onChange(null)
     }
 
-    /** Типове вікно: заголовок, текст, кнопки (скасування — праворуч, правило YTM UX-018). */
+    /** Типове вікно: заголовок, текст, кнопки праворуч (скасування/«Закрити» — найправіша: YTM UX-018, faric T53). */
     fun dialog(
         title: String,
         message: CharSequence,
@@ -114,7 +114,7 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
         box.addView(ui.title(title, 19f))
         if (message.isNotEmpty()) box.addView(ui.text(message, 15f, Palette.muted))
         extra?.let { box.addView(it) }
-        val row = FlowLayout(host.context, ui.dp(8), ui.dp(8))
+        val row = FlowLayout(host.context, ui.dp(8), ui.dp(8), alignEnd = true) // кнопки праворуч, «Закрити» — найправіша (T53)
         actions.forEachIndexed { i, (label, kind) ->
             row.addView(ui.button(label, kind) { onAction(i) })
         }

@@ -1,5 +1,6 @@
 package ua.faric.trackcatcher.ui
 
+import android.text.TextUtils
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Bitmap
@@ -332,7 +333,11 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
         box.addView(thumb(r, 48), LinearLayout.LayoutParams(ui.dp(48), ui.dp(48)))
         val texts = ui.column(3)
-        texts.addView(ui.text(r.displayName, 15.5f, medium = true).apply { maxLines = 2 })
+        texts.addView(ui.text(r.displayName, 15.5f, medium = true).apply {
+            // T44: довга назва — 3 рядки і «…» в кінці, а не мовчки обрізана посеред.
+            maxLines = 3
+            ellipsize = TextUtils.TruncateAt.END
+        })
         texts.addView(ui.numbers(ui.muted(metaLine(r), 13f)))
         if (r.status != RecStatus.COMPLETE && r.reason.isNotBlank()) {
             texts.addView(ui.text(r.reason, 12.5f, ui.statusColor(r.status)).apply { maxLines = 3 })
