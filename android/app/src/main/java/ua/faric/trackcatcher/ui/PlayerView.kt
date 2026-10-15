@@ -81,7 +81,8 @@ class PlayerView(
                 topMargin = ui.dp(14)
                 bottomMargin = ui.dp(6)
             })
-            val row = ui.row()
+            // Значки — по верху, в одну лінію (T52).
+            val row = ui.row().apply { gravity = Gravity.TOP }
             actions.forEach { row.addView(it, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)) }
             addView(row, ui.matchWrap())
         }
