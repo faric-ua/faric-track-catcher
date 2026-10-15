@@ -40,6 +40,12 @@ object InAppPlayer {
         .setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_NONE)
         .build()
 
+    /**
+     * Файл дограв до кінця — історія відкриває наступну пісню й грає далі (v0.1.17, «слухати як у плеєрі»).
+     * Ставить екран «Історія», поки він на екрані.
+     */
+    var onFinished: ((String) -> Unit)? = null
+
     fun addListener(l: () -> Unit) { listeners += l }
     fun removeListener(l: () -> Unit) { listeners -= l }
     private fun changed() = listeners.toList().forEach { it() }
@@ -68,6 +74,8 @@ object InAppPlayer {
             p.setOnCompletionListener {
                 abandonFocus()
                 changed()
+                val done = uri
+                if (done != null) onFinished?.invoke(done)
             }
             p.setOnErrorListener { _, _, _ ->
                 fail("Файл не відкривається — можливо, його видалили в «Моїх файлах».")
