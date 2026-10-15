@@ -13,9 +13,16 @@ class TrackCatcherApp : Application() {
             setShowBadge(false)
         }
         nm.createNotificationChannel(channel)
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_PLAYBACK, "Прослуховування", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Плеєр у шторці: що грає з історії, ⏮ ▶ ⏭"
+                setShowBadge(false)
+            },
+        )
     }
 
     companion object {
         const val CHANNEL_RECORDING = "recording"
+        const val CHANNEL_PLAYBACK = "playback"
     }
 }

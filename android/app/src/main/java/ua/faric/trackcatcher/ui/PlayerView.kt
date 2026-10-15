@@ -33,6 +33,8 @@ class PlayerView(
     /** null — сусіда нема (край історії), кнопка неактивна. */
     onPrevious: (() -> Unit)?,
     onNext: (() -> Unit)?,
+    /** Маленькі дії під кнопками — «Поділитись», «Інший плеєр», «Видалити» ([ActionTile]). */
+    actions: List<View> = emptyList(),
 ) : LinearLayout(context) {
     private val handler = Handler(Looper.getMainLooper())
     // Під смугою: ліворуч — скільки зіграно, праворуч — скільки ще лишилось (faric 14.10 04:41:
@@ -74,6 +76,15 @@ class PlayerView(
         addView(transport, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = ui.dp(6) })
 
         addView(message, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = ui.dp(8) })
+        if (actions.isNotEmpty()) {
+            addView(ui.divider(), LayoutParams(LayoutParams.MATCH_PARENT, maxOf(1, ui.dp(1) / 2)).apply {
+                topMargin = ui.dp(14)
+                bottomMargin = ui.dp(6)
+            })
+            val row = ui.row()
+            actions.forEach { row.addView(it, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)) }
+            addView(row, ui.matchWrap())
+        }
         message.visibility = GONE
         contentDescription = "Плеєр запису"
         render()

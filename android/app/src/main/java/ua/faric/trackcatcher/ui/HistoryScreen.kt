@@ -94,18 +94,20 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
     }
 
-    private val finished: (String) -> Unit = { uri -> onFinished(uri) }
+    private val follower: (InAppPlayer.Track) -> Unit = { t -> follow(t) }
 
     override fun onStart() {
         unobserve = HistoryDb.observe { reload() }
-        InAppPlayer.onFinished = finished
+        InAppPlayer.onTrackChanged = follower
         reload()
+        // Поки застосунок був схований, плеєр міг перейти далі (шторка, «дограла»).
+        InAppPlayer.current?.let { follow(it) }
     }
 
     override fun onStop() {
         unobserve?.invoke()
         unobserve = null
-        if (InAppPlayer.onFinished === finished) InAppPlayer.onFinished = null
+        if (InAppPlayer.onTrackChanged === follower) InAppPlayer.onTrackChanged = null
     }
 
     override fun save(out: Bundle) {
@@ -446,18 +448,19 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             val uri = playUri(r)!!
             val prev = neighbor(r, next = false)
             val next = neighbor(r, next = true)
+            // Дії — маленькими значками всередині плитки плеєра (faric 15.10 17:31).
+            val actions = listOf(
+                ActionTile(host, ui, ActionTile.Icon.SHARE, "Поділитись", danger = false) { share(r) },
+                ActionTile(host, ui, ActionTile.Icon.OPEN, "Інший плеєр", danger = false) { InAppPlayer.pause(); playExternal(uri, playMime(r)) },
+                ActionTile(host, ui, ActionTile.Icon.DELETE, "Видалити", danger = true) { confirmDelete(r) },
+            )
             box.addView(PlayerView(
                 host, ui, uri, r.lengthMs,
                 onPlay = { listen(r) },
                 onPrevious = prev?.let { p -> { go(p) } },
                 onNext = next?.let { n -> { go(n) } },
+                actions = actions,
             ), ui.matchWrap())
-
-            val actions = FlowLayout(host, ui.dp(8), ui.dp(8))
-            actions.addView(ui.button("Поділитись", Ui.Kind.NORMAL) { share(r) })
-            actions.addView(ui.button("Інший плеєр", Ui.Kind.NORMAL) { InAppPlayer.pause(); playExternal(uri, playMime(r)) })
-            actions.addView(ui.button("Видалити файл", Ui.Kind.DANGER) { confirmDelete(r) })
-            box.addView(actions, ui.matchWrap())
         } else if (r.status != RecStatus.COMPLETE && r.status != RecStatus.PARTIAL) {
             box.addView(ui.muted("Файлу немає — запис не зберігався (див. причину вище).", 13f))
         }
@@ -491,14 +494,24 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         if (wasPlaying) listen(to)
     }
 
-    /** Пісня дограла: якщо її подробиці відкриті — відкрити наступну й грати далі. */
-    private fun onFinished(doneUri: String) {
-        val done = rows.firstOrNull { it.mp3Uri == doneUri || it.wavUri == doneUri } ?: return
-        val shown = if (detailPane == null) host.overlay.key == "detail:${done.id}" else selectedId == done.id
-        if (!shown) return
-        val next = neighbor(done, next = true) ?: return
-        reopen(next)
-        listen(next)
+    /**
+     * Плеєр сам перейшов на інший запис (дограла, ⏮/⏭ у шторці): якщо відкриті подробиці іншого —
+     * показати ті, що грають.
+     */
+    private fun follow(t: InAppPlayer.Track) {
+        if (detailPane == null) {
+            val key = host.overlay.key ?: return
+            if (!key.startsWith("detail:") || key == "detail:${t.id}") return
+            (rows.firstOrNull { it.id == t.id } ?: db.get(t.id))?.let { showDetailDialog(it) }
+        } else if (selectedId != t.id) {
+            selectedId = t.id
+            reload()
+        }
+    }
+
+    private fun track(r: RecordingRow): InAppPlayer.Track? {
+        val uri = playUri(r) ?: return null
+        return InAppPlayer.Track(r.id, uri, r.title.ifBlank { r.displayName }, r.artist, r.album, r.artworkPath)
     }
 
     private fun listen(r: RecordingRow) {
@@ -507,7 +520,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             host.toast("Іде запис — послухаєш після «Зупинити»: інакше плеєр, який записуєш, стане на паузу")
             return
         }
-        playUri(r)?.let { InAppPlayer.play(host, it) }
+        val t = track(r) ?: return
+        InAppPlayer.play(host, t, rows.filter { it.hasFile }.mapNotNull { track(it) })
     }
 
     private fun playExternal(uri: String, mime: String) {

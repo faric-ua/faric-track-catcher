@@ -314,8 +314,8 @@ class MainActivity : Activity() {
         screen?.onStop()
         tracker.stop()
         Updater.detach(this)
-        // Застосунок сховали — пауза (поворот екрана не рахується: плеєр грає далі).
-        if (!isChangingConfigurations) InAppPlayer.pause()
+        // v0.1.18: сховали застосунок — плеєр грає далі, керування — у шторці (PlaybackService).
+        // (До v0.1.18 тут ставилась пауза: шторки не було, і звук без вікна був би «нічиїм».)
         super.onStop()
     }
 

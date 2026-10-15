@@ -8,16 +8,33 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import ua.faric.trackcatcher.core.Playlist
+import ua.faric.trackcatcher.playback.PlaybackService
 
 /**
  * Плеєр усередині застосунку (faric 14.10: «щоб не відкривав зовнішній плеєр»).
  * Один на весь застосунок — переживає поворот екрана. Усі виклики — з головного потоку.
  * Свій звук Track Catcher сам не записує: ALLOW_CAPTURE_BY_NONE.
+ *
+ * v0.1.18 (faric 15.10 17:31: «щоб у шторці зверху теж показувало, що грається»): черга записів
+ * історії, ⏮/⏭ і «дограла — наступна» живуть тут, а не в екрані, — тож працюють і зі шторки,
+ * і коли застосунок сховано. Шторку й заблокований екран показує [PlaybackService].
  */
 object InAppPlayer {
+    /** Що грає: запис історії й файл, який саме слухаємо (MP3 або WAV). */
+    data class Track(
+        val id: Long,
+        val uri: String,
+        val title: String,
+        val artist: String,
+        val album: String,
+        val artworkPath: String?,
+    )
+
     private var player: MediaPlayer? = null
     private var focus: AudioFocusRequest? = null
     private var audio: AudioManager? = null
+    private var app: Context? = null
     private val handler = Handler(Looper.getMainLooper())
     private val listeners = LinkedHashSet<() -> Unit>()
     private var attachedViews = 0
@@ -30,6 +47,14 @@ object InAppPlayer {
     var error: String? = null
         private set
 
+    /** Поточний запис і черга (порядок історії — новіші згори). */
+    var current: Track? = null
+        private set
+    private var queue: List<Track> = emptyList()
+
+    /** Перейшли на інший запис не з екрана (шторка, «дограла») — екран показує його подробиці. */
+    var onTrackChanged: ((Track) -> Unit)? = null
+
     val playing: Boolean get() = prepared && runCatching { player?.isPlaying == true }.getOrDefault(false)
     val positionMs: Long get() = if (prepared) runCatching { player?.currentPosition?.toLong() ?: 0L }.getOrDefault(0L) else 0L
     val durationMs: Long get() = if (prepared) runCatching { player?.duration?.toLong() ?: 0L }.getOrDefault(0L).coerceAtLeast(0L) else 0L
@@ -40,42 +65,61 @@ object InAppPlayer {
         .setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_NONE)
         .build()
 
-    /**
-     * Файл дограв до кінця — історія відкриває наступну пісню й грає далі (v0.1.17, «слухати як у плеєрі»).
-     * Ставить екран «Історія», поки він на екрані.
-     */
-    var onFinished: ((String) -> Unit)? = null
-
     fun addListener(l: () -> Unit) { listeners += l }
     fun removeListener(l: () -> Unit) { listeners -= l }
     private fun changed() = listeners.toList().forEach { it() }
 
-    /** Почати (або продовжити) файл [newUri]. Інший файл — зупиняє попередній. */
-    fun play(context: Context, newUri: String) {
+    /** Грати [track]; [newestFirst] — записи з файлами в порядку історії (для ⏮/⏭). */
+    fun play(context: Context, track: Track, newestFirst: List<Track>) {
+        queue = newestFirst
+        current = track
+        open(context, track.uri)
+    }
+
+    fun hasNeighbor(next: Boolean): Boolean {
+        val cur = current ?: return false
+        return Playlist.neighbor(queue.map { it.id }, { true }, cur.id, next) != null
+    }
+
+    /** ⏮ / ⏭ у черзі. Повертає false на краю. */
+    fun skip(context: Context, next: Boolean): Boolean {
+        val cur = current ?: return false
+        val id = Playlist.neighbor(queue.map { it.id }, { true }, cur.id, next) ?: return false
+        val t = queue.firstOrNull { it.id == id } ?: return false
+        current = t
+        open(context, t.uri)
+        onTrackChanged?.invoke(t)
+        return true
+    }
+
+    /** Відкрити файл і почати. Той самий файл — продовжити. */
+    private fun open(context: Context, newUri: String) {
+        val appCtx = context.applicationContext
+        app = appCtx
         if (newUri == uri && player != null) {
-            resume(context)
+            resume(appCtx)
             return
         }
         release()
         uri = newUri
         error = null
-        val app = context.applicationContext
-        audio = app.getSystemService(AudioManager::class.java)
+        audio = appCtx.getSystemService(AudioManager::class.java)
         val p = MediaPlayer()
         player = p
         try {
             p.setAudioAttributes(attrs)
-            p.setDataSource(app, Uri.parse(newUri))
+            p.setDataSource(appCtx, Uri.parse(newUri))
             p.setOnPreparedListener {
                 prepared = true
                 if (requestFocus()) it.start()
                 changed()
             }
             p.setOnCompletionListener {
-                abandonFocus()
-                changed()
-                val done = uri
-                if (done != null) onFinished?.invoke(done)
+                // Дограла — наступна (як в альбомі); остання — стоп на місці.
+                if (!skip(appCtx, next = true)) {
+                    abandonFocus()
+                    changed()
+                }
             }
             p.setOnErrorListener { _, _, _ ->
                 fail("Файл не відкривається — можливо, його видалили в «Моїх файлах».")
@@ -85,6 +129,7 @@ object InAppPlayer {
         } catch (e: Exception) {
             fail("Файл не відкривається — можливо, його видалили в «Моїх файлах».")
         }
+        PlaybackService.ensureStarted(appCtx)
         changed()
     }
 
@@ -92,7 +137,7 @@ object InAppPlayer {
         if (playing) pause() else resume(context)
     }
 
-    private fun resume(context: Context) {
+    fun resume(context: Context) {
         val p = player ?: return
         if (!prepared) return
         if (audio == null) audio = context.applicationContext.getSystemService(AudioManager::class.java)
@@ -114,10 +159,14 @@ object InAppPlayer {
         changed()
     }
 
+    /** Зупинити зовсім: файл закрито, шторка зникає. */
     fun stop() {
-        if (player == null && uri == null) return
+        if (player == null && uri == null && current == null) return
         release()
+        current = null
+        queue = emptyList()
         changed()
+        app?.let { PlaybackService.stop(it) }
     }
 
     /** Вікно з плеєром з'явилось / зникло. Коли не лишилось жодного — зупиняємо (з запасом на поворот). */
