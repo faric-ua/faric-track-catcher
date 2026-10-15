@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
@@ -13,9 +14,14 @@ import kotlin.math.min
 
 /**
  * Маленька дія всередині плитки плеєра: круглий значок і підпис під ним — «Поділитись»,
- * «Інший плеєр», «Видалити» (faric 15.10 17:31: «маленькими ярличками, такими кнопочками
+ * «Плеєр», «Видалити» (faric 15.10 17:31: «маленькими ярличками, такими кнопочками
  * інтересними — у нашу плитку»). Уся колонка — зона дотику (≥ 48 dp), значок малюється лініями
  * в тому ж стилі, що й ⏮ ▶ ⏭ ([TransportButton]).
+ *
+ * T52 (скрін 15.10 21:21): підпис — **один рядок**, не влазить — «…» (було «Поділитис / ь», а
+ * «Інший / плеєр» у 2 рядки зсував кружок «Видалити» нижче — не в одну лінію). Кружки однакові:
+ * та сама заливка й рамка; «Видалити» виділене лише червоним значком і підписом (раніше червона
+ * рамка й заливка робили кружок на вигляд більшим).
  */
 @SuppressLint("ViewConstructor")
 class ActionTile(
@@ -43,7 +49,9 @@ class ActionTile(
             ui.text(label, 12.5f, if (danger) Palette.danger else Palette.muted, medium = true).apply {
                 gravity = Gravity.CENTER
                 textAlignment = TEXT_ALIGNMENT_CENTER
-                maxLines = 2
+                maxLines = 1
+                isSingleLine = true
+                ellipsize = TextUtils.TruncateAt.END
             },
             LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { topMargin = ui.dp(5) },
         )
@@ -64,12 +72,13 @@ class ActionTile(
             val cx = width / 2f
             val cy = height / 2f
             val r = side / 2f - ui.dp(1)
+            // Усі кружки однакові (T52) — відрізняється лише колір значка.
             paint.style = Paint.Style.FILL
-            paint.color = if (danger) Palette.dangerFill else Palette.surface
+            paint.color = Palette.surface
             canvas.drawCircle(cx, cy, r, paint)
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = ui.dp(1).toFloat()
-            paint.color = if (danger) Palette.danger else Palette.border
+            paint.color = Palette.border
             canvas.drawCircle(cx, cy, r - paint.strokeWidth / 2f, paint)
 
             val ink = if (danger) Palette.danger else Palette.text

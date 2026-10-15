@@ -59,6 +59,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val chips = ui.row(8)
     private val list = ui.column(10)
     private val detailPane: LinearLayout? = if (ui.twoPane) ui.column(12) else null
+    private var detailScroll: android.widget.ScrollView? = null
     private var unobserve: (() -> Unit)? = null
     private val thumbs = LruCache<String, Bitmap>(60)
     private var rows: List<RecordingRow> = emptyList()
@@ -87,7 +88,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 gravity = Gravity.TOP
                 addView(listColumn, ui.weight(1.15f))
                 addView(ui.divider().apply { layoutParams = LinearLayout.LayoutParams(maxOf(1, ui.dp(1) / 2), ViewGroup.LayoutParams.MATCH_PARENT) })
-                addView(ui.scroll(detailPane, 16), ui.weight(1f))
+                addView(ui.scroll(detailPane, 16).also { detailScroll = it }, ui.weight(1f))
             }
         } else {
             listColumn
@@ -391,9 +392,9 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         reload()
     }
 
-    private fun showDetailDialog(r: RecordingRow) {
+    private fun showDetailDialog(r: RecordingRow, keepScroll: Boolean = false) {
         selectedId = r.id
-        host.overlay.show("detail:${r.id}", detailView(r, inDialog = true))
+        host.overlay.show("detail:${r.id}", detailView(r, inDialog = true), keepScroll = keepScroll)
     }
 
     private fun detailView(r: RecordingRow, inDialog: Boolean): View {
@@ -451,7 +452,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             // Дії — маленькими значками всередині плитки плеєра (faric 15.10 17:31).
             val actions = listOf(
                 ActionTile(host, ui, ActionTile.Icon.SHARE, "Поділитись", danger = false) { share(r) },
-                ActionTile(host, ui, ActionTile.Icon.OPEN, "Інший плеєр", danger = false) { InAppPlayer.pause(); playExternal(uri, playMime(r)) },
+                ActionTile(host, ui, ActionTile.Icon.OPEN, "Плеєр", danger = false) { InAppPlayer.pause(); playExternal(uri, playMime(r)) },
                 ActionTile(host, ui, ActionTile.Icon.DELETE, "Видалити", danger = true) { confirmDelete(r) },
             )
             box.addView(PlayerView(
@@ -482,9 +483,19 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         return id?.let { found -> rows.firstOrNull { it.id == found } }
     }
 
-    /** Показати подробиці [r] там, де вони зараз (вікно або права колонка). */
+    /**
+     * Показати подробиці [r] замість поточних (⏮/⏭, «дограла», MP3/WAV) — там, де вони зараз
+     * (вікно або права колонка), і **не стрибати вгору**: плеєр лишається на тому самому місці (T51).
+     */
     private fun reopen(r: RecordingRow) {
-        if (detailPane == null) showDetailDialog(r) else select(r)
+        if (detailPane == null) {
+            showDetailDialog(r, keepScroll = true)
+        } else {
+            val s = detailScroll
+            val fromBottom = s?.let { distanceFromBottom(it) }
+            select(r)
+            if (s != null && fromBottom != null) restoreFromBottom(s, fromBottom)
+        }
     }
 
     /** ⏮ / ⏭: відкрити сусіда; якщо грало — грати й його (як у плеєрі). */
@@ -502,10 +513,9 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         if (detailPane == null) {
             val key = host.overlay.key ?: return
             if (!key.startsWith("detail:") || key == "detail:${t.id}") return
-            (rows.firstOrNull { it.id == t.id } ?: db.get(t.id))?.let { showDetailDialog(it) }
+            (rows.firstOrNull { it.id == t.id } ?: db.get(t.id))?.let { reopen(it) }
         } else if (selectedId != t.id) {
-            selectedId = t.id
-            reload()
+            (rows.firstOrNull { it.id == t.id } ?: db.get(t.id))?.let { reopen(it) }
         }
     }
 

@@ -5,6 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.view.ViewTreeObserver
 import android.widget.ScrollView
 
 /**
@@ -16,6 +17,7 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
         private set
     private var layer: View? = null
     private var panel: View? = null
+    private var scroll: ScrollView? = null
     /** Системні панелі (рядок стану згори, кнопки внизу): вікно не заходить під них (T41, faric 14.10). */
     private var barLeft = 0
     private var barTop = 0
@@ -24,7 +26,12 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
 
     val isShowing: Boolean get() = layer != null
 
-    fun show(key: String, content: View, dismissOnOutside: Boolean = true) {
+    /**
+     * [keepScroll] — нове вікно замість такого самого (⏮/⏭ у подробицях запису, T51): прокрутити так,
+     * щоб низ (плеєр і кнопки) лишився на тому самому місці екрана, а не стрибав угору.
+     */
+    fun show(key: String, content: View, dismissOnOutside: Boolean = true, keepScroll: Boolean = false) {
+        val fromBottom = if (keepScroll) scroll?.let { distanceFromBottom(it) } else null
         dismiss(notify = false)
         this.key = key
         val scrim = FrameLayout(host.context).apply {
@@ -50,7 +57,9 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
         host.addView(scrim, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         layer = scrim
         this.panel = panel
+        this.scroll = scroll
         placePanel()
+        fromBottom?.let { restoreFromBottom(scroll, it) }
         onChange(key)
     }
 
@@ -88,6 +97,7 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
         layer?.let { host.removeView(it) }
         layer = null
         panel = null
+        scroll = null
         key = null
         if (notify) onChange(null)
     }
@@ -111,4 +121,19 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
         box.addView(row, ui.matchWrap())
         return box
     }
+}
+
+/** Скільки прокрутки лишилось до низу вмісту (T51: тримати низ на місці при заміні вмісту). */
+fun distanceFromBottom(s: ScrollView): Int = (s.getChildAt(0)?.height ?: 0) - s.scrollY
+
+/** Після побудови нового вмісту — прокрутити так, щоб до низу лишилось [fromBottom] (до першого кадру, без блимання). */
+fun restoreFromBottom(s: ScrollView, fromBottom: Int) {
+    s.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+        override fun onPreDraw(): Boolean {
+            if (s.viewTreeObserver.isAlive) s.viewTreeObserver.removeOnPreDrawListener(this)
+            val h = s.getChildAt(0)?.height ?: return true
+            s.scrollTo(0, (h - fromBottom).coerceAtLeast(0))
+            return true
+        }
+    })
 }
