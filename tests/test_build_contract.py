@@ -75,6 +75,15 @@ class BuildContract(unittest.TestCase):
         self.assertIn("BIND_NOTIFICATION_LISTENER_SERVICE", MANIFEST)
         self.assertIn('android:allowBackup="false"', MANIFEST)
 
+    def test_playback_notification_setup(self):
+        """v0.1.18: шторка під час прослуховування — служба mediaPlayback з дозволом; свій MediaSession не пишемо."""
+        self.assertIn("android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK", MANIFEST)
+        self.assertRegex(MANIFEST, r'\.playback\.PlaybackService"\s+android:exported="false"\s+android:foregroundServiceType="mediaPlayback"')
+        tracker = (ROOT / "android/app/src/main/java/ua/faric/trackcatcher/capture/NowPlayingTracker.kt").read_text(encoding="utf-8")
+        self.assertIn("it.packageName != own", tracker)
+        player = (ROOT / "android/app/src/main/java/ua/faric/trackcatcher/ui/InAppPlayer.kt").read_text(encoding="utf-8")
+        self.assertIn("ALLOW_CAPTURE_BY_NONE", player)
+
     def test_drive_update_setup(self):
         # Оновлення з Google Диска (faric 14.10 20:22): інтернет, встановлення, FileProvider лише для cache/updates.
         for perm in ("INTERNET", "REQUEST_INSTALL_PACKAGES"):
