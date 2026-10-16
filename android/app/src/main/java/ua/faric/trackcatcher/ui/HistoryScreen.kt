@@ -19,6 +19,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import ua.faric.trackcatcher.capture.MediaStoreWriter
+import ua.faric.trackcatcher.core.Lossless
 import ua.faric.trackcatcher.core.Playlist
 import ua.faric.trackcatcher.core.RecStatus
 import ua.faric.trackcatcher.core.TimeText
@@ -38,7 +39,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private var filter: RecStatus? = state?.getString(KEY_FILTER)?.let { RecStatus.fromCode(it) }
     private var query: String = state?.getString(KEY_QUERY) ?: ""
     private var selectedId: Long = state?.getLong(KEY_SELECTED, 0L) ?: 0L
-    /** Є і MP3, і WAV — який слухати в плеєрі. */
+    /** Є і MP3, і файл без втрат (WAV або FLAC) — який слухати в плеєрі. */
     private var listenWav: Boolean = state?.getBoolean(KEY_LISTEN_WAV, false) ?: false
     /** Режим вибору (T38): довге натискання на плитку. Порожньо — звичайний режим. */
     private val picked = LinkedHashSet<Long>().apply { state?.getLongArray(KEY_PICKED)?.forEach { add(it) } }
@@ -191,7 +192,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             append("З історії зникне ").append(TimeText.plural(chosen.size, "запис", "записи", "записів")).append(".")
             if (withFiles > 0) {
                 append(" Разом з ними з телефона буде видалено файли ")
-                append(TimeText.plural(withFiles, "пісні", "пісень", "пісень")).append(" (MP3 / WAV).")
+                append(TimeText.plural(withFiles, "пісні", "пісень", "пісень")).append(" (MP3 / WAV / FLAC).")
             } else {
                 append(" Файлів у них нема — видаляються лише записи.")
             }
@@ -358,7 +359,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     private fun formats(r: RecordingRow): String = listOfNotNull(
         if (r.mp3Name != null) "MP3 ${r.mp3Bitrate}" else null,
-        if (r.wavName != null) "WAV" else null,
+        if (r.wavName != null) Lossless.ofName(r.wavName).label else null,
     ).joinToString(" + ")
 
     private fun thumb(r: RecordingRow, sizeDp: Int): View {
@@ -420,7 +421,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         if (r.durationMs > 0) facts.addView(ui.fact("Пісня", TimeText.clock(r.durationMs)))
         formats(r).takeIf { it.isNotBlank() }?.let { facts.addView(ui.fact("Формат", it)) }
         r.mp3Name?.let { facts.addView(ui.fact("Файл MP3", "$it · ${TimeText.size(r.mp3Size)}")) }
-        r.wavName?.let { facts.addView(ui.fact("Файл WAV", "$it · ${TimeText.size(r.wavSize)}")) }
+        r.wavName?.let { facts.addView(ui.fact("Файл ${Lossless.ofName(it).label}", "$it · ${TimeText.size(r.wavSize)}")) }
         if (r.hasFile) {
             val folder = (r.mp3Uri ?: r.wavUri)?.let { MediaStoreWriter(host).folderLabel(it) } ?: MediaStoreWriter.FOLDER_LABEL
             facts.addView(ui.fact("Папка", folder))
@@ -440,7 +441,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 // Обидва формати — вибір, який слухати (зелена рамка, без галочок).
                 val formats = ui.row(8)
                 formats.addView(ui.muted("Слухати:", 14f))
-                listOf(false to "MP3", true to "WAV").forEach { (wav, label) ->
+                listOf(false to "MP3", true to Lossless.ofName(r.wavName).label).forEach { (wav, label) ->
                     formats.addView(ui.choice(label, listenWav == wav) {
                         if (listenWav == wav) return@choice
                         val wasPlaying = InAppPlayer.playing && isPlaying(r)
@@ -479,7 +480,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     private fun playUri(r: RecordingRow): String? = if (listenWav) r.wavUri ?: r.mp3Uri else r.mp3Uri ?: r.wavUri
 
-    private fun playMime(r: RecordingRow): String = if (playUri(r) == r.wavUri) "audio/x-wav" else "audio/mpeg"
+    private fun playMime(r: RecordingRow): String = if (playUri(r) == r.wavUri) Lossless.ofName(r.wavName).mime else "audio/mpeg"
 
     private fun isPlaying(r: RecordingRow): Boolean = InAppPlayer.uri != null && (InAppPlayer.uri == r.mp3Uri || InAppPlayer.uri == r.wavUri)
 
@@ -553,7 +554,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         r.mp3Uri?.let { uris += Uri.parse(it) }
         r.wavUri?.let { uris += Uri.parse(it) }
         val send = if (uris.size == 1) {
-            Intent(Intent.ACTION_SEND).setType(if (r.mp3Uri != null) "audio/mpeg" else "audio/x-wav").putExtra(Intent.EXTRA_STREAM, uris[0])
+            Intent(Intent.ACTION_SEND).setType(if (r.mp3Uri != null) "audio/mpeg" else Lossless.ofName(r.wavName).mime).putExtra(Intent.EXTRA_STREAM, uris[0])
         } else {
             Intent(Intent.ACTION_SEND_MULTIPLE).setType("audio/*").putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
         }

@@ -8,13 +8,16 @@ import java.io.FileInputStream
 import java.io.IOException
 import java.io.OutputStream
 import java.io.RandomAccessFile
+import java.security.MessageDigest
 import ua.faric.trackcatcher.core.AudioStats
 import ua.faric.trackcatcher.core.Classifier
 import ua.faric.trackcatcher.core.ClipCounter
 import ua.faric.trackcatcher.core.EdgeFade
+import ua.faric.trackcatcher.core.FlacEncoder
 import ua.faric.trackcatcher.core.FileNames
 import ua.faric.trackcatcher.core.Id3v2
 import ua.faric.trackcatcher.core.LevelAnalysis
+import ua.faric.trackcatcher.core.Lossless
 import ua.faric.trackcatcher.core.Pcm
 import ua.faric.trackcatcher.core.RecStatus
 import ua.faric.trackcatcher.core.RepeatPolicy
@@ -28,7 +31,7 @@ import ua.faric.trackcatcher.encode.Mp3Encoder
 /**
  * Шматок → файл(и) + запис в історії.
  * 1) рівні звуку по 10 мс → обрізати тишу; 2) повний/неповний/невдало/пропущено;
- * 3) WAV і/або MP3 з назвою й тегами; 4) історія; 5) тимчасовий файл прибрати.
+ * 3) файл без втрат (WAV або FLAC) і/або MP3 з назвою й тегами; 4) історія; 5) тимчасовий файл прибрати.
  */
 class SegmentFinisher(context: Context) {
     private val app = context.applicationContext
@@ -61,7 +64,12 @@ class SegmentFinisher(context: Context) {
             val dir = FileNames.folderFor(job.meta, settings.albumFolders, settings.plainNames)
             val fade = EdgeFade.frames(fadeMs = settings.fadeMs)
             fun saveTo(store: AudioStore) {
-                if (settings.format.wav) wav = writeWav(store, job, stats, base, dir, fade)
+                // «wav» тут і в історії — файл без втрат: WAV або FLAC (T55; тип — за розширенням імені).
+                when (settings.format.lossless) {
+                    Lossless.WAV -> wav = writeWav(store, job, stats, base, dir, fade)
+                    Lossless.FLAC -> wav = writeFlac(store, job, stats, base, dir, fade)
+                    null -> {}
+                }
                 if (settings.format.mp3) {
                     bitrate = settings.mp3Bitrate
                     mp3 = writeMp3(store, job, stats, base, dir, fade, settings.mp3Bitrate, lengthMs)
@@ -138,6 +146,22 @@ class SegmentFinisher(context: Context) {
         return store.write(name, "audio/x-wav", dir) { out ->
             out.write(WavHeader.build(dataBytes, info = WavHeader.infoFor(job.meta)))
             copyRange(job.pcmFile, stats, fade) { buf, n -> out.write(buf, 0, n) }
+        }
+    }
+
+    /**
+     * FLAC (T55): спершу MD5 усього звуку (той самий шлях, що й запис, — з наростанням/затуханням),
+     * потім кодування. Читати файл двічі дешевше, ніж кодувати: MD5 — частки секунди.
+     */
+    private fun writeFlac(store: AudioStore, job: SegmentJob, stats: AudioStats, base: String, dir: String, fade: Int): MediaStoreWriter.Saved {
+        val name = FileNames.unique(base, Lossless.FLAC.ext) { store.exists(it, dir) }
+        val md5 = MessageDigest.getInstance("MD5")
+        copyRange(job.pcmFile, stats, fade) { buf, n -> md5.update(buf, 0, n) }
+        val sum = md5.digest()
+        return store.write(name, Lossless.FLAC.mime, dir) { out ->
+            val enc = FlacEncoder(out, stats.keptFrames, sum, FlacEncoder.tagsFor(job.meta), Artwork.readJpeg(job.meta.artworkPath))
+            copyRange(job.pcmFile, stats, fade) { buf, n -> enc.encode(buf, 0, n) }
+            enc.finish()
         }
     }
 

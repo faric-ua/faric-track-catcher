@@ -145,9 +145,12 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private fun formatHint(v: Settings.Values): String {
         val mp3 = TimeText.size(SizeEstimate.mp3BytesPerMinute(v.mp3Bitrate) * 4)
         val wav = TimeText.size(SizeEstimate.wavBytesPerMinute() * 4)
+        val flac = TimeText.size(SizeEstimate.flacBytesPerMinute() * 4)
         return when (v.format) {
+            OutputFormat.FLAC -> "4 хв пісні ≈ $flac. Без втрат — точно як грало, а місця майже вдвічі менше, ніж WAV. Теги й обкладинка — у файлі."
             OutputFormat.MP3 -> "4 хв пісні ≈ $mp3. Підходить для будь-якого плеєра."
             OutputFormat.WAV -> "4 хв пісні ≈ $wav. Без втрат — точно як грало, але займає багато місця."
+            OutputFormat.MP3_FLAC -> "4 хв пісні ≈ $mp3 + $flac. Два файли на кожну пісню: MP3 для будь-якого плеєра і FLAC без втрат."
             OutputFormat.BOTH -> "4 хв пісні ≈ $mp3 + $wav. Два файли на кожну пісню."
         }
     }

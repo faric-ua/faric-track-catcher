@@ -103,6 +103,15 @@ jobs:
           ffprobe -v error -show_entries stream=codec_name -of csv=p=0 "$dir/selftest.mp3" | grep -qx mp3
           ffmpeg -v error -i "$dir/selftest.mp3" -f null - 2> decode.log || true
           if [ -s decode.log ]; then echo "::error title=Media self-test::MP3 декодується з помилками: $(head -c 300 decode.log)"; exit 1; fi
+          # FLAC (T55): ffmpeg з перевіркою CRC розкодовує й порівнює з тим самим PCM — має збігтися до біта.
+          f="$dir/selftest.flac"
+          info="$(ffprobe -v error -show_entries stream=codec_name,sample_rate,channels:format=duration:format_tags=title,artist,album -of default=nw=1 "$f" | tr '\n' ' ')"
+          echo "::notice title=MEDIA_SELFTEST selftest.flac::$info · $(stat -c%s "$f") байт з $(stat -c%s "$dir/selftest-flac.raw") PCM"
+          echo "$info" | grep -q "codec_name=flac" || { echo "::error title=Media self-test::selftest.flac — не FLAC"; exit 1; }
+          echo "$info" | grep -q "Обійми" || { echo "::error title=Media self-test::selftest.flac — немає назви в тегах"; exit 1; }
+          ffmpeg -v error -err_detect crccheck+bitstream+explode -i "$f" -map 0:a -f s16le -y flac-decoded.raw 2> flac.log || { echo "::error title=Media self-test::FLAC не розкодовується: $(head -c 300 flac.log)"; exit 1; }
+          cmp -s flac-decoded.raw "$dir/selftest-flac.raw" || { echo "::error title=Media self-test::FLAC після розкодування не збігається з PCM"; exit 1; }
+          echo "::notice title=MEDIA_SELFTEST FLAC::без втрат — розкодовано до біта (ffmpeg, CRC)"
 
       - name: Prepare signing key
         if: env.PUBLISH == 'true'

@@ -95,6 +95,16 @@ class DriveUpdateTest {
         assertEquals(emptyList<String>(), DriveUpdate.manifestCandidates(null, null, ""))
     }
 
+    @Test
+    fun newestWinsOverSavedOldFile() {
+        // T56: збережене посилання на старий файл (0.1.15) не має перекривати вбудований новий (0.1.21).
+        fun m(code: Long) = DriveUpdate.Manifest("ua.faric.trackcatcher", code, "0.1.$code", "a".repeat(64), 1, "X".repeat(33), 0)
+        assertEquals("built", DriveUpdate.newest(listOf("saved" to m(16), "built" to m(22)))!!.first)
+        assertEquals("saved", DriveUpdate.newest(listOf("saved" to m(22), "built" to m(22)))!!.first)
+        assertEquals("saved", DriveUpdate.newest(listOf("saved" to m(23), "built" to m(22)))!!.first)
+        assertEquals(null, DriveUpdate.newest(emptyList()))
+    }
+
     private fun isWrongFile(text: String): Boolean = try {
         DriveUpdate.Manifest.parse(text)
         fail("мало не прочитатись: $text")
