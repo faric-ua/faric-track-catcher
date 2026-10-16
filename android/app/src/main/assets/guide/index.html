@@ -1,371 +1,920 @@
+<!doctype html>
+<!-- Зібрано scripts/build_guide.py з docs/guide/guide.html — редагувати там. -->
+<html lang="uk">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Інструкція Track Catcher</title>
 <style>
-/* Інструкція Track Catcher. Свідомо одна тема — темна, як сам застосунок (кольори з ui/Palette.kt).
-   Сторінка працює без інтернету: системний шрифт, картинки й схеми — локальні. */
+/* Layout: «касетна дека» — смуга плівки з розрізами вгорі, далі плитки розділів групами;
+   розділ — одна колонка: лічильник «03 / 16», заголовок, кроки, схема, внизу плитки «назад / далі».
+   Одна тема — темна, як сам застосунок (ui/Palette.kt). Працює без інтернету: системні шрифти, усе локальне. */
 :root{
-  --bg:#0E1116; --surface:#171C23; --surface-2:#202733; --border:#333D4B;
+  --bg:#0E1116; --surface:#171C23; --surface-2:#202733; --line:#333D4B;
   --text:#F2F5F8; --muted:#A3AEBB; --faint:#6B7684;
-  --accent:#FFB15A; --accent-fill:#2E2416; --rec:#FF5A4E; --rec-fill:#35191A;
-  --ok:#62D296; --ok-fill:#16271E; --part:#A99FFF; --part-fill:#242046; --bad:#FF7A88; --bad-fill:#3A1C21;
-  --font: system-ui, "Roboto", "Segoe UI", sans-serif;
-  color-scheme: dark;
+  --amber:#FFB15A; --amber-fill:#2E2416; --rec:#FF5A4E; --rec-fill:#35191A;
+  --ok:#62D296; --ok-fill:#16271E; --part:#A99FFF; --part-fill:#242046;
+  --bad:#FF7A88; --bad-fill:#3A1C21; --warn:#F0B968; --warn-fill:#2B251F;
+  --font-display:"sans-serif-condensed","Roboto Condensed","Arial Narrow",system-ui,sans-serif;
+  --font-body:system-ui,"Roboto","Segoe UI",sans-serif;
+  --font-mono:"Roboto Mono",ui-monospace,"Droid Sans Mono",monospace;
+  color-scheme:dark;
 }
 *{box-sizing:border-box}
-html,body{background:var(--bg); color:var(--text)}
-body{margin:0; font-family:var(--font); font-size:16px; line-height:1.55; -webkit-text-size-adjust:100%}
-.wrap{max-width:760px; margin:0 auto; padding-inline:16px; padding-block:20px 48px}
-h1,h2,h3{margin:0; line-height:1.25; text-wrap:balance; font-weight:600}
-h1{font-size:1.75rem}
-h2{font-size:1.35rem}
-h3{font-size:1.05rem}
-p{margin:0}
-a{color:var(--accent)}
-.stack{display:flex; flex-direction:column; gap:14px}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg); color:var(--text); font-family:var(--font-body); font-size:16px; line-height:1.55}
+.wrap{max-width:780px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:18px 56px}
+h1,h2,h3{margin:0; line-height:1.15; text-wrap:balance}
+h1{font-family:var(--font-display); font-weight:700; font-size:clamp(2rem, 8vw, 2.8rem); letter-spacing:-.01em}
+h2{font-family:var(--font-display); font-weight:700; font-size:clamp(1.6rem, 6vw, 2.1rem); letter-spacing:-.005em}
+h3{font-size:1.06rem; font-weight:650}
+p{margin:0; max-width:65ch}
+a{color:var(--amber)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--amber); outline-offset:2px}
+b{font-weight:650}
 .muted{color:var(--muted)}
 .small{font-size:.88rem}
-.label{font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600}
-.brand{display:flex; align-items:center; gap:10px}
-.dot{width:12px; height:12px; border-radius:50%; background:var(--rec); flex:none}
-.card{background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:16px}
+.mono{font-family:var(--font-mono); font-size:.88em}
+.num{font-variant-numeric:tabular-nums}
+.eyebrow{font-family:var(--font-mono); font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:var(--amber)}
+.stack{display:flex; flex-direction:column; gap:16px}
+.stack-s{display:flex; flex-direction:column; gap:8px}
+[hidden]{display:none !important}
+svg.ic{width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex:none}
 
-/* головна: список можливостей */
-.features{display:grid; grid-template-columns:1fr; gap:10px; margin:0; padding:0; list-style:none}
-@media (min-width:620px){ .features{grid-template-columns:1fr 1fr} }
-.features a{display:grid; grid-template-columns:44px 1fr 16px; gap:12px; align-items:center; min-height:64px;
-  text-decoration:none; color:var(--text); background:var(--surface); border:1px solid var(--border);
-  border-radius:16px; padding:12px 14px}
-.features a:active{border-color:var(--ok); background:var(--ok-fill)}
-.features .ic{width:44px; height:44px; border-radius:12px; display:grid; place-items:center; background:var(--surface-2); font-size:20px}
-.features b{display:block; font-weight:600}
-.features span.d{display:block; color:var(--muted); font-size:.88rem; line-height:1.4}
-.features .chev{color:var(--faint)}
+/* ---------- головна ---------- */
+.hero{display:flex; flex-direction:column; gap:14px; padding-bottom:6px}
+.brand{display:flex; align-items:center; gap:12px}
+.brand .led{width:14px; height:14px; border-radius:50%; background:var(--rec); box-shadow:0 0 0 4px var(--rec-fill); flex:none}
+.tape{background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:14px 12px 10px; overflow:hidden}
+.tape svg{display:block; width:100%; height:auto}
+.tape .t-lab{font-family:var(--font-mono); font-size:13px; fill:var(--muted)}
+.tape .t-name{font-size:17px; fill:var(--text); font-weight:600}
+.tape .t-file{font-family:var(--font-mono); font-size:14.5px; fill:var(--muted)}
+.tape .bar{fill:var(--amber)}
+.tape .cut{stroke:var(--rec); stroke-width:2; stroke-dasharray:4 4}
+.tape .chip{fill:var(--surface-2); stroke:var(--line)}
+.tape .head{stroke:var(--text); stroke-width:1.5}
+.tape .headdot{fill:var(--text)}
+.lead{font-size:1.05rem; color:var(--muted)}
+.facts{display:flex; flex-wrap:wrap; gap:8px}
+.fact{font-size:.82rem; padding:4px 10px; border-radius:999px; background:var(--surface-2); border:1px solid var(--line); color:var(--muted)}
+.fact b{color:var(--text)}
 
-/* розділ */
+.group{display:flex; flex-direction:column; gap:10px; margin-top:22px}
+.group-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; border-bottom:1px solid var(--line); padding-bottom:6px}
+.group-head h3{font-family:var(--font-display); font-size:1.25rem; font-weight:700}
+.group-head span{font-size:.82rem; color:var(--faint)}
+.tiles{display:grid; grid-template-columns:1fr; gap:10px; list-style:none; margin:0; padding:0}
+@media (min-width:560px){ .tiles{grid-template-columns:1fr 1fr} }
+.tile{display:grid; grid-template-columns:44px 1fr 18px; gap:12px; align-items:center; min-height:72px; padding:12px 14px;
+  border-radius:16px; background:var(--surface); border:1px solid var(--line); color:var(--text); text-decoration:none;
+  transition:border-color .15s, background-color .15s, transform .15s}
+.tile:active{transform:scale(.985); border-color:var(--ok); background:var(--ok-fill)}
+@media (hover:hover){ .tile:hover{border-color:var(--amber)} }
+.tile .badge{width:44px; height:44px; border-radius:12px; display:grid; place-items:center; background:var(--surface-2); color:var(--amber); position:relative}
+.tile .badge .n{position:absolute; top:-6px; left:-6px; min-width:20px; height:20px; border-radius:10px; background:var(--amber); color:var(--bg);
+  font:700 .72rem/20px var(--font-mono); text-align:center; padding:0 5px}
+.tile b{display:block; font-weight:650; line-height:1.3}
+.tile .d{display:block; color:var(--muted); font-size:.86rem; line-height:1.4; margin-top:2px}
+.tile .chev{color:var(--faint); font-size:1.2rem}
+.tile.rec .badge{color:var(--rec); background:var(--rec-fill)}
+.foot{margin-top:28px; color:var(--faint); font-size:.84rem; display:flex; flex-direction:column; gap:6px}
+
+/* ---------- розділ ---------- */
+.page{display:flex; flex-direction:column; gap:18px}
+.topbar{display:flex; align-items:center; justify-content:space-between; gap:10px}
 .back{display:inline-flex; align-items:center; gap:6px; min-height:44px; padding:8px 14px; border-radius:12px;
-  border:1px solid var(--border); background:var(--surface-2); color:var(--text); text-decoration:none; font-weight:600}
+  border:1px solid var(--line); background:var(--surface-2); color:var(--text); text-decoration:none; font-weight:600}
+.counter{font-family:var(--font-mono); font-size:.8rem; color:var(--faint); font-variant-numeric:tabular-nums}
+.counter b{color:var(--amber); font-weight:700}
+.title-block{display:flex; flex-direction:column; gap:8px}
+.page-lead{color:var(--muted); font-size:1.02rem}
+
 ol.steps{list-style:none; margin:0; padding:0; counter-reset:s; display:flex; flex-direction:column; gap:12px}
-ol.steps li{counter-increment:s; display:grid; grid-template-columns:30px 1fr; gap:12px; align-items:start}
-ol.steps li::before{content:counter(s); width:28px; height:28px; border-radius:50%; display:grid; place-items:center;
-  background:var(--accent-fill); color:var(--accent); font-weight:700; font-size:.9rem; font-variant-numeric:tabular-nums}
-ol.steps li > div{min-width:0}
-.btn{display:inline-block; padding:1px 8px; border-radius:8px; font-weight:600; white-space:nowrap}
+ol.steps > li{counter-increment:s; display:grid; grid-template-columns:30px minmax(0,1fr); gap:12px; align-items:start}
+ol.steps > li::before{content:counter(s); width:28px; height:28px; border-radius:50%; display:grid; place-items:center;
+  background:var(--amber-fill); color:var(--amber); font:700 .86rem/1 var(--font-mono)}
+.btn{display:inline; padding:1px 8px; border-radius:8px; font-weight:600; font-size:.94em; border:1px solid transparent; -webkit-box-decoration-break:clone; box-decoration-break:clone; line-height:1.9}
 .btn.rec{background:var(--rec); color:var(--bg)}
-.btn.stop{background:var(--bad-fill); color:var(--bad); border:1px solid var(--bad)}
-.btn.prim{background:var(--accent-fill); color:var(--accent); border:1px solid var(--accent)}
-.btn.norm{background:var(--surface-2); color:var(--text); border:1px solid var(--border)}
-.pill{display:inline-block; font-size:.78rem; font-weight:600; padding:2px 9px; border-radius:20px; white-space:nowrap}
+.btn.stop{background:var(--bad-fill); color:var(--bad); border-color:var(--bad)}
+.btn.prim{background:var(--amber-fill); color:var(--amber); border-color:var(--amber)}
+.btn.norm{background:var(--surface-2); color:var(--text); border-color:var(--line)}
+.btn.sel{background:var(--ok-fill); color:var(--text); border-color:var(--ok)}
+.pill{display:inline-block; font-size:.78rem; font-weight:650; padding:2px 9px; border-radius:20px; white-space:nowrap}
 .p-ok{background:var(--ok-fill); color:var(--ok)}
 .p-part{background:var(--part-fill); color:var(--part)}
 .p-bad{background:var(--bad-fill); color:var(--bad)}
 .p-skip{background:var(--surface-2); color:var(--muted)}
+
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:14px; min-width:0}
+.panel > h3{margin-bottom:8px}
+.grid2{display:grid; grid-template-columns:1fr; gap:10px}
+@media (min-width:560px){ .grid2{grid-template-columns:1fr 1fr} }
+.note{border-left:3px solid var(--amber); padding:2px 0 2px 12px; color:var(--muted)}
+.warn{background:var(--warn-fill); border:1px solid #6E5A42; border-radius:14px; padding:12px 14px}
+.warn b:first-child{color:var(--warn)}
+.ok-box{background:var(--ok-fill); border:1px solid #2F5A42; border-radius:14px; padding:12px 14px}
+
+.diagram{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:12px; overflow-x:auto}
+.diagram svg{display:block; width:100%; min-width:300px; max-width:620px; height:auto; margin:0 auto; font-family:var(--font-body)}
+.diagram svg.narrow{max-width:440px}
+.diagram figcaption{margin-top:8px; text-align:center}
+.d-box{fill:var(--surface-2); stroke:var(--line); stroke-width:1.2}
+.d-amber{fill:var(--amber-fill); stroke:var(--amber); stroke-width:1.5}
+.d-rec{fill:var(--rec-fill); stroke:var(--rec); stroke-width:1.5}
+.d-ok{fill:var(--ok-fill); stroke:var(--ok); stroke-width:1.5}
+.d-part{fill:var(--part-fill); stroke:var(--part); stroke-width:1.5}
+.d-bad{fill:var(--bad-fill); stroke:var(--bad); stroke-width:1.5}
+.d-skip{fill:var(--surface-2); stroke:var(--faint); stroke-width:1.5}
+.d-t{fill:var(--text); font-size:14px; font-weight:600}
+.d-s{fill:var(--muted); font-size:12px}
+.d-m{fill:var(--muted); font-size:11.5px; font-family:var(--font-mono)}
+.d-tok{fill:var(--ok); font-size:12px; font-weight:650}
+.d-tpart{fill:var(--part); font-size:12px; font-weight:650}
+.d-tbad{fill:var(--bad); font-size:12px; font-weight:650}
+.d-trec{fill:var(--rec); font-size:11.5px; font-weight:650}
+.d-tamber{fill:var(--amber); font-size:12px; font-weight:650}
+.d-line{stroke:var(--muted); stroke-width:1.5; fill:none}
+.d-dash{stroke:var(--rec); stroke-width:2; stroke-dasharray:5 4; fill:none}
+.d-wave{fill:var(--amber); opacity:.85}
+.d-faint{fill:var(--faint)}
+.d-arrow{fill:var(--muted)}
+
 figure{margin:0; display:flex; flex-direction:column; gap:8px; align-items:center}
-figure img{display:block; width:100%; max-width:300px; height:auto; border-radius:20px; border:1px solid var(--border)}
+figure img{display:block; width:100%; max-width:300px; height:auto; border-radius:20px; border:1px solid var(--line)}
 figure.wide img{max-width:640px; border-radius:14px}
-figcaption{color:var(--muted); font-size:.86rem; text-align:center; max-width:46ch}
-.shots{display:flex; gap:12px; overflow-x:auto; padding-bottom:4px}
-.shots figure{flex:0 0 min(78%, 260px)}
-.diagram{background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:12px; overflow-x:auto}
-.diagram svg{display:block; width:100%; max-width:560px; height:auto; margin:0 auto; font-family:var(--font)}
-.note{border-left:3px solid var(--accent); padding:4px 0 4px 12px; color:var(--muted)}
-.warn{background:var(--accent-fill); border:1px solid #6E5A42; border-radius:14px; padding:12px 14px}
+figcaption{color:var(--muted); font-size:.85rem; text-align:center; max-width:46ch}
+.shots{display:flex; gap:12px; overflow-x:auto; padding-bottom:4px; scroll-snap-type:x mandatory}
+.shots figure{flex:0 0 min(78%, 260px); scroll-snap-align:start}
+
+.tbl{overflow-x:auto; border:1px solid var(--line); border-radius:14px}
 table{border-collapse:collapse; width:100%; font-size:.93rem}
-td{padding:8px 6px; border-bottom:1px solid var(--border); vertical-align:top}
-td:first-child{white-space:nowrap; width:1%}
-details{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:4px 14px}
-details + details{margin-top:8px}
-summary{min-height:44px; display:flex; align-items:center; cursor:pointer; font-weight:600}
+th,td{padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; text-align:left}
+th{background:var(--surface-2); color:var(--muted); font-weight:600; font-size:.82rem}
+tr:last-child td{border-bottom:0}
+td.k{white-space:nowrap; width:1%}
+@media (max-width:520px){
+  .tbl.kv tr{display:block; border-bottom:1px solid var(--line); padding:8px 10px}
+  .tbl.kv tr:last-child{border-bottom:0}
+  .tbl.kv td{display:block; border:0; padding:0}
+  .tbl.kv td.k{white-space:normal; width:auto; padding-bottom:3px}
+  .tbl.kv tr.hd{display:none}
+}
+details{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:2px 14px}
+details[open]{border-color:var(--amber)}
+summary{min-height:48px; display:flex; align-items:center; cursor:pointer; font-weight:600; list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+"; margin-left:auto; color:var(--amber); font:700 1.2rem/1 var(--font-mono); padding-left:10px}
+details[open] summary::after{content:"−"}
 details > div{padding:0 0 12px; color:var(--muted)}
-.mono{font-family:ui-monospace, "Roboto Mono", monospace; font-size:.9em}
-[hidden]{display:none !important}
+.acc{display:flex; flex-direction:column; gap:8px}
+
+/* макети екранів застосунку */
+.mock{background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:14px; display:flex; flex-direction:column; gap:10px; max-width:420px; width:100%; margin:0 auto}
+.mock .lbl{font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600}
+.chips{display:flex; flex-wrap:wrap; gap:8px}
+.chipx{font-size:.88rem; padding:6px 12px; border-radius:12px; background:var(--surface-2); border:1px solid var(--line); color:var(--text)}
+.chipx.on{border-color:var(--ok); background:var(--ok-fill)}
+.seek{height:6px; border-radius:3px; background:var(--surface-2); position:relative}
+.seek i{position:absolute; inset:0 auto 0 0; width:24%; background:var(--amber); border-radius:3px}
+.seek i::after{content:""; position:absolute; right:-7px; top:-4px; width:14px; height:14px; border-radius:50%; background:var(--amber)}
+.times{display:flex; justify-content:space-between; font:500 .82rem var(--font-mono); color:var(--muted)}
+.transport{display:flex; justify-content:center; align-items:center; gap:22px}
+.rnd{width:46px; height:46px; border-radius:50%; display:grid; place-items:center; border:1px solid var(--line); background:var(--surface-2); color:var(--text)}
+.rnd.big{width:62px; height:62px; border:2px solid var(--amber); background:var(--amber-fill); color:var(--amber)}
+.rnd svg{width:22px; height:22px; fill:currentColor; stroke:none}
+.acts{display:grid; grid-template-columns:repeat(3,1fr); gap:6px; text-align:center; font-size:.8rem; color:var(--muted)}
+.acts span{display:flex; flex-direction:column; align-items:center; gap:4px}
+.acts .c{width:38px; height:38px; border-radius:50%; border:1px solid var(--line); display:grid; place-items:center; color:var(--text)}
+.acts .del{color:var(--bad)}
+.acts .del .c{color:var(--bad)}
+.wide-btn{text-align:center; padding:10px; border-radius:12px; background:var(--surface-2); border:1px solid var(--line); font-weight:600}
+.rowtile{display:grid; grid-template-columns:52px minmax(0,1fr); gap:12px; align-items:start; padding:10px; border-radius:14px; background:var(--surface-2); border:1px solid var(--line)}
+.thumb{width:52px; height:52px; border-radius:10px; background:linear-gradient(135deg, #3A2B4F, #1C3341); display:grid; place-items:center; color:var(--muted)}
+.rowtile .nm{font-weight:600; line-height:1.3; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden}
+.rowtile .mt{font:500 .8rem var(--font-mono); color:var(--muted); margin-top:3px}
+.rowtile .why{font-size:.8rem; color:var(--part); margin-top:2px}
+.status-line{display:flex; align-items:center; gap:8px; font-weight:650; color:var(--rec)}
+.status-line .dotr{width:10px; height:10px; border-radius:50%; background:var(--rec)}
+.meter{display:grid; grid-template-columns:14px 1fr; gap:6px 8px; align-items:center; font:600 .72rem var(--font-mono); color:var(--muted)}
+.meter i{height:8px; border-radius:4px; background:linear-gradient(90deg, var(--ok) 0 60%, var(--warn) 60% 85%, var(--rec) 85%); clip-path:inset(0 30% 0 0)}
+.meter i.r{clip-path:inset(0 38% 0 0)}
+.diag-line{font:500 .76rem var(--font-mono); color:var(--muted); line-height:1.45}
+
+.pager{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px}
+.pager a{display:flex; flex-direction:column; gap:2px; padding:12px 14px; min-height:64px; border-radius:14px; background:var(--surface);
+  border:1px solid var(--line); color:var(--text); text-decoration:none}
+.pager a span{font:600 .7rem var(--font-mono); letter-spacing:.1em; text-transform:uppercase; color:var(--faint)}
+.pager a b{font-weight:600; line-height:1.3}
+.pager a.next{text-align:right; grid-column:2}
+.pager a:active{border-color:var(--ok); background:var(--ok-fill)}
+
+/* перехід між розділами */
+.enter{animation:enter .26s ease-out}
+@keyframes enter{from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:none}}
+.tape .head-g{animation:play 7s linear infinite}
+@keyframes play{from{transform:translateX(0)} to{transform:translateX(536px)}}
+@media (prefers-reduced-motion:reduce){ .enter, .tape .head-g{animation:none} .tile{transition:none} }
 </style>
+
+<!-- значки (малюються тут, без емодзі й без інтернету) -->
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l3 3M14 9l2 2"/></symbol>
+  <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></symbol>
+  <symbol id="i-disc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3v3M18.4 5.6l-2.1 2.1"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path d="M12 8v5M12 16.5v.5"/></symbol>
+  <symbol id="i-cut" viewBox="0 0 24 24"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.5 8.5L20 19M8.5 15.5L20 5"/></symbol>
+  <symbol id="i-status" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z" fill="currentColor"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-rotate" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="16" rx="2"/><path d="M3 15a9 9 0 0 0 9 6M21 9a9 9 0 0 0-9-6"/></symbol>
+  <symbol id="i-format" viewBox="0 0 24 24"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-4"/></symbol>
+  <symbol id="i-edges" viewBox="0 0 24 24"><path d="M2 18L7 6h10l5 12"/><path d="M2 21h20"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.5 1.5A3.8 3.8 0 0 1 17.5 18z"/><path d="M12 11v6M9.5 14.5L12 17l2.5-2.5"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17v.3"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><circle cx="17" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="17" cy="18.5" r="2.5"/><path d="M8.2 10.8l6.6-4M8.2 13.2l6.6 4"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-bin" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
+</svg>
 
 <div class="wrap">
 
 <!-- ================= ГОЛОВНА ================= -->
 <main id="home" class="stack">
-  <div class="brand"><span class="dot" aria-hidden="true"></span><h1>Track Catcher</h1></div>
-  <p class="muted">Записує музику, яку грає телефон, і сам ріже її на пісні. Кожна пісня — окремий файл з назвою зі шторки. Нижче — що він уміє. Торкнись пункту — відкриється докладно, крок за кроком.</p>
+  <div class="hero">
+    <div class="brand"><span class="led" aria-hidden="true"></span><h1>Track Catcher</h1></div>
+    <p class="lead">Записує музику, яку грає телефон, і сам ріже її на пісні. Кожна пісня стає окремим файлом з назвою, виконавцем і обкладинкою зі шторки.</p>
 
-  <ul class="features">
-    <li><a href="#start"><span class="ic">🔑</span><span><b>Перший запуск</b><span class="d">4 дозволи — один раз</span></span><span class="chev">›</span></a></li>
-    <li><a href="#record"><span class="ic" style="color:var(--rec)">●</span><span><b>Записати пісні</b><span class="d">з будь-якого плеєра, 10–20 підряд</span></span><span class="chev">›</span></a></li>
-    <li><a href="#rules"><span class="ic">!</span><span><b>Що записується і чого не робити</b><span class="d">сповіщення, дзвінки, інші відео — важливо</span></span><span class="chev">›</span></a></li>
-    <li><a href="#split"><span class="ic">✂︎</span><span><b>Одна пісня — один файл</b><span class="d">як застосунок знаходить кінець пісні</span></span><span class="chev">›</span></a></li>
-    <li><a href="#night"><span class="ic">☾</span><span><b>Нічний екран</b><span class="d">щоб запис не зупинився</span></span><span class="chev">›</span></a></li>
-    <li><a href="#history"><span class="ic">☰</span><span><b>Історія записів</b><span class="d">повні, неповні, невдалі, пропущені</span></span><span class="chev">›</span></a></li>
-    <li><a href="#actions"><span class="ic">▶︎</span><span><b>Слухати, поділитись, видалити</b><span class="d">що можна зробити з записом</span></span><span class="chev">›</span></a></li>
-    <li><a href="#settings"><span class="ic">⚙︎</span><span><b>Формат і якість</b><span class="d">FLAC, MP3, WAV, мінімальна довжина, повтори</span></span><span class="chev">›</span></a></li>
-    <li><a href="#files"><span class="ic">📁</span><span><b>Де лежать файли</b><span class="d">папка й назви файлів</span></span><span class="chev">›</span></a></li>
-    <li><a href="#rotate"><span class="ic">⟲</span><span><b>Книжковий і альбомний вигляд</b><span class="d">поверни телефон — дві колонки</span></span><span class="chev">›</span></a></li>
-    <li><a href="#update"><span class="ic">⤓</span><span><b>Оновити застосунок</b><span class="d">через меню Termux</span></span><span class="chev">›</span></a></li>
-    <li><a href="#trouble"><span class="ic">?</span><span><b>Якщо щось не так</b><span class="d">тиша, «Невідома пісня», запис зупинився</span></span><span class="chev">›</span></a></li>
-  </ul>
+    <div class="tape" role="img" aria-label="Звук пишеться суцільною смугою; коли в шторці змінюється пісня, Track Catcher розрізає смугу, і кожна пісня стає окремим файлом.">
+      <svg viewBox="0 0 560 168">
+        <text class="t-lab" x="2" y="13">ШТОРКА</text>
+        <rect class="chip" x="0" y="20" width="176" height="30" rx="15"/><text class="t-name" x="88" y="41" text-anchor="middle">Neon Horizon</text>
+        <rect class="chip" x="190" y="20" width="196" height="30" rx="15"/><text class="t-name" x="288" y="41" text-anchor="middle">Velvet Temple</text>
+        <rect class="chip" x="400" y="20" width="160" height="30" rx="15"/><text class="t-name" x="480" y="41" text-anchor="middle">Velocity</text>
+        <text class="t-lab" x="2" y="70">ЗВУК</text>
+        <g id="wave"></g>
+        <line class="cut" x1="183" y1="16" x2="183" y2="132"/>
+        <line class="cut" x1="393" y1="16" x2="393" y2="132"/>
+        <g class="head-g"><line class="head" x1="12" y1="74" x2="12" y2="126"/><circle class="headdot" cx="12" cy="74" r="3"/></g>
+        <rect class="chip" x="0" y="134" width="176" height="30" rx="8"/><text class="t-file" x="10" y="154">Neon Horizon.flac</text>
+        <rect class="chip" x="190" y="134" width="196" height="30" rx="8"/><text class="t-file" x="200" y="154">Velvet Temple.flac</text>
+        <rect class="chip" x="400" y="134" width="160" height="30" rx="8"/><text class="t-file" x="410" y="154">Velocity.flac</text>
+      </svg>
+    </div>
 
-  <div class="diagram" role="img" aria-label="Як працює Track Catcher: плеєр грає, Track Catcher записує й читає назву зі шторки, ріже на пісні і зберігає файли в Музику; результат видно в Історії.">
-    <svg viewBox="0 0 560 150">
-      <defs><marker id="a0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#A3AEBB"/></marker></defs>
-      <rect x="8" y="40" width="112" height="70" rx="12" fill="#202733" stroke="#333D4B"/>
-      <text x="64" y="70" fill="#F2F5F8" font-size="14" font-weight="600" text-anchor="middle">Плеєр</text>
-      <text x="64" y="90" fill="#A3AEBB" font-size="11.5" text-anchor="middle">будь-який</text>
-      <rect x="196" y="28" width="168" height="94" rx="14" fill="#2E2416" stroke="#FFB15A" stroke-width="1.5"/>
-      <circle cx="218" cy="52" r="6" fill="#FF5A4E"/>
-      <text x="232" y="57" fill="#F2F5F8" font-size="14" font-weight="600">Track Catcher</text>
-      <text x="212" y="80" fill="#A3AEBB" font-size="11.5">звук + назва зі шторки</text>
-      <text x="212" y="100" fill="#A3AEBB" font-size="11.5">ріже на пісні</text>
-      <rect x="440" y="16" width="112" height="54" rx="12" fill="#202733" stroke="#333D4B"/>
-      <text x="496" y="40" fill="#F2F5F8" font-size="13" font-weight="600" text-anchor="middle">Музика</text>
-      <text x="496" y="58" fill="#A3AEBB" font-size="11" text-anchor="middle">FLAC / MP3</text>
-      <rect x="440" y="82" width="112" height="54" rx="12" fill="#202733" stroke="#333D4B"/>
-      <text x="496" y="106" fill="#F2F5F8" font-size="13" font-weight="600" text-anchor="middle">Історія</text>
-      <text x="496" y="124" fill="#A3AEBB" font-size="11" text-anchor="middle">що вдалось</text>
-      <line x1="120" y1="75" x2="192" y2="75" stroke="#A3AEBB" stroke-width="1.5" marker-end="url(#a0)"/>
-      <text x="156" y="68" fill="#A3AEBB" font-size="11" text-anchor="middle">грає</text>
-      <line x1="364" y1="60" x2="436" y2="45" stroke="#A3AEBB" stroke-width="1.5" marker-end="url(#a0)"/>
-      <line x1="364" y1="92" x2="436" y2="106" stroke="#A3AEBB" stroke-width="1.5" marker-end="url(#a0)"/>
-    </svg>
+    <div class="facts">
+      <span class="fact"><b>48 кГц</b> стерео</span>
+      <span class="fact"><b>FLAC</b> · MP3 · WAV</span>
+      <span class="fact">будь-який <b>плеєр</b></span>
+      <span class="fact">без інтернету й реклами</span>
+    </div>
   </div>
-  <p class="small muted">Записи лишаються лише на телефоні. Без інтернету, реклами й аналітики. Для особистого користування.</p>
+
+  <section class="group" aria-labelledby="g1">
+    <div class="group-head"><h3 id="g1">Перші кроки</h3><span>по порядку</span></div>
+    <ul class="tiles">
+      <li><a class="tile" href="#start"><span class="badge"><span class="n">1</span><svg class="ic"><use href="#i-key"/></svg></span><span><b>Перший запуск</b><span class="d">4 дозволи — один раз</span></span><span class="chev">›</span></a></li>
+      <li><a class="tile rec" href="#record"><span class="badge"><span class="n">2</span><svg class="ic"><use href="#i-rec"/></svg></span><span><b>Записати пісні</b><span class="d">з будь-якого плеєра, альбом чи плейлист</span></span><span class="chev">›</span></a></li>
+      <li><a class="tile" href="#night"><span class="badge"><span class="n">3</span><svg class="ic"><use href="#i-moon"/></svg></span><span><b>Нічний екран</b><span class="d">щоб Android не зупинив запис</span></span><span class="chev">›</span></a></li>
+      <li><a class="tile" href="#history"><span class="badge"><span class="n">4</span><svg class="ic"><use href="#i-list"/></svg></span><span><b>Історія записів</b><span class="d">пошук, фільтри, видалення</span></span><span class="chev">›</span></a></li>
+    </ul>
+  </section>
+
+  <section class="group" aria-labelledby="g2">
+    <div class="group-head"><h3 id="g2">Під час запису</h3><span>як це працює</span></div>
+    <ul class="tiles">
+      <li><a class="tile" href="#thisrec"><span class="badge"><svg class="ic"><use href="#i-disc"/></svg></span><span><b>«Цей запис»</b><span class="d">свій альбом і «Зупинитись після N пісень»</span></span><span class="chev">›</span></a></li>
+      <li><a class="tile" href="#rules"><span class="badge"><svg class="ic"><use href="#i-shield"/></svg></span><span><b>Що пишеться і чого не робити</b><span class="d">сповіщення, дзвінки, інші відео</span></span><span class="chev">›</span></a></li>
+      <li><a class="tile" href="#split"><span class="badge"><svg class="ic"><use href="#i-cut"/></svg></span><span><b>Одна пісня — один файл</b><span class="d">як застосунок знаходить межу пісні</span></span><span class="chev">›</span></a></li>
+      <li><a class="tile" href="#status"><span class="badge"><svg class="ic"><use href="#i-status"/></svg></span><span><b>Повний, неповний, невдало, пропущено</b><span class="d">що означає кожен статус</span></span><span class="chev">›</span></a></li>
+    </ul>
+  </section>
+
+  <section class="group" aria-labelledby="g3">
+    <div class="group-head"><h3 id="g3">Після запису</h3><span>слухати й знайти файл</span></div>
+    <ul class="tiles">
+      <li><a class="tile" href="#player"><span class="badge"><svg class="ic"><use href="#i-play"/></svg></span><span><b>Плеєр і шторка</b><span class="d">⏮ ▶ ⏭, поділитись, видалити</span></span><span class="chev">›</span></a></li>
+      <li><a class="tile" href="#files"><span class="badge"><svg class="ic"><use href="#i-folder"/></svg></span><span><b>Де файли і як названі</b><span class="d">«Музика», своя папка, карта пам'яті</span></span><span class="chev">›</span></a></li>
+      <li><a class="tile" href="#rotate"><span class="badge"><svg class="ic"><use href="#i-rotate"/></svg></span><span><b>Книжковий і альбомний вигляд</b><span class="d">поверни телефон — дві колонки</span></span><span class="chev">›</span></a></li>
+    </ul>
+  </section>
+
+  <section class="group" aria-labelledby="g4">
+    <div class="group-head"><h3 id="g4">Налаштування</h3><span>діють з наступного запису</span></div>
+    <ul class="tiles">
+      <li><a class="tile" href="#formats"><span class="badge"><svg class="ic"><use href="#i-format"/></svg></span><span><b>Формат і якість</b><span class="d">FLAC, MP3, WAV, розміри, довжина, повтори</span></span><span class="chev">›</span></a></li>
+      <li><a class="tile" href="#edges"><span class="badge"><svg class="ic"><use href="#i-edges"/></svg></span><span><b>Краї пісні</b><span class="d">зрізати 1 с, наростання, зсув розрізу</span></span><span class="chev">›</span></a></li>
+    </ul>
+  </section>
+
+  <section class="group" aria-labelledby="g5">
+    <div class="group-head"><h3 id="g5">Оновлення</h3><span>нова версія поверх старої</span></div>
+    <ul class="tiles">
+      <li><a class="tile" href="#update"><span class="badge"><svg class="ic"><use href="#i-cloud"/></svg></span><span><b>Оновити з Google Диска</b><span class="d">прямо в застосунку; для автора — публікація</span></span><span class="chev">›</span></a></li>
+      <li><a class="tile" href="#termux"><span class="badge"><svg class="ic"><use href="#i-term"/></svg></span><span><b>Меню Termux</b><span class="d">усі пункти: встановити, зібрати, ключ</span></span><span class="chev">›</span></a></li>
+    </ul>
+  </section>
+
+  <section class="group" aria-labelledby="g6">
+    <div class="group-head"><h3 id="g6">Допомога</h3><span></span></div>
+    <ul class="tiles">
+      <li><a class="tile" href="#trouble"><span class="badge"><svg class="ic"><use href="#i-help"/></svg></span><span><b>Якщо щось не так</b><span class="d">тиша, «Невідома пісня», «чирк», оновлення</span></span><span class="chev">›</span></a></li>
+    </ul>
+  </section>
+
+  <div class="foot">
+    <p>Записи лишаються на телефоні й нікуди не передаються. Інтернет — лише для перевірки оновлень з Google Диска автора. Без реклами й аналітики. Для особистого користування.</p>
+    <p class="mono">Track Catcher 0.1.21 · github.com/faric-ua/faric-track-catcher</p>
+  </div>
 </main>
 
-<!-- ================= ПЕРШИЙ ЗАПУСК ================= -->
-<section id="start" class="page stack" hidden>
-  <a class="back" href="#">← Усі можливості</a>
-  <h2>Перший запуск: 4 дозволи</h2>
-  <p class="muted">На вкладці «Запис» є картка «Що дозволити». Кожен пункт — одна кнопка. Коли дозволено, пункт обводиться зеленою рамкою і пише «Готово».</p>
+<!-- ================= 1. ПЕРШИЙ ЗАПУСК ================= -->
+<section id="start" class="page" data-group="Перші кроки" hidden>
+  <div class="title-block"><span class="eyebrow">Перші кроки</span><h2>Перший запуск: 4 дозволи</h2>
+  <p class="page-lead">На вкладці «Запис» є картка <b>«Що дозволити»</b>. Кожен пункт — одна кнопка. Дозволено — пункт у зеленій рамці з написом «Готово». Коли все готово, картка стає «Дозволи — усе готово».</p></div>
+  <div class="grid2">
+    <div class="panel"><h3>Запис звуку</h3><p class="muted">Щоб чути музику з телефона. Android назве це «Мікрофон», але пишеться <b>лише звук самого телефона</b>, не голос навколо.</p><p style="margin-top:8px"><span class="btn prim">Дозволити</span></p></div>
+    <div class="panel"><h3>Назви пісень</h3><p class="muted">«Доступ до сповіщень» — щоб брати зі шторки назву, виконавця й обкладинку. У списку Android увімкни <b>Track Catcher</b>.</p><p style="margin-top:8px"><span class="btn prim">Відкрити налаштування</span></p></div>
+    <div class="panel"><h3>Повідомлення</h3><p class="muted">Щоб під час запису в шторці було видно, що пишеться, і була кнопка «Стоп».</p><p style="margin-top:8px"><span class="btn prim">Дозволити</span></p></div>
+    <div class="panel"><h3>Робота у фоні</h3><p class="muted">Щоб Samsung не приспав запис, коли екран вимкнено.</p><p style="margin-top:8px"><span class="btn prim">Дозволити</span></p></div>
+  </div>
+  <div class="warn"><b>Перемикач «Доступ до сповіщень» сірий?</b> Так Android захищає застосунки, встановлені з файлу. Налаштування телефона → Застосунки → Track Catcher → <b>⋮</b> угорі праворуч → «Дозволити обмежені налаштування». Потім знову «Відкрити налаштування». Кнопка <span class="btn norm">Відкрити «Про застосунок»</span> у картці веде саме туди.</div>
   <figure><img src="img/first-run.webp" alt="Вкладка Запис з карткою Що дозволити"><figcaption>Картка «Що дозволити» на першому запуску.</figcaption></figure>
-  <ol class="steps">
-    <li><div><b>Запис звуку</b> → <span class="btn prim">Дозволити</span>. Android назве це «Мікрофон», але пишеться <b>лише звук самого телефона</b>, не голос навколо.</div></li>
-    <li><div><b>Назви пісень</b> → <span class="btn prim">Відкрити налаштування</span> → у списку «Доступ до сповіщень» увімкни <b>Track Catcher</b>. Так застосунок бачить назву, виконавця й обкладинку в шторці.</div></li>
-    <li><div><b>Повідомлення</b> → <span class="btn prim">Дозволити</span>. Під час запису в шторці буде видно, що пишеться, і кнопку «Стоп».</div></li>
-    <li><div><b>Робота у фоні</b> → <span class="btn prim">Дозволити</span>. Samsung не приспить запис, коли екран вимкнено.</div></li>
-  </ol>
-  <div class="warn"><b>Перемикач «Доступ до сповіщень» сірий?</b> Android так захищає застосунки, встановлені з файлу. Налаштування → Застосунки → Track Catcher → <b>⋮</b> (угорі праворуч) → «Дозволити обмежені налаштування». Потім знову крок 2. У картці є кнопка «Відкрити «Про застосунок»» — вона веде саме туди.</div>
+  <p class="note">Без дозволу «Назви пісень» запис теж працює, але все піде одним файлом «Невідома пісня» — різати нема за чим.</p>
 </section>
 
-<!-- ================= ЗАПИС ================= -->
-<section id="record" class="page stack" hidden>
-  <a class="back" href="#">← Усі можливості</a>
-  <h2>Записати пісні</h2>
+<!-- ================= 2. ЗАПИС ================= -->
+<section id="record" class="page" data-group="Перші кроки" hidden>
+  <div class="title-block"><span class="eyebrow">Перші кроки</span><h2>Записати пісні</h2>
+  <p class="page-lead">Увімкни альбом чи плейлист у будь-якому плеєрі — Track Catcher запише його цілком і розріже на пісні.</p></div>
   <ol class="steps">
-    <li><div>Увімкни музику в будь-якому плеєрі (YouTube Music, Spotify, плеєр файлів…). Альбом чи плейлист — 10–20 пісень підряд.</div></li>
-    <li><div>Відкрий Track Catcher → вкладка <b>Запис</b>. У картці «Зараз грає» має з'явитись пісня зі шторки.</div></li>
-    <li><div>Натисни <span class="btn rec">● Почати запис</span>.</div></li>
-    <li><div>За потреби — картка <b>«Цей запис»</b>: <b>Альбом</b> «Як у плеєрі» або «Свій…» (ввести назву чи вибрати з папок, що вже є — усі пісні підуть у цей альбом, і в папку, і в теги файлів; зручно для Suno, де альбому нема). <b>Зупинитись після</b> «Без обмеження» або «N пісень»: після N-ї пісні плеєр стане на паузу, а запис зупиниться сам — на екрані видно «7 з 26».</div></li>
-    <li><div>Android запитає «Почати запис?» — натисни <b>«Почати»</b>. Це питання буде щоразу: так влаштований Android.</div></li>
-    <li><div>Готово: червоне «● Записую» і час, рівень звуку L/R рухається, видно скільки пісень і скільки збережено.</div></li>
-    <li><div>Щоб запис не зупинився, коли екран гасне, — <span class="btn prim">☾ Нічний екран</span> (<a href="#night">докладно</a>).</div></li>
-    <li><div>Коли досить — <span class="btn stop">■ Зупинити запис</span> (або «Стоп» у шторці). Останні пісні дозбережуться за кілька секунд.</div></li>
+    <li><div>Увімкни музику в плеєрі (Suno, YouTube Music, AIMP, Spotify…). Краще — з першої пісні з самого початку.</div></li>
+    <li><div>Відкрий Track Catcher → вкладка <b>Запис</b>. У картці <b>«Зараз грає»</b> з'явиться пісня зі шторки: назва, виконавець, обкладинка.</div></li>
+    <li><div>За потреби — картка <b>«Цей запис»</b>: свій альбом і «Зупинитись після N пісень» (<a href="#thisrec">докладно</a>).</div></li>
+    <li><div>Натисни <span class="btn rec">● Почати запис</span>. Android спитає «Почати запис?» — <b>«Почати»</b>. Це питання буде щоразу: так влаштований Android.</div></li>
+    <li><div>Пішло: червоне <b>«● Записую»</b> і час, рівень L/R рухається, видно скільки пісень і скільки збережено. У шторці — «⏺ Записую» з кнопкою «Стоп».</div></li>
+    <li><div>Щоб Android не зупинив запис, коли гасне екран, — <span class="btn prim">☾ Нічний екран</span> (<a href="#night">докладно</a>).</div></li>
+    <li><div>Досить — <span class="btn stop">■ Зупинити запис</span> або «Стоп» у шторці. Останні пісні дозбережуться за кілька секунд («Зберігаю…»).</div></li>
   </ol>
+
+  <figure class="diagram" role="img" aria-label="Стани запису: Готово до запису, Записую, Зберігаю останні пісні, знову Готово.">
+    <svg class="narrow" viewBox="0 0 360 262">
+      <defs><marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrow" d="M0 0L10 5L0 10z"/></marker></defs>
+      <rect class="d-box" x="60" y="6" width="240" height="50" rx="14"/>
+      <text class="d-t" x="180" y="28" text-anchor="middle">Готово до запису</text>
+      <text class="d-s" x="180" y="46" text-anchor="middle">картка «Зараз грає»</text>
+      <path class="d-line" d="M180 56 V90" marker-end="url(#ar1)"/><text class="d-m" x="192" y="78">● Почати запис</text>
+      <rect class="d-rec" x="60" y="94" width="240" height="66" rx="14"/>
+      <circle cx="146" cy="113" r="5" fill="var(--rec)"/><text class="d-t" x="158" y="118">Записую</text>
+      <text class="d-s" x="180" y="136" text-anchor="middle">пісні ріжуться й зберігаються</text>
+      <text class="d-s" x="180" y="152" text-anchor="middle">пауза в плеєрі — тиша не пишеться</text>
+      <path class="d-line" d="M180 160 V194" marker-end="url(#ar1)"/><text class="d-m" x="192" y="182">■ Стоп</text>
+      <rect class="d-amber" x="60" y="198" width="240" height="50" rx="14"/>
+      <text class="d-t" x="180" y="220" text-anchor="middle">Зберігаю…</text>
+      <text class="d-s" x="180" y="238" text-anchor="middle">останні пісні — кілька секунд</text>
+      <path class="d-line" d="M60 223 H24 V31 H56" marker-end="url(#ar1)"/>
+      <text class="d-m" x="16" y="132" text-anchor="middle" transform="rotate(-90 16 132)">знову готово</text>
+    </svg>
+    <figcaption>■ Стоп — це «Зупинити запис», «Стоп» у шторці або «Зупинитись після N пісень».</figcaption>
+  </figure>
+
+  <div class="mock" aria-label="Приклад: вкладка Запис під час запису">
+    <span class="lbl">Стан</span>
+    <div class="status-line"><span class="dotr"></span><span class="num">Записую 12:34</span></div>
+    <div class="meter"><span>L</span><i></i><span>R</span><i class="r"></i></div>
+    <div class="num" style="font-size:.92rem">3 пісні з 26 · збережено 2</div>
+    <div class="diag-line">Звук від Android: 754 с отримано · рівень −19 dB · плеєр 1:12 з 3:03 · пропусків 0</div>
+  </div>
+  <div class="tbl kv"><table>
+    <tr><td class="k"><b>Рівень L/R</b></td><td>Рухається — звук іде. Стоїть, а плеєр грає — цей плеєр не дає себе записувати (з'явиться попередження).</td></tr>
+    <tr><td class="k"><b>N пісень · збережено</b></td><td>Пісня зберігається, коли почнеться наступна або після «Зупинити». Тому під час першої пісні «збережено 0» — це нормально.</td></tr>
+    <tr><td class="k"><b>Звук від Android</b></td><td>Рядок для перевірки: скільки звуку отримано, рівень, де зараз плеєр, чи були пропуски. Знадобиться, якщо щось не так — зроби скрін.</td></tr>
+    <tr><td class="k"><b>● 12:34 · 3</b></td><td>Цей червоний значок угорі видно на інших вкладках, поки йде запис. Торкнись — повернешся на «Запис».</td></tr>
+  </table></div>
   <div class="shots">
     <figure><img src="img/ready.webp" alt="Готово до запису"><figcaption>Готово до запису.</figcaption></figure>
     <figure><img src="img/recording.webp" alt="Іде запис"><figcaption>Іде запис: рівень, пісня, «Ця сесія».</figcaption></figure>
   </div>
-  <p class="note">Поки плеєр на паузі, тиша у файл не пишеться. Можна поставити на паузу й продовжити — це буде той самий запис.</p>
+  <p class="note">Поставив плеєр на паузу — тиша у файл не пишеться, а пісня після паузи продовжиться в той самий файл. Плейлист закінчився — запис чекає («Нічого не грає»), доки не ввімкнеш ще або не натиснеш «Зупинити».</p>
 </section>
 
-<!-- ================= ПРАВИЛА ================= -->
-<section id="rules" class="page stack" hidden>
-  <a class="back" href="#">← Усі можливості</a>
-  <h2>Що записується і чого не робити</h2>
-  <p class="muted">Track Catcher бере у телефона лише звук типу «музика / медіа». Решту Android йому не віддає.</p>
-  <table>
-    <tr><td><span class="pill p-ok">пишеться</span></td><td>Музика з плеєра. А також <b>будь-яке інше відео чи музика</b>, що грає в цей момент (YouTube, TikTok, голосове в Telegram), і звук ігор.</td></tr>
-    <tr><td><span class="pill p-skip">не пишеться</span></td><td>Звуки сповіщень (Telegram, Viber, SMS), дзвінки й рингтон, будильник, системні звуки (клавіатура, блокування, зарядка).</td></tr>
-  </table>
-
-  <h3>Під час запису не роби</h3>
-  <ol class="steps">
-    <li><div><b>Не вмикай інші відео й музику</b> — TikTok, YouTube, Instagram, голосові й відео в месенджерах. Їхній звук потрапить у файл, а ще вони можуть поставити плеєр на паузу.</div></li>
-    <li><div><b>Не натискай кнопку блокування.</b> Android 15+ від цього зупиняє запис. Щоб екран не гас сам — <span class="btn prim">☾ Нічний екран</span> (<a href="#night">докладно</a>).</div></li>
-    <li><div><b>Не перемикай пісню посеред</b>, якщо потрібен повний запис: перервана пісня буде <span class="pill p-part">неповний</span>.</div></li>
-  </ol>
-
-  <h3>Як записати найкраще</h3>
-  <ol class="steps">
-    <li><div>Увімкни <b>«Не турбувати»</b> (шторка → «Не турбувати»). Коли приходить сповіщення, Android на мить притишує музику — у записі це може бути чутно.</div></li>
-    <li><div>Спершу <span class="btn rec">● Почати запис</span>, потім у плеєрі — перша пісня <b>з самого початку</b>. Тоді вона буде <span class="pill p-ok">повний</span>, а не «почато посеред».</div></li>
-    <li><div>Гучність телефона можна прикрутити: звук береться до регулятора гучності, тож у файлі має бути повна гучність. <span class="muted">(Ще перевіряємо на телефоні.)</span></div></li>
-    <li><div>Пісня зберігається у файл, коли <b>почнеться наступна</b> або коли натиснеш <span class="btn stop">■ Зупинити запис</span>. Тому «збережено 0» під час першої пісні — це нормально.</div></li>
-    <li><div>Плейлист закінчився — запис <b>чекає</b> («Нічого не грає»), тишу у файл не пише. Увімкни ще пісні або натисни «Зупинити».</div></li>
-  </ol>
-
-  <div class="warn">Подзвонили посеред запису? Плеєр стане на паузу — розмова <b>не</b> записується. Після дзвінка пісня продовжиться в той самий файл.</div>
-  <p class="note">Пісні з однаковою назвою (кілька версій «Velocity» в альбомі) стають окремими файлами, якщо в них різна тривалість або це різні пісні в плеєрі.</p>
-</section>
-
-<!-- ================= РОЗРІЗ ================= -->
-<section id="split" class="page stack" hidden>
-  <a class="back" href="#">← Усі можливості</a>
-  <h2>Одна пісня — один файл</h2>
-  <p class="muted">Звук пишеться без перерв. Коли в шторці змінюється назва, Track Catcher шукає тишу між піснями (в межах 2 секунд) і ріже там. Немає довгої тиші — шукає «обрив»: плеєр різко обриває стару пісню й за кілька мілісекунд починає нову; ріже там. Немає й обриву (пісні плавно перетікають) — ріже точно в момент зміни назви. Підкрутити можна в «Налаштування» → «Краї пісні».</p>
-  <div class="diagram" role="img" aria-label="Звук пишеться без перерв; у місцях тиші біля зміни назви він розрізається, і кожна пісня стає окремим файлом з її назвою.">
-    <svg viewBox="0 0 560 230">
-      <text x="10" y="18" fill="#A3AEBB" font-size="11" font-weight="600" letter-spacing="1">ШТОРКА</text>
-      <rect x="10" y="26" width="170" height="26" rx="13" fill="#202733" stroke="#333D4B"/><text x="95" y="44" fill="#F2F5F8" font-size="12.5" text-anchor="middle">Пісня A</text>
-      <rect x="190" y="26" width="200" height="26" rx="13" fill="#202733" stroke="#333D4B"/><text x="290" y="44" fill="#F2F5F8" font-size="12.5" text-anchor="middle">Пісня B</text>
-      <rect x="400" y="26" width="150" height="26" rx="13" fill="#202733" stroke="#333D4B"/><text x="475" y="44" fill="#F2F5F8" font-size="12.5" text-anchor="middle">Пісня C</text>
-      <text x="10" y="76" fill="#A3AEBB" font-size="11" font-weight="600" letter-spacing="1">ЗВУК</text>
-      <g fill="#FFB15A">
-        <rect x="10" y="88" width="168" height="34" rx="4" opacity=".85"/>
-        <rect x="192" y="84" width="196" height="42" rx="4" opacity=".85"/>
-        <rect x="402" y="90" width="148" height="30" rx="4" opacity=".85"/>
-      </g>
-      <g stroke="#FF5A4E" stroke-width="2" stroke-dasharray="5 4"><line x1="185" y1="22" x2="185" y2="140"/><line x1="395" y1="22" x2="395" y2="140"/></g>
-      <text x="185" y="156" fill="#FF5A4E" font-size="11.5" text-anchor="middle" font-weight="600">розріз у тиші</text>
-      <text x="395" y="156" fill="#FF5A4E" font-size="11.5" text-anchor="middle" font-weight="600">розріз у тиші</text>
-      <text x="10" y="182" fill="#A3AEBB" font-size="11" font-weight="600" letter-spacing="1">ФАЙЛИ</text>
-      <rect x="10" y="190" width="168" height="32" rx="8" fill="#171C23" stroke="#333D4B"/><text x="20" y="211" fill="#F2F5F8" font-size="12">A — Пісня A.mp3</text>
-      <rect x="192" y="190" width="196" height="32" rx="8" fill="#171C23" stroke="#333D4B"/><text x="202" y="211" fill="#F2F5F8" font-size="12">B — Пісня B.mp3</text>
-      <rect x="402" y="190" width="148" height="32" rx="8" fill="#171C23" stroke="#333D4B"/><text x="412" y="211" fill="#F2F5F8" font-size="12">C — Пісня C.mp3</text>
+<!-- ================= 3. НІЧНИЙ ЕКРАН ================= -->
+<section id="night" class="page" data-group="Перші кроки" hidden>
+  <div class="title-block"><span class="eyebrow">Перші кроки</span><h2>Нічний екран</h2>
+  <p class="page-lead">Android 15 і новіші <b>самі зупиняють запис, коли телефон блокується</b>. Нічний екран не дає йому заблокуватись: екран чорний, підсвітка майже нуль, а запис іде.</p></div>
+  <figure class="diagram" role="img" aria-label="Без нічного екрана: екран гасне, телефон блокується, Android зупиняє запис. З нічним екраном: екран чорний, телефон не блокується, запис іде.">
+    <svg class="narrow" viewBox="0 0 360 214">
+      <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrow" d="M0 0L10 5L0 10z"/></marker></defs>
+      <text class="d-m" x="90" y="13" text-anchor="middle">БЕЗ НІЧНОГО ЕКРАНА</text>
+      <text class="d-m" x="270" y="13" text-anchor="middle">З НІЧНИМ ЕКРАНОМ</text>
+      <rect class="d-box" x="8" y="24" width="164" height="42" rx="10"/><text class="d-t" x="90" y="50" text-anchor="middle">екран гасне</text>
+      <rect class="d-box" x="8" y="94" width="164" height="42" rx="10"/><text class="d-t" x="90" y="120" text-anchor="middle">блокування</text>
+      <rect class="d-bad" x="8" y="164" width="164" height="42" rx="10"/><text class="d-tbad" x="90" y="190" text-anchor="middle">запис зупинено</text>
+      <path class="d-line" d="M90 66 V90 M90 136 V160" marker-end="url(#ar2)"/>
+      <path class="d-line" d="M90 66 V90" marker-end="url(#ar2)"/>
+      <rect class="d-amber" x="188" y="24" width="164" height="42" rx="10"/><text class="d-t" x="270" y="50" text-anchor="middle">☾ чорний екран</text>
+      <rect class="d-box" x="188" y="94" width="164" height="42" rx="10"/><text class="d-t" x="270" y="120" text-anchor="middle">не блокується</text>
+      <rect class="d-ok" x="188" y="164" width="164" height="42" rx="10"/><text class="d-tok" x="270" y="190" text-anchor="middle">запис іде далі</text>
+      <path class="d-line" d="M270 136 V160" marker-end="url(#ar2)"/>
+      <path class="d-line" d="M270 66 V90" marker-end="url(#ar2)"/>
     </svg>
-  </div>
-  <table>
-    <tr><td><span class="pill p-ok">повний</span></td><td>Пісня від початку до кінця.</td></tr>
-    <tr><td><span class="pill p-part">неповний</span></td><td>Почато посеред (запис увімкнули, коли пісня вже грала), зупинено посеред або перемкнуто до кінця.</td></tr>
-    <tr><td><span class="pill p-skip">пропущено</span></td><td>Коротше за мінімум (реклама), тиша до початку музики, або така пісня вже є (якщо так налаштовано).</td></tr>
-    <tr><td><span class="pill p-bad">невдало</span></td><td>Плеєр грав, а звуку не було — цей застосунок, схоже, не дає себе записувати. Або не вистачило місця.</td></tr>
-  </table>
-  <p class="note">Тиша на початку й у кінці кожного файлу обрізається (лишається 0,2 с), а гучність плавно наростає на початку й затухає в кінці — по 0,5 с, щоб на стику не було «чирку».</p>
-</section>
-
-<!-- ================= НІЧНИЙ ЕКРАН ================= -->
-<section id="night" class="page stack" hidden>
-  <a class="back" href="#">← Усі можливості</a>
-  <h2>Нічний екран</h2>
-  <p class="muted">Android 15 і новіші <b>самі зупиняють запис, коли телефон блокується</b>. Нічний екран не дає йому заблокуватись: екран чорний, яскравість майже нуль, а запис іде.</p>
+  </figure>
   <ol class="steps">
     <li><div>Почни запис (<a href="#record">як</a>) і переконайся, що плеєр грає.</div></li>
     <li><div>На вкладці «Запис» натисни <span class="btn prim">☾ Нічний екран</span>.</div></li>
-    <li><div>Екран стане чорним з тьмяним годинником, назвою пісні й лічильником. Поклади телефон — можна прикрутити гучність.</div></li>
+    <li><div>Екран стане чорним: тьмяно — «● 12:36» (скільки йде запис), назва пісні, «N пісень · збережено M». Поклади телефон.</div></li>
     <li><div>Щоб вийти — <b>двічі торкнись</b> екрана або натисни «Назад».</div></li>
   </ol>
-  <figure><img src="img/night.webp" alt="Нічний екран"><figcaption>Нічний екран: «● 12:36», пісня, скільки збережено.</figcaption></figure>
-  <div class="warn">Якщо натиснути кнопку блокування, Android може зупинити запис. Тоді на вкладці «Запис» з'явиться пояснення, а все записане до цього <b>збережеться</b>.</div>
+  <figure><img src="img/night.webp" alt="Нічний екран"><figcaption>Нічний екран.</figcaption></figure>
+  <div class="warn"><b>Натиснув кнопку блокування?</b> Android може зупинити запис. На вкладці «Запис» буде «Запис зупинив Android — найчастіше через блокування екрана», а все записане до цього <b>збережено</b>.</div>
 </section>
 
-<!-- ================= ІСТОРІЯ ================= -->
-<section id="history" class="page stack" hidden>
-  <a class="back" href="#">← Усі можливості</a>
-  <h2>Історія записів</h2>
+<!-- ================= 4. ІСТОРІЯ ================= -->
+<section id="history" class="page" data-group="Перші кроки" hidden>
+  <div class="title-block"><span class="eyebrow">Перші кроки</span><h2>Історія записів</h2>
+  <p class="page-lead">Вкладка <b>Історія</b> — кожна пісня, яку застосунок бачив: збережена чи ні, і чому.</p></div>
+  <div class="mock" aria-label="Приклад: як виглядає Історія">
+    <div class="chipx" style="color:var(--faint)">Пошук: виконавець, назва, альбом</div>
+    <div class="chips"><span class="chipx on">Усі 14</span><span class="chipx">Повні</span><span class="chipx">Неповні</span><span class="chipx">Невдалі</span><span class="chipx">Пропущені</span></div>
+    <span class="lbl num">15.10, 22:38–22:44 · 3 записи · FLAC</span>
+    <div class="rowtile"><span class="thumb">♪</span><div><div class="nm">Saney — 🎵 TRACK 02 — NEON LANES</div><div class="mt">3:41 · FLAC · 24,8 МБ · 22:40</div><div style="margin-top:4px"><span class="pill p-ok">повний</span></div></div></div>
+    <div class="rowtile"><span class="thumb">♪</span><div><div class="nm">Saney — BONUS 03 — TWO ECHOES, ONE SKY</div><div class="mt">0:38 · FLAC · 4,3 МБ · 22:39</div><div class="why">почато посеред (з 0:20)</div><div style="margin-top:4px"><span class="pill p-part">неповний</span></div></div></div>
+  </div>
   <ol class="steps">
-    <li><div>Вкладка <b>Історія</b>. Записи згруповані по сесіях: дата, час, скільки записів, формат.</div></li>
-    <li><div>Угорі — пошук (виконавець, назва, альбом) і фільтри: <b>Усі · Повні · Неповні · Невдалі · Пропущені</b> з кількістю. Вибраний фільтр — у зеленій рамці.</div></li>
-    <li><div>У кожному рядку: обкладинка, назва, тривалість · формат · розмір · час, і статус. Якщо запис не повний — причина під назвою.</div></li>
-    <li><div>Торкнись запису — відкриються подробиці (<a href="#actions">що там можна зробити</a>).</div></li>
-    <li><div><b>Видалити кілька записів:</b> натисни й потримай плитку — вона стане в зеленій рамці. Торкайся інших, щоб додати чи зняти. Угорі — <span class="btn stop">Видалити (N)</span>, «Вибрати всі видимі» й «Скасувати». Перед видаленням застосунок перепитає. Якщо в записі є файл — видалиться і файл; якщо файлу нема — лише запис з історії. «Назад» — вийти з вибору.</div></li>
+    <li><div>Записи згруповані по сесіях: дата, час від–до, скільки записів, формат.</div></li>
+    <li><div>Угорі — пошук (виконавець, назва, альбом) і фільтри <b>Усі · Повні · Неповні · Невдалі · Пропущені</b>. Вибраний фільтр — у зеленій рамці.</div></li>
+    <li><div>У плитці: обкладинка, назва (до 3 рядків, довга — з «…»), тривалість · формат · розмір · час і статус (<a href="#status">що означає</a>). Не повний — причина під назвою.</div></li>
+    <li><div>Торкнись запису — відкриються подробиці й плеєр (<a href="#player">докладно</a>).</div></li>
+  </ol>
+  <h3>Видалити кілька записів</h3>
+  <ol class="steps">
+    <li><div><b>Натисни й потримай</b> плитку — вона стане в зеленій рамці. Торкайся інших, щоб додати чи зняти.</div></li>
+    <li><div>Угорі: <span class="btn stop">Видалити (N)</span>, <span class="btn norm">Вибрати всі видимі</span>, <span class="btn norm">Скасувати</span>. «Назад» — вийти з вибору.</div></li>
+    <li><div>Застосунок перепитає. Є файл — видалиться і файл; файлу нема — лише запис з історії. Повернути не вийде.</div></li>
   </ol>
   <div class="shots">
     <figure><img src="img/history.webp" alt="Історія"><figcaption>Історія з фільтрами.</figcaption></figure>
-    <figure><img src="img/detail.webp" alt="Подробиці запису"><figcaption>Подробиці запису.</figcaption></figure>
+    <figure><img src="img/delete.webp" alt="Видалити файл?"><figcaption>Перед видаленням — завжди питання.</figcaption></figure>
   </div>
 </section>
 
-<!-- ================= ДІЇ ================= -->
-<section id="actions" class="page stack" hidden>
-  <a class="back" href="#">← Усі можливості</a>
-  <h2>Слухати, поділитись, видалити</h2>
-  <p class="muted">Історія → торкнись запису. У подробицях: скільки записано, тривалість пісні, формат, назва файлу й розмір, папка, як різалось, з якого плеєра, коли.</p>
-  <table>
-    <tr><td><span class="btn prim">⏮ ▶&#xFE0E; ⏭</span></td><td>Плеєр прямо в подробицях. Велика кругла кнопка — грати / пауза; смуга — торкнись або потягни, щоб перемотати; ліворуч під смугою — скільки зіграно, праворуч — скільки лишилось («−0:41»). <b>⏭</b> — наступна пісня (записана після цієї, як в альбомі), <b>⏮</b> — попередня; вікно при цьому не стрибає вгору — плеєр лишається на місці; записи без файлу перескакуються. Грало — грає й наступна; дограла пісня — сама відкривається й грає наступна. Якщо збережено і MP3, і WAV — «Слухати: MP3 / WAV». Під час запису слухати не можна (плеєр, який записуєш, став би на паузу).</td></tr>
-    <tr><td><span class="btn norm">Шторка</span></td><td>Поки грає — у шторці й на заблокованому екрані картка: назва, обкладинка, ⏮ ▶ ⏭. Можна сховати застосунок чи вимкнути екран — музика грає далі. На паузі картку можна змахнути — плеєр зупиниться. «Закрити» у вікні запису теж зупиняє.</td></tr>
-    <tr><td><span class="btn norm">Поділитись · Плеєр · Видалити</span></td><td>Маленькі значки внизу плитки плеєра. «Поділитись» — у месенджер, на пошту, в Drive. «Плеєр» (стрілка назовні) — відкрити у твоєму плеєрі. «Видалити» — спершу запитає «Видалити файл?»; файл зникне з «Музики», а запис в історії лишиться з поміткою «файл видалено».</td></tr>
-  </table>
-  <div class="shots">
-    <figure><img src="img/detail.webp" alt="Подробиці"><figcaption>Подробиці (знімок до v0.1.17 — тепер плеєр з ⏮ ▶ ⏭ і значками дій, «Закрити» — широка внизу).</figcaption></figure>
-    <figure><img src="img/delete.webp" alt="Видалити файл?"><figcaption>Підтвердження видалення.</figcaption></figure>
+<!-- ================= 5. ЦЕЙ ЗАПИС ================= -->
+<section id="thisrec" class="page" data-group="Під час запису" hidden>
+  <div class="title-block"><span class="eyebrow">Під час запису</span><h2>«Цей запис»: альбом і «Зупинитись після»</h2>
+  <p class="page-lead">Картка на вкладці «Запис». Налаштовується <b>перед</b> «Почати запис» і діє на один запис. Під час запису змінити не можна — лише після.</p></div>
+  <div class="mock" aria-label="Приклад: картка Цей запис">
+    <span class="lbl">Цей запис</span>
+    <b>Альбом</b>
+    <div class="chips"><span class="chipx">Як у плеєрі</span><span class="chipx on">Свій: Neon Lanes</span></div>
+    <b>Зупинитись після</b>
+    <div class="chips"><span class="chipx">Без обмеження</span><span class="chipx on">26 пісень</span></div>
+    <p class="muted small">Усі пісні підуть в альбом «Neon Lanes» (папка й теги). Після 26-ї пісні плеєр стане на паузу, а запис зупиниться сам.</p>
   </div>
+  <div class="grid2">
+    <div class="panel"><h3>Свій альбом</h3><p class="muted">«Свій…» → введи назву або вибери з папок, що вже є в «Track Catcher». Усі пісні цього запису підуть у папку цього альбому, і назва альбому запишеться в сам файл. Зручно для Suno, де альбому нема.</p></div>
+    <div class="panel"><h3>Зупинитись після N пісень</h3><p class="muted">Знаєш, скільки пісень в альбомі, але не знаєш, скільки це хвилин? «Кількість пісень…» → число. Після останньої Track Catcher поставить плеєр на паузу й зупинить запис. На «Записі» видно «7 з 26».</p></div>
+  </div>
+  <p class="note">Корисно, коли плеєр після альбому сам грає далі чужі пісні (так робить Suno).</p>
 </section>
 
-<!-- ================= НАЛАШТУВАННЯ ================= -->
-<section id="settings" class="page stack" hidden>
-  <a class="back" href="#">← Усі можливості</a>
-  <h2>Формат і якість</h2>
-  <p class="muted">Вкладка <b>Налаштування</b>. Вибране — у зеленій рамці. Зміни діють з наступного запису.</p>
-  <table>
-    <tr><td><b>Формат</b></td><td><b>FLAC</b> (типово з 0.1.21) — без втрат, точно як грало, 4 хв ≈ 26–30 МБ (удвічі менше за WAV); назва, виконавець, альбом і обкладинка — у файлі. <b>MP3</b> — для будь-якого плеєра, 4 хв ≈ 9 МБ (320). <b>WAV</b> — без втрат, 4 хв ≈ 46 МБ. <b>MP3 + FLAC</b>, <b>MP3 + WAV</b> — по два файли. Інші формати — з FLAC у застосунку «Audio Converter».</td></tr>
-    <tr><td><b>Якість MP3</b></td><td>320 — на слух майже як оригінал. 192 — добре й удвічі менше місця. Також 128 і 256.</td></tr>
-    <tr><td><b>Коротші не зберігати</b></td><td>Зберігати все / 15 / 30 / 45 / 60 с. Коротші (реклама) підуть в історію як «пропущено», без файлу.</td></tr>
-    <tr><td><b>Краї пісні</b></td><td><b>Зрізати по 1 с</b> на початку й у кінці (Так / Ні) — прибирає хвіст попередньої пісні й «чирк» перемикання. <b>Наростання й затухання</b> — без / 0,1 … 2 с (типово 0,5 с). <b>Зсув розрізу</b> −1 … +1 с: «+», якщо на початку файлу чути кінець попередньої пісні; «−», якщо в кінці чути початок наступної.</td></tr>
-    <tr><td><b>Якщо пісня вже є</b></td><td>«Записати ще раз» — новий файл з «(2)». «Пропустити» — якщо в історії вже є повний запис цієї пісні.</td></tr>
-  </table>
-  <figure><img src="img/settings.webp" alt="Налаштування"><figcaption>Налаштування.</figcaption></figure>
-</section>
-
-<!-- ================= ФАЙЛИ ================= -->
-<section id="files" class="page stack" hidden>
-  <a class="back" href="#">← Усі можливості</a>
-  <h2>Де лежать файли</h2>
+<!-- ================= 6. ЩО ПИШЕТЬСЯ ================= -->
+<section id="rules" class="page" data-group="Під час запису" hidden>
+  <div class="title-block"><span class="eyebrow">Під час запису</span><h2>Що пишеться і чого не робити</h2>
+  <p class="page-lead">Track Catcher бере в телефона звук типу «медіа». Решту Android йому не віддає.</p></div>
+  <div class="grid2">
+    <div class="panel"><h3><span class="pill p-ok">пишеться</span></h3><p class="muted">Музика з плеєра. А також <b>будь-яке інше відео чи музика</b>, що грає в цей момент: YouTube, TikTok, голосове в Telegram, звук ігор. Іноді — звуки повідомлень, які застосунок грає як «медіа».</p></div>
+    <div class="panel"><h3><span class="pill p-skip">не пишеться</span></h3><p class="muted">Справжні сповіщення, дзвінки й рингтон, будильник, системні звуки (клавіатура, блокування, зарядка), голос навколо.</p></div>
+  </div>
+  <h3>Під час запису не роби</h3>
   <ol class="steps">
-    <li><div>Папка: <b>Музика › Track Catcher</b> (<span class="mono">Music/Track Catcher</span>). Її видно в «Моїх файлах» і в будь-якому плеєрі. Пісні з альбомом ідуть у папку альбому: <b>Track Catcher › Neon</b> (вимкнути — «Налаштування» → «Папка для кожного альбому»).</div></li>
-    <li><div>Назва файлу: <b>«Виконавець — Назва.mp3»</b>. Заборонені символи (/ : * ? …) замінюються на «_». Смайлики й невидимі символи з назви файлу й папки альбому прибираються (щоб файл відкривався будь-де — у магнітолі, старому плеєрі, на комп'ютері); усередині файлу назва лишається зі смайликами. Вимкнути — «Налаштування» → «Смайлики в назві файлу» → «Лишати».</div></li>
-    <li><div>Така назва вже є — новий файл отримує «(2)», «(3)»…</div></li>
-    <li><div>У файлі записані назва, виконавець, альбом і обкладинка — плеєри їх показують.</div></li>
-    <li><div>Швидко відкрити папку: Налаштування → «Куди зберігається» → <span class="btn norm">Відкрити папку</span>.</div></li>
-    <li><div><b>Своя папка, і на карті пам'яті:</b> Налаштування → «Куди зберігається» → <span class="btn prim">Вибрати свою папку</span> → у вікні Android вибери папку (меню ☰ — там і карта пам'яті) → «Використати цю папку» → «Дозволити». Альбоми — папками всередині неї. Якщо папка недоступна (карту вийняли), пісні тимчасово йдуть у «Музика › Track Catcher» — нічого не губиться. Повернути як було — «Повернути «Музику»».</div></li>
+    <li><div><b>Не вмикай інші відео й музику.</b> Їхній звук потрапить у файл, а ще вони можуть поставити плеєр на паузу.</div></li>
+    <li><div><b>Не натискай кнопку блокування.</b> Android 15+ від цього зупиняє запис. Користуйся <a href="#night">нічним екраном</a>.</div></li>
+    <li><div><b>Не перемикай пісню посеред</b>, якщо потрібен повний запис: перервана пісня буде <span class="pill p-part">неповний</span>.</div></li>
   </ol>
+  <h3>Як записати найкраще</h3>
+  <ol class="steps">
+    <li><div>Увімкни <b>«Не турбувати»</b> у шторці: коли приходить сповіщення, Android на мить притишує музику — у записі це чутно.</div></li>
+    <li><div>Спершу <span class="btn rec">● Почати запис</span>, потім перша пісня <b>з самого початку</b> — тоді вона буде <span class="pill p-ok">повний</span>.</div></li>
+    <li><div>Гучність телефона можна прикрутити: звук береться до регулятора гучності.</div></li>
+  </ol>
+  <div class="ok-box">Подзвонили посеред запису? Плеєр стане на паузу, розмова <b>не</b> записується. Після дзвінка пісня продовжиться в той самий файл.</div>
 </section>
 
-<!-- ================= ПОВОРОТ ================= -->
-<section id="rotate" class="page stack" hidden>
-  <a class="back" href="#">← Усі можливості</a>
-  <h2>Книжковий і альбомний вигляд</h2>
-  <p class="muted">Поверни телефон — вкладки переїдуть у смугу ліворуч, а екрани стануть у дві колонки. Нічого не губиться: вибраний запис, фільтр, пошук, відкрите вікно. Запис іде далі.</p>
+<!-- ================= 7. РОЗРІЗ ================= -->
+<section id="split" class="page" data-group="Під час запису" hidden>
+  <div class="title-block"><span class="eyebrow">Під час запису</span><h2>Одна пісня — один файл</h2>
+  <p class="page-lead">Звук пишеться без перерв. Коли в шторці змінюється пісня, Track Catcher шукає найкраще місце для розрізу поруч — у межах 2 секунд.</p></div>
+  <figure class="diagram" role="img" aria-label="Шторка показує пісні A, B, C. Звук суцільний. Розріз у тиші між піснями. Три файли.">
+    <svg class="narrow" viewBox="0 0 380 224">
+      <text class="d-m" x="0" y="13">ШТОРКА</text>
+      <rect class="d-box" x="0" y="20" width="118" height="28" rx="14"/><text class="d-t" x="59" y="39" text-anchor="middle">Пісня A</text>
+      <rect class="d-box" x="124" y="20" width="132" height="28" rx="14"/><text class="d-t" x="190" y="39" text-anchor="middle">Пісня B</text>
+      <rect class="d-box" x="262" y="20" width="118" height="28" rx="14"/><text class="d-t" x="321" y="39" text-anchor="middle">Пісня C</text>
+      <text class="d-m" x="0" y="72">ЗВУК</text>
+      <rect class="d-wave" x="0" y="84" width="117" height="34" rx="4"/>
+      <rect class="d-wave" x="125" y="80" width="130" height="42" rx="4"/>
+      <rect class="d-wave" x="263" y="86" width="117" height="30" rx="4"/>
+      <path class="d-dash" d="M121 16 V136 M259 16 V136"/>
+      <text class="d-trec" x="121" y="152" text-anchor="middle">розріз</text>
+      <text class="d-trec" x="259" y="152" text-anchor="middle">розріз</text>
+      <text class="d-m" x="0" y="178">ФАЙЛИ</text>
+      <rect class="d-box" x="0" y="186" width="118" height="32" rx="8"/><text class="d-m" x="8" y="206">Пісня A.flac</text>
+      <rect class="d-box" x="124" y="186" width="132" height="32" rx="8"/><text class="d-m" x="132" y="206">Пісня B.flac</text>
+      <rect class="d-box" x="262" y="186" width="118" height="32" rx="8"/><text class="d-m" x="270" y="206">Пісня C.flac</text>
+    </svg>
+  </figure>
+  <h3>Де саме ріже — три способи по черзі</h3>
+  <figure class="diagram" role="img" aria-label="Спершу шукає тишу між піснями, потім обрив звуку, інакше ріже в момент зміни назви. Потім додається зсув з налаштувань.">
+    <svg class="narrow" viewBox="0 0 360 306">
+      <defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrow" d="M0 0L10 5L0 10z"/></marker></defs>
+      <rect class="d-amber" x="20" y="4" width="200" height="34" rx="10"/><text class="d-t" x="120" y="26" text-anchor="middle">у шторці нова пісня</text>
+      <path class="d-line" d="M120 38 V54" marker-end="url(#ar3)"/>
+      <rect class="d-box" x="0" y="58" width="240" height="58" rx="10"/>
+      <text class="d-t" x="120" y="78" text-anchor="middle">1. Тиша між піснями?</text>
+      <text class="d-s" x="120" y="95" text-anchor="middle">хоч 0,06 с тихіше −45 dB</text>
+      <text class="d-s" x="120" y="110" text-anchor="middle">у межах ±2 с від сигналу</text>
+      <rect class="d-box" x="0" y="140" width="240" height="58" rx="10"/>
+      <text class="d-t" x="120" y="160" text-anchor="middle">2. Обрив звуку?</text>
+      <text class="d-s" x="120" y="177" text-anchor="middle">плеєр різко обірвав пісню</text>
+      <text class="d-s" x="120" y="192" text-anchor="middle">до 1 с від сигналу</text>
+      <rect class="d-box" x="0" y="222" width="240" height="58" rx="10"/>
+      <text class="d-t" x="120" y="242" text-anchor="middle">3. Момент зміни назви</text>
+      <text class="d-s" x="120" y="259" text-anchor="middle">пісні плавно перетікають</text>
+      <text class="d-s" x="120" y="274" text-anchor="middle">одна в одну</text>
+      <path class="d-line" d="M120 116 V136 M120 198 V218" marker-end="url(#ar3)"/>
+      <path class="d-line" d="M120 116 V136" marker-end="url(#ar3)"/>
+      <text class="d-m" x="130" y="131">ні</text><text class="d-m" x="130" y="213">ні</text>
+      <path class="d-line" d="M240 87 H272" marker-end="url(#ar3)"/><text class="d-m" x="255" y="80" text-anchor="middle">так</text>
+      <path class="d-line" d="M240 169 H272" marker-end="url(#ar3)"/><text class="d-m" x="255" y="162" text-anchor="middle">так</text>
+      <path class="d-line" d="M240 251 H272" marker-end="url(#ar3)"/>
+      <rect class="d-ok" x="276" y="70" width="84" height="34" rx="10"/><text class="d-tok" x="318" y="92" text-anchor="middle">ріже тут</text>
+      <rect class="d-ok" x="276" y="152" width="84" height="34" rx="10"/><text class="d-tok" x="318" y="174" text-anchor="middle">ріже тут</text>
+      <rect class="d-ok" x="276" y="234" width="84" height="34" rx="10"/><text class="d-tok" x="318" y="256" text-anchor="middle">ріже тут</text>
+      <text class="d-s" x="180" y="300" text-anchor="middle">+ «Зсув розрізу» з налаштувань (−1 … +1 с)</text>
+    </svg>
+  </figure>
+  <div class="tbl kv"><table>
+    <tr><td class="k"><b>Однакові назви</b></td><td>Кілька різних «Velocity» в альбомі стають окремими файлами, якщо в них різна тривалість або плеєр позначає їх як різні пісні.</td></tr>
+    <tr><td class="k"><b>Повтор однієї пісні</b></td><td>Плеєр грає ту саму пісню по колу — кожен новий круг стає новим файлом (для пісень від 15 с).</td></tr>
+    <tr><td class="k"><b>Краї файлу</b></td><td>Тиша на початку й у кінці обрізається (лишається 0,2 с), гучність плавно наростає й затухає — щоб на стику не було «чирку». Підкрутити — <a href="#edges">«Краї пісні»</a>.</td></tr>
+  </table></div>
+</section>
+
+<!-- ================= 8. СТАТУСИ ================= -->
+<section id="status" class="page" data-group="Під час запису" hidden>
+  <div class="title-block"><span class="eyebrow">Під час запису</span><h2>Повний, неповний, невдало, пропущено</h2>
+  <p class="page-lead">Після кожної пісні Track Catcher вирішує, що з нею. Перевіряє по черзі — як на схемі. Причину видно під назвою в історії.</p></div>
+  <figure class="diagram" role="img" aria-label="Схема: тиша — невдало або пропущено; коротше мінімуму — пропущено; почато посеред або не до кінця — неповний; інакше — повний.">
+    <svg class="narrow" viewBox="0 0 360 352">
+      <defs><marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrow" d="M0 0L10 5L0 10z"/></marker></defs>
+      <rect class="d-box" x="0" y="4" width="226" height="50" rx="10"/>
+      <text class="d-t" x="113" y="25" text-anchor="middle">Звуку менше 1 с?</text>
+      <text class="d-s" x="113" y="43" text-anchor="middle">плеєр грав, а у файлі тиша</text>
+      <rect class="d-box" x="0" y="78" width="226" height="50" rx="10"/>
+      <text class="d-t" x="113" y="99" text-anchor="middle">Коротше за мінімум?</text>
+      <text class="d-s" x="113" y="117" text-anchor="middle">типово 30 с (реклама)</text>
+      <rect class="d-box" x="0" y="152" width="226" height="50" rx="10"/>
+      <text class="d-t" x="113" y="173" text-anchor="middle">Почато посеред?</text>
+      <text class="d-s" x="113" y="191" text-anchor="middle">пісня грала вже понад 4 с</text>
+      <rect class="d-box" x="0" y="226" width="226" height="50" rx="10"/>
+      <text class="d-t" x="113" y="247" text-anchor="middle">Не дограла до кінця?</text>
+      <text class="d-s" x="113" y="265" text-anchor="middle">«Зупинити» чи перемкнуто</text>
+      <path class="d-line" d="M113 54 V74" marker-end="url(#ar4)"/><path class="d-line" d="M113 128 V148" marker-end="url(#ar4)"/>
+      <path class="d-line" d="M113 202 V222" marker-end="url(#ar4)"/><path class="d-line" d="M113 276 V302" marker-end="url(#ar4)"/>
+      <text class="d-m" x="122" y="69">ні</text><text class="d-m" x="122" y="143">ні</text><text class="d-m" x="122" y="217">ні</text><text class="d-m" x="122" y="294">ні</text>
+      <path class="d-line" d="M226 29 H244" marker-end="url(#ar4)"/><path class="d-line" d="M226 103 H244" marker-end="url(#ar4)"/>
+      <path class="d-line" d="M226 177 H244" marker-end="url(#ar4)"/><path class="d-line" d="M226 251 H244" marker-end="url(#ar4)"/>
+      <rect class="d-bad" x="248" y="8" width="112" height="42" rx="10"/><text class="d-tbad" x="304" y="26" text-anchor="middle">невдало</text><text class="d-s" x="304" y="42" text-anchor="middle">або пропущено</text>
+      <rect class="d-skip" x="248" y="82" width="112" height="42" rx="10"/><text class="d-t" x="304" y="100" text-anchor="middle">пропущено</text><text class="d-s" x="304" y="116" text-anchor="middle">без файлу</text>
+      <rect class="d-part" x="248" y="156" width="112" height="42" rx="10"/><text class="d-tpart" x="304" y="182" text-anchor="middle">неповний</text>
+      <rect class="d-part" x="248" y="230" width="112" height="42" rx="10"/><text class="d-tpart" x="304" y="256" text-anchor="middle">неповний</text>
+      <rect class="d-ok" x="23" y="306" width="180" height="40" rx="10"/><text class="d-tok" x="113" y="331" text-anchor="middle">повний</text>
+    </svg>
+  </figure>
+  <div class="tbl kv"><table>
+    <tr class="hd"><th>Статус</th><th>Що пише в історії</th></tr>
+    <tr><td class="k"><span class="pill p-ok">повний</span></td><td>Пісня від початку до кінця. Причини нема.</td></tr>
+    <tr><td class="k"><span class="pill p-part">неповний</span></td><td>«почато посеред (з 0:20)», «зупинено посеред», «перемкнуто до кінця пісні», «застосунок закрився під час запису». Файл є.</td></tr>
+    <tr><td class="k"><span class="pill p-skip">пропущено</span></td><td>«коротше 30 с», «тиша — нічого не грало», «порожній шматок», «вже є повний запис цієї пісні». Файлу нема.</td></tr>
+    <tr><td class="k"><span class="pill p-bad">невдало</span></td><td>«тиша — цей плеєр, схоже, не дає себе записувати», «немає місця на телефоні», «помилка збереження». Файлу нема.</td></tr>
+  </table></div>
+  <p class="note">«Не дограла» рахується з запасом: 4 с або 4 % тривалості пісні — що більше.</p>
+</section>
+
+<!-- ================= 9. ПЛЕЄР ================= -->
+<section id="player" class="page" data-group="Після запису" hidden>
+  <div class="title-block"><span class="eyebrow">Після запису</span><h2>Плеєр і шторка</h2>
+  <p class="page-lead">Історія → торкнись запису. Угорі — назва й факти, нижче — плеєр. Переходиш між записами, як в альбомі.</p></div>
+  <div class="mock" aria-label="Приклад: плитка плеєра в подробицях запису">
+    <div class="seek"><i></i></div>
+    <div class="times"><span>0:14</span><span>−0:44</span></div>
+    <div class="transport">
+      <span class="rnd"><svg><use href="#i-prev"/></svg></span>
+      <span class="rnd big"><svg><use href="#i-pause"/></svg></span>
+      <span class="rnd"><svg><use href="#i-next"/></svg></span>
+    </div>
+    <div class="acts">
+      <span><span class="c"><svg class="ic"><use href="#i-share"/></svg></span>Поділити…</span>
+      <span><span class="c"><svg class="ic"><use href="#i-out"/></svg></span>Плеєр</span>
+      <span class="del"><span class="c"><svg class="ic"><use href="#i-bin"/></svg></span>Видалити</span>
+    </div>
+    <div class="wide-btn">Закрити</div>
+  </div>
+  <div class="tbl kv"><table>
+    <tr><td class="k"><b>▶ / ❚❚</b></td><td>Грати / пауза. Смуга — торкнись або потягни, щоб перемотати. Ліворуч — скільки зіграно, праворуч — скільки лишилось.</td></tr>
+    <tr><td class="k"><b>⏮ ⏭</b></td><td>Попередній / наступний запис — у тому порядку, як записувались. Записи без файлу перескакуються. Вікно не стрибає: плеєр лишається на тому самому місці екрана.</td></tr>
+    <tr><td class="k"><b>Дограла</b></td><td>Сама відкривається й грає наступна.</td></tr>
+    <tr><td class="k"><b>Слухати: MP3 / FLAC</b></td><td>З'являється, коли збережено два файли (MP3 + FLAC або MP3 + WAV).</td></tr>
+    <tr><td class="k"><b>Поділитись</b></td><td>Файл — у месенджер, на пошту, в Google Диск.</td></tr>
+    <tr><td class="k"><b>Плеєр</b></td><td>Відкрити файл у твоєму звичайному плеєрі.</td></tr>
+    <tr><td class="k"><b>Видалити</b></td><td>Спершу «Видалити файл?». Файл зникне з «Музики», запис в історії лишиться з поміткою «файл видалено».</td></tr>
+  </table></div>
+  <figure class="diagram" role="img" aria-label="Порядок записів: ⏮ веде до записаного раніше, ⏭ до записаного пізніше; записи без файлу пропускаються.">
+    <svg class="narrow" viewBox="0 0 380 124">
+      <defs><marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrow" d="M0 0L10 5L0 10z"/></marker></defs>
+      <text class="d-m" x="0" y="13">ЗАПИСАНО: РАНІШЕ → ПІЗНІШЕ</text>
+      <rect class="d-box" x="0" y="26" width="86" height="46" rx="10"/><text class="d-t" x="43" y="54" text-anchor="middle">BONUS 01</text>
+      <rect class="d-amber" x="98" y="26" width="86" height="46" rx="10"/><text class="d-t" x="141" y="47" text-anchor="middle">BONUS 02</text><text class="d-s" x="141" y="63" text-anchor="middle">грає</text>
+      <rect class="d-skip" x="196" y="26" width="86" height="46" rx="10" stroke-dasharray="4 3"/><text class="d-s" x="239" y="46" text-anchor="middle">пропущено</text><text class="d-s" x="239" y="62" text-anchor="middle">без файлу</text>
+      <rect class="d-box" x="294" y="26" width="86" height="46" rx="10"/><text class="d-t" x="337" y="54" text-anchor="middle">BONUS 03</text>
+      <path class="d-line" d="M120 72 C112 96 60 96 48 76" marker-end="url(#ar5)"/><text class="d-t" x="84" y="112" text-anchor="middle">⏮</text>
+      <path class="d-line" d="M162 72 C190 110 310 110 334 76" marker-end="url(#ar5)"/><text class="d-t" x="248" y="118" text-anchor="middle">⏭ (через пропущений)</text>
+    </svg>
+  </figure>
+  <h3>Шторка й заблокований екран</h3>
+  <p>Поки грає — у шторці й на заблокованому екрані картка: назва, обкладинка, смуга, ⏮ ❚❚ ⏭. Можна сховати застосунок чи вимкнути екран — музика грає далі. На першому записі ⏮ нема: раніше нічого не записано.</p>
+  <p class="note">Зупинити зовсім: «Закрити» у вікні запису, або змахнути картку в шторці, коли на паузі. Під час запису слухати не можна: плеєр, який записуєш, став би на паузу.</p>
+</section>
+
+<!-- ================= 10. ФАЙЛИ ================= -->
+<section id="files" class="page" data-group="Після запису" hidden>
+  <div class="title-block"><span class="eyebrow">Після запису</span><h2>Де файли і як названі</h2>
+  <p class="page-lead">Файли видно в «Моїх файлах» і в будь-якому плеєрі. Назва, виконавець, альбом і обкладинка записані в сам файл.</p></div>
+  <figure class="diagram" role="img" aria-label="Папки: Музика, у ній Track Catcher, у ньому папки альбомів, у них файли Виконавець — Назва.">
+    <svg class="narrow" viewBox="0 0 360 244">
+      <rect class="d-box" x="0" y="4" width="150" height="32" rx="9"/><text class="d-t" x="12" y="25">Музика</text>
+      <rect class="d-amber" x="24" y="48" width="180" height="32" rx="9"/><text class="d-t" x="36" y="69">Track Catcher</text>
+      <rect class="d-box" x="48" y="92" width="140" height="32" rx="9"/><text class="d-t" x="60" y="113">Neon</text><text class="d-s" x="104" y="113">— альбом</text>
+      <rect class="d-box" x="72" y="136" width="288" height="32" rx="9"/><text class="d-m" x="84" y="157">Saney — Velocity.flac</text>
+      <rect class="d-box" x="48" y="182" width="312" height="32" rx="9"/><text class="d-m" x="60" y="203">Saney — Neon Horizon (2).flac</text>
+      <path class="d-line" d="M12 36 V64 H24 M36 80 V108 H48 M36 108 V198 H48 M60 124 V152 H72"/>
+      <text class="d-s" x="48" y="236">без альбому — прямо в «Track Catcher»; повтор назви — «(2)»</text>
+    </svg>
+  </figure>
+  <div class="tbl kv"><table>
+    <tr><td class="k"><b>Папка</b></td><td><b>Музика › Track Catcher</b> (<span class="mono">Music/Track Catcher</span>). Пісні з альбомом — у папку альбому. Вимкнути: «Налаштування» → «Папка для кожного альбому» → «Ні».</td></tr>
+    <tr><td class="k"><b>Назва</b></td><td><b>«Виконавець — Назва.flac»</b>. Заборонені символи (/ : * ? …) стають «_».</td></tr>
+    <tr><td class="k"><b>Смайлики</b></td><td>Типово прибираються з назви файлу й папки: «🎵 TRACK 02 — VELVET TEMPLE. 🏛» → «Saney — TRACK 02 — VELVET TEMPLE.flac». Так файл відкриється будь-де: магнітола, старий плеєр, комп'ютер. Усередині файлу назва лишається зі смайликами. Лишати — «Смайлики в назві файлу» → «Лишати».</td></tr>
+    <tr><td class="k"><b>Відкрити</b></td><td>«Налаштування» → «Куди зберігається» → <span class="btn norm">Відкрити папку</span>. Порожня папка ще не створена: файл з'являється, коли почнеться наступна пісня або після «Зупинити».</td></tr>
+  </table></div>
+  <h3>Своя папка, і на карті пам'яті</h3>
+  <ol class="steps">
+    <li><div>«Налаштування» → «Куди зберігається» → <span class="btn prim">Вибрати свою папку</span>.</div></li>
+    <li><div>У вікні Android: меню ☰ ліворуч (там і карта пам'яті) → папка → «Використати цю папку» → «Дозволити».</div></li>
+    <li><div>Альбоми підуть папками всередині неї. Змінити — <span class="btn norm">Змінити папку</span>, повернути як було — <span class="btn norm">Повернути «Музику»</span>.</div></li>
+  </ol>
+  <div class="ok-box">Своя папка недоступна (карту вийняли, дозвіл забрано)? Пісні тимчасово йдуть у «Музика › Track Catcher», у причині запису буде «своя папка недоступна — збережено в «Музику»». Нічого не губиться.</div>
+</section>
+
+<!-- ================= 11. ПОВОРОТ ================= -->
+<section id="rotate" class="page" data-group="Після запису" hidden>
+  <div class="title-block"><span class="eyebrow">Після запису</span><h2>Книжковий і альбомний вигляд</h2>
+  <p class="page-lead">Поверни телефон — вкладки переїдуть у смугу ліворуч, екрани стануть у дві колонки. Нічого не губиться: вибраний запис, фільтр, пошук, відкрите вікно. Запис іде далі.</p></div>
   <figure class="wide"><img src="img/land-record.webp" alt="Запис в альбомному вигляді"><figcaption>«Запис»: ліворуч стан і кнопки, праворуч пісня й сесія.</figcaption></figure>
-  <figure class="wide"><img src="img/land-history.webp" alt="Історія в альбомному вигляді"><figcaption>«Історія»: список ліворуч, подробиці праворуч.</figcaption></figure>
-  <p class="note">Під час запису на інших вкладках угорі видно червоний значок «● 12:34 · 3» — торкнись, і повернешся на «Запис».</p>
+  <figure class="wide"><img src="img/land-history.webp" alt="Історія в альбомному вигляді"><figcaption>«Історія»: список ліворуч, подробиці з плеєром праворуч.</figcaption></figure>
+  <p class="note">«Налаштування» в альбомному вигляді: ліворуч — формат, якість, довжина, повтори, краї; праворуч — папка, дозволи, оновлення, «Про застосунок».</p>
 </section>
 
-<!-- ================= ОНОВЛЕННЯ ================= -->
-<section id="update" class="page stack" hidden>
-  <a class="back" href="#">← Усі можливості</a>
-  <h2>Оновити застосунок</h2>
-  <p class="muted">Нова версія ставиться поверх — записи, історія й налаштування лишаються.</p>
-  <h3>З Google Диска — прямо в застосунку</h3>
-  <p>«Налаштування» → «Оновлення застосунку» → <b>«Перевірити оновлення»</b>. Застосунок дивиться на Google Диск автора, і якщо там новіша версія — завантажує її, перевіряє (розмір, контрольна сума, версія, той самий ключ підпису) і відкриває вікно Android «Оновити». Уперше Android попросить один дозвіл: «Дозволити з цього джерела» → «Назад».</p>
-  <p class="muted">З версії 0.1.17 посилання вже вбудоване — нічого вставляти не треба. Якщо автор каже, що вийшла новіша, а застосунок пише «у тебе остання версія», — у тому ж вікні (або в «Оновленні застосунку») є <b>«Інше посилання»</b>: візьми посилання в автора й натисни. Версії 0.1.16 і старіші дивляться на старий файл — їх один раз онови меню Termux <b>2</b>. Старіша версія може попросити посилання: його надсилає автор («Поділитися посиланням на оновлення») — це посилання на маленький файл версії <code>track-catcher-onovlennia.json</code>, <b>не на APK</b>. Скопіюй і натисни «Вставити посилання»; не той файл застосунок не запам'ятає й пояснить, яке посилання потрібне. «Перевіряти самому раз на день: Так» — перевіряє тихо при відкритті й каже лише про нову версію.</p>
-  <p class="muted"><b>Автору:</b> «Опублікувати цю версію на Диск» — один раз створити два файли на Диску й вставити посилання на них (кроки 1–4 у вікні), далі після кожної нової версії — лише «Опублікувати зараз».</p>
-  <h3>Через меню Termux «Track Catcher»</h3>
-  <table>
-    <tr><td><b>2</b></td><td>Встановити нову версію з GitHub.</td></tr>
-    <tr><td><b>10</b></td><td>Вікно встановлення сховалось? Відкрити ще раз.</td></tr>
-    <tr><td><b>5</b></td><td>Встановити версію, зібрану на іншому телефоні (для старого телефона).</td></tr>
-    <tr><td><b>11 / 12</b></td><td>Зібрати прямо на телефоні (з інтернетом / без).</td></tr>
-    <tr><td><b>3</b></td><td>Статус: що на GitHub і що встановлено.</td></tr>
-  </table>
+<!-- ================= 12. ФОРМАТ ================= -->
+<section id="formats" class="page" data-group="Налаштування" hidden>
+  <div class="title-block"><span class="eyebrow">Налаштування</span><h2>Формат і якість</h2>
+  <p class="page-lead">Вкладка <b>Налаштування</b>. Вибране — у зеленій рамці. Зміни діють з наступного запису.</p></div>
+  <figure class="diagram" role="img" aria-label="Розмір 4-хвилинної пісні: WAV 43,9 МБ, FLAC близько 26 МБ (22–31), MP3 320 — 9,2 МБ, 256 — 7,3, 192 — 5,5, 128 — 3,7.">
+    <svg class="narrow" viewBox="0 0 380 240">
+      <text class="d-m" x="0" y="12">4 ХВ ПІСНІ — МБ</text>
+      <g class="d-faint" opacity=".35"><rect x="78" y="20" width="1" height="194"/><rect x="140.7" y="20" width="1" height="194"/><rect x="203.3" y="20" width="1" height="194"/><rect x="266" y="20" width="1" height="194"/><rect x="328.7" y="20" width="1" height="194"/></g>
+      <text class="d-m" x="78" y="232" text-anchor="middle">0</text><text class="d-m" x="140.7" y="232" text-anchor="middle">10</text><text class="d-m" x="203.3" y="232" text-anchor="middle">20</text><text class="d-m" x="266" y="232" text-anchor="middle">30</text><text class="d-m" x="328.7" y="232" text-anchor="middle">40</text>
+      <text class="d-t" x="70" y="40" text-anchor="end">WAV</text><rect x="78" y="25" width="275" height="22" rx="4" style="fill:var(--muted)" opacity=".55"/><text class="d-m" x="348" y="40" text-anchor="end" style="fill:var(--bg)">43,9</text>
+      <text class="d-t" x="70" y="72" text-anchor="end">FLAC</text><rect x="78" y="57" width="165" height="22" rx="4" style="fill:var(--amber)"/><rect x="216" y="65" width="56" height="6" rx="3" style="fill:var(--amber)" opacity=".4"/><text class="d-m" x="278" y="72">≈26 (22–31)</text>
+      <text class="d-t" x="70" y="104" text-anchor="end">MP3 320</text><rect x="78" y="89" width="58" height="22" rx="4" style="fill:var(--part)"/><text class="d-m" x="142" y="104">9,2</text>
+      <text class="d-t" x="70" y="136" text-anchor="end">MP3 256</text><rect x="78" y="121" width="46" height="22" rx="4" style="fill:var(--part)" opacity=".8"/><text class="d-m" x="130" y="136">7,3</text>
+      <text class="d-t" x="70" y="168" text-anchor="end">MP3 192</text><rect x="78" y="153" width="35" height="22" rx="4" style="fill:var(--part)" opacity=".65"/><text class="d-m" x="119" y="168">5,5</text>
+      <text class="d-t" x="70" y="200" text-anchor="end">MP3 128</text><rect x="78" y="185" width="23" height="22" rx="4" style="fill:var(--part)" opacity=".5"/><text class="d-m" x="107" y="200">3,7</text>
+    </svg>
+    <figcaption>FLAC залежить від музики: тиха й проста стискається сильніше. Бурштин — без втрат, бузковий — зі стисненням.</figcaption>
+  </figure>
+  <div class="tbl kv"><table>
+    <tr class="hd"><th>Формат</th><th>Що це</th></tr>
+    <tr><td class="k"><b>FLAC</b></td><td><b>Без втрат</b> — точно як грало, а місця майже вдвічі менше за WAV. Назва, виконавець, альбом і обкладинка — у файлі. Типовий для нових установок з 0.1.21; якщо раніше вибрано MP3 — сам не міняється.</td></tr>
+    <tr><td class="k"><b>MP3</b></td><td>Для будь-якого плеєра й магнітоли. Якість — нижче.</td></tr>
+    <tr><td class="k"><b>WAV</b></td><td>Без втрат, без стиснення — найбільший.</td></tr>
+    <tr><td class="k"><b>MP3 + FLAC</b></td><td>Два файли на кожну пісню: MP3 для будь-якого плеєра і FLAC без втрат.</td></tr>
+    <tr><td class="k"><b>MP3 + WAV</b></td><td>Два файли: MP3 і WAV.</td></tr>
+  </table></div>
+  <p class="note">Потрібен інший формат (M4A, Opus…)? Бери FLAC — з нього без втрат зробить що завгодно застосунок <b>Audio Converter</b>.</p>
+  <div class="grid2">
+    <div class="panel"><h3>Якість MP3</h3><p class="muted">128 · 192 · 256 · <b>320</b> кбіт/с. 320 — на слух майже як оригінал, 192 — добре й удвічі менше місця. Для FLAC і WAV не діє.</p></div>
+    <div class="panel"><h3>Коротші не зберігати</h3><p class="muted">Зберігати все · 15 · <b>30</b> · 45 · 60 с. Реклама й короткі уривки підуть в історію як «пропущено», без файлу.</p></div>
+    <div class="panel"><h3>Якщо пісня вже є</h3><p class="muted"><b>«Записати ще раз»</b> — новий файл з «(2)». «Пропустити» — якщо в історії вже є повний запис цієї пісні.</p></div>
+    <div class="panel"><h3>Папка для кожного альбому</h3><p class="muted"><b>Так</b> — «Track Catcher › Neon». Ні — усі пісні в одну папку.</p></div>
+  </div>
+  <p class="muted small">Жирним (і в зеленій рамці) — що стоїть спочатку. Під час запису налаштування видно, а зміни підуть у наступний запис.</p>
+  <figure><img src="img/settings.webp" alt="Налаштування"><figcaption>Налаштування (знімок старшої версії — тепер у «Формат файлів» ще FLAC і MP3 + FLAC).</figcaption></figure>
 </section>
 
-<!-- ================= ПРОБЛЕМИ ================= -->
-<section id="trouble" class="page stack" hidden>
-  <a class="back" href="#">← Усі можливості</a>
-  <h2>Якщо щось не так</h2>
-  <details><summary>Запис «невдало: тиша»</summary><div>Деякі застосунки забороняють записувати свій звук (часто — платний захищений контент). Спробуй інший плеєр. Також перевір, що у вікні Android «Почати запис?» натиснуто «Почати».</div></details>
-  <details><summary>Усі пісні — «Невідома пісня» і не ріжуться</summary><div>Немає дозволу «Доступ до сповіщень» (<a href="#start">як дати</a>) або плеєр не показує пісню в шторці. Тоді все пишеться одним файлом.</div></details>
-  <details><summary>Запис зупинився сам</summary><div>Найчастіше — телефон заблокувався (Android 15+). Користуйся <a href="#night">нічним екраном</a>. Записане до зупинки збережене. Якщо застосунок закрився посеред запису — шматки збережуться як «неповні» при наступному запуску.</div></details>
-  <details><summary>Перемикач «Доступ до сповіщень» сірий</summary><div>Налаштування → Застосунки → Track Catcher → ⋮ → «Дозволити обмежені налаштування», потім увімкни доступ.</div></details>
-  <details><summary>Пісня розрізалась не там</summary><div>Між піснями без паузи розріз іде точно в момент зміни назви в шторці — можливі пів секунди чужої пісні на краю. Напиши, з якого плеєра й на якій пісні, — підлаштуємо.</div></details>
-  <details><summary>«Збережено 0», хоча пісня грає давно</summary><div>Пісня зберігається, коли почнеться наступна або після «Зупинити». Якщо пісня вже давно мала закінчитись — подивись рядок «Звук від Android … плеєр 3:40 з 3:03» на вкладці «Запис» і надішли скрін.</div></details>
-  <details><summary>У файлі чути чуже відео чи звук гри</summary><div>Track Catcher пише все, що телефон грає як «медіа». Під час запису не вмикай інші відео й музику (<a href="#rules">докладно</a>).</div></details>
-  <details><summary>У файлі тріск, «чирк»</summary><div>Подивись під час запису рядок «Звук від Android … пропусків N». Якщо не 0 — телефон не встиг забрати звук (був зайнятий); закрий важкі застосунки. У подробицях запису є «Перевантаження»: якщо там число — пісня надто гучна, піки обрізано, і в гучних місцях може «чиркати». Якщо 0, а тріск є — він, швидше за все, у самому плеєрі (так буває з музикою з інтернету): послухай те саме місце в оригіналі. Напиши, у якій пісні й на якій хвилині.</div></details>
-  <details><summary>Файлу не видно в плеєрі</summary><div>Плеєр міг ще не пересканувати пам'ять. Відкрий Налаштування → «Відкрити папку» або «Мої файли» → Музика → Track Catcher.</div></details>
+<!-- ================= 13. КРАЇ ================= -->
+<section id="edges" class="page" data-group="Налаштування" hidden>
+  <div class="title-block"><span class="eyebrow">Налаштування</span><h2>Краї пісні</h2>
+  <p class="page-lead">Що робиться з початком і кінцем кожного файлу. «Налаштування» → «Краї пісні». Діє з наступного запису.</p></div>
+  <figure class="diagram" role="img" aria-label="Файл: тиша на краях обрізана до 0,2 с; гучність наростає 0,5 с на початку і затухає 0,5 с у кінці; зсув розрізу пересуває межу раніше або пізніше.">
+    <svg class="narrow" viewBox="0 0 360 184">
+      <text class="d-trec" x="180" y="14" text-anchor="middle">межі файлу: тиша обрізана, лишається 0,2 с</text>
+      <rect x="0" y="52" width="28" height="48" style="fill:var(--faint)" opacity=".25"/>
+      <rect x="332" y="52" width="28" height="48" style="fill:var(--faint)" opacity=".25"/>
+      <text class="d-s" x="14" y="44" text-anchor="middle">тиша</text><text class="d-s" x="346" y="44" text-anchor="middle">тиша</text>
+      <path d="M28 100 L66 36 H294 L332 100 Z" class="d-wave"/>
+      <text class="d-t" x="180" y="76" text-anchor="middle" style="fill:var(--bg)">пісня</text>
+      <path class="d-dash" d="M28 22 V108 M332 22 V108"/>
+      <path class="d-line" d="M28 112 V124 M66 112 V124 M294 112 V124 M332 112 V124"/>
+      <text class="d-s" x="47" y="140" text-anchor="middle">0,5 с</text><text class="d-s" x="47" y="155" text-anchor="middle">наростання</text>
+      <text class="d-s" x="313" y="140" text-anchor="middle">0,5 с</text><text class="d-s" x="313" y="155" text-anchor="middle">затухання</text>
+      <path class="d-line" d="M150 176 H210"/><text class="d-s" x="180" y="170" text-anchor="middle">− зсув розрізу +</text>
+    </svg>
+  </figure>
+  <div class="stack-s">
+    <div class="panel"><h3>Зрізати по 1 с на початку й у кінці</h3><div class="chips" style="margin-bottom:8px"><span class="chipx on">Ні</span><span class="chipx">Так</span></div><p class="muted">Прибирає хвіст попередньої пісні й «чирк» перемикання — але й 1 с самої пісні з кожного боку.</p></div>
+    <div class="panel"><h3>Наростання й затухання</h3><div class="chips" style="margin-bottom:8px"><span class="chipx">Без</span><span class="chipx">0,1 с</span><span class="chipx">0,25 с</span><span class="chipx on">0,5 с</span><span class="chipx">1 с</span><span class="chipx">2 с</span></div><p class="muted">Гучність плавно росте з нуля на початку файлу й спадає до нуля в кінці — без клацання на стику.</p></div>
+    <div class="panel"><h3>Зсув розрізу</h3><div class="chips" style="margin-bottom:8px"><span class="chipx">−1 с</span><span class="chipx">−0,5 с</span><span class="chipx">−0,2 с</span><span class="chipx on">0</span><span class="chipx">+0,2 с</span><span class="chipx">+0,5 с</span><span class="chipx">+1 с</span></div><p class="muted">«+» — розріз пізніше: якщо на початку файлу чути кінець попередньої пісні. «−» — раніше: якщо в кінці чути початок наступної.</p></div>
+  </div>
+  <p class="note">Статус («повний» чи ні) рахується за записаним звуком; «Зрізати по 1 с» лише вкорочує файл.</p>
 </section>
 
-<p class="small muted" style="margin-top:28px">Track Catcher · <a href="https://github.com/faric-ua/faric-track-catcher">github.com/faric-ua/faric-track-catcher</a></p>
+<!-- ================= 14. ОНОВЛЕННЯ ================= -->
+<section id="update" class="page" data-group="Оновлення" hidden>
+  <div class="title-block"><span class="eyebrow">Оновлення</span><h2>Оновити з Google Диска</h2>
+  <p class="page-lead">Нова версія ставиться поверх: записи, історія й налаштування лишаються. «Налаштування» → «Оновлення застосунку».</p></div>
+  <figure class="diagram" role="img" aria-label="Автор публікує версію на свій Google Диск; інший телефон перевіряє, завантажує, перевіряє файл і відкриває вікно Android Оновити.">
+    <svg class="narrow" viewBox="0 0 360 392">
+      <defs><marker id="ar6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrow" d="M0 0L10 5L0 10z"/></marker></defs>
+      <text class="d-m" x="0" y="12">ТЕЛЕФОН АВТОРА</text><text class="d-m" x="194" y="12">GOOGLE ДИСК</text>
+      <rect class="d-amber" x="0" y="20" width="166" height="54" rx="12"/><text class="d-t" x="83" y="43" text-anchor="middle">Опублікувати</text><text class="d-t" x="83" y="61" text-anchor="middle">зараз</text>
+      <path class="d-line" d="M166 47 H190" marker-end="url(#ar6)"/>
+      <rect class="d-box" x="194" y="20" width="166" height="24" rx="8"/><text class="d-m" x="204" y="36">Track Catcher.apk</text>
+      <rect class="d-box" x="194" y="50" width="166" height="24" rx="8"/><text class="d-m" x="204" y="66">файл версії .json</text>
+      <text class="d-m" x="0" y="106">ІНШИЙ ТЕЛЕФОН</text>
+      <path class="d-line" d="M277 74 V110" marker-end="url(#ar6)"/>
+      <rect class="d-box" x="40" y="114" width="280" height="40" rx="12"/><text class="d-t" x="180" y="139" text-anchor="middle">Перевірити оновлення</text>
+      <path class="d-line" d="M180 154 V172" marker-end="url(#ar6)"/>
+      <rect class="d-box" x="40" y="176" width="280" height="48" rx="12"/><text class="d-t" x="180" y="197" text-anchor="middle">Є нова версія</text><text class="d-s" x="180" y="214" text-anchor="middle">«Завантажити й встановити»</text>
+      <path class="d-line" d="M180 224 V242" marker-end="url(#ar6)"/>
+      <rect class="d-ok" x="40" y="246" width="280" height="80" rx="12"/>
+      <text class="d-tok" x="180" y="268" text-anchor="middle">5 перевірок файлу</text>
+      <text class="d-s" x="180" y="288" text-anchor="middle">розмір · SHA-256 · той самий застосунок</text>
+      <text class="d-s" x="180" y="306" text-anchor="middle">новіша версія · той самий ключ підпису</text>
+      <path class="d-line" d="M180 326 V344" marker-end="url(#ar6)"/>
+      <rect class="d-amber" x="40" y="348" width="280" height="40" rx="12"/><text class="d-t" x="180" y="373" text-anchor="middle">Вікно Android «Оновити»</text>
+    </svg>
+  </figure>
+  <h3>Перевірити й встановити</h3>
+  <ol class="steps">
+    <li><div><span class="btn prim">Перевірити оновлення</span>. Застосунок без входу в Google читає маленький файл версії на Диску автора.</div></li>
+    <li><div>«Є нова версія» → <span class="btn prim">Завантажити й встановити</span>. Застосунок завантажує й перевіряє файл; щось не так — нічого не ставить і пише чому.</div></li>
+    <li><div>Уперше Android попросить «Дозволити з цього джерела» → увімкни → «Назад». Встановлення продовжиться саме.</div></li>
+    <li><div>Вікно Android «Оновити» → «Оновити». Якщо Google Play Захист попередить — «Усе одно встановити».</div></li>
+  </ol>
+  <div class="grid2">
+    <div class="panel"><h3>Перевіряти самому раз на день</h3><p class="muted"><b>Так</b> — під час відкриття застосунку, тихо. Скаже лише тоді, коли є нова версія.</p></div>
+    <div class="panel"><h3>Інше посилання</h3><p class="muted">Автор каже, що вийшла новіша, а тут «У тебе остання версія»? Скопіюй посилання від автора → <span class="btn norm">Інше посилання</span> у тому ж вікні або в картці. Посилання — на файл <span class="mono">track-catcher-onovlennia.json</span>, не на APK.</p></div>
+  </div>
+  <p class="note">З 0.1.17 посилання вбудоване — вставляти нічого не треба. Застосунок пробує і збережене, і вбудоване посилання та бере найновішу версію. Версії 0.1.16 і старіші один раз онови через меню Termux, пункт 2.</p>
+
+  <h3>Для автора: опублікувати версію</h3>
+  <ol class="steps">
+    <li><div><span class="btn norm">Опублікувати цю версію на Диск (автор)</span>.</div></li>
+    <li><div>Один раз: кроки 1–2 — створити два файли на Диску (у вікні вибору ☰ → «Google Диск» → папка → «Зберегти»); кроки 3–4 — у застосунку Диск ⋮ біля файлу → «Надати доступ» → «Усі, хто має посилання» → «Копіювати посилання» → назад і натиснути крок.</div></li>
+    <li><div>Далі після кожної нової версії — лише <span class="btn prim">Опублікувати зараз</span>. Застосунок кладе свій встановлений APK у ті самі файли — посилання не змінюється. Іншим телефонам видно за кілька хвилин.</div></li>
+    <li><div><span class="btn norm">Поділитися посиланням на оновлення</span> — якщо комусь потрібне посилання вручну.</div></li>
+  </ol>
+  <div class="warn"><b>Жовте попередження у вікні публікації?</b> Файл версії на Диску не той, що вбудований у застосунок. Інші телефони його не побачать — напиши в чат, перш ніж створювати файли заново.</div>
+</section>
+
+<!-- ================= 15. TERMUX ================= -->
+<section id="termux" class="page" data-group="Оновлення" hidden>
+  <div class="title-block"><span class="eyebrow">Оновлення</span><h2>Меню Termux «Track Catcher»</h2>
+  <p class="page-lead">Ярлик на головному екрані (Termux:Widget) відкриває меню. Угорі видно, яка версія в репо і яка на телефоні: «На телефоні: build 22 — найновіша» або «є новіша, пункт 2».</p></div>
+  <div class="tbl"><table>
+    <tr><th colspan="2">Встановити / оновити застосунок</th></tr>
+    <tr><td class="k num"><b>2</b></td><td>Встановити нову версію з GitHub (перевіряє SHA-256).</td></tr>
+    <tr><td class="k num"><b>10</b></td><td>Вікно встановлення сховалось? Відкрити ще раз.</td></tr>
+    <tr><td class="k num"><b>5</b></td><td>Встановити версію, зібрану на іншому телефоні.</td></tr>
+    <tr><td class="k num"><b>13</b></td><td>Відкрити папку з останнім APK.</td></tr>
+    <tr><th colspan="2">Щодня</th></tr>
+    <tr><td class="k num"><b>1</b></td><td>Оновити це меню.</td></tr>
+    <tr><td class="k num"><b>3</b></td><td>Статус: що на GitHub і що на телефоні.</td></tr>
+    <tr><td class="k num"><b>4</b></td><td>Відкрити папку з записами.</td></tr>
+    <tr><td class="k num"><b>6</b></td><td>Командний рядок. Назад у меню — <span class="mono">exit</span>.</td></tr>
+    <tr><th colspan="2">Збірка на цьому телефоні</th></tr>
+    <tr><td class="k num"><b>11</b></td><td>Зібрати тут і встановити (і відправити для іншого телефона).</td></tr>
+    <tr><td class="k num"><b>12</b></td><td>Зібрати тут без інтернету.</td></tr>
+    <tr><th colspan="2">Перше налаштування (один раз)</th></tr>
+    <tr><td class="k num"><b>7</b></td><td>Ключ підпису: створити — лише на основному телефоні.</td></tr>
+    <tr><td class="k num"><b>8</b></td><td>Ключ підпису: резервна копія.</td></tr>
+    <tr><td class="k num"><b>9</b></td><td>Ярлик меню на головному екрані.</td></tr>
+    <tr><td class="k num"><b>0</b></td><td>Вийти.</td></tr>
+  </table></div>
+  <p class="note">Найпростіше оновлення без Termux — <a href="#update">з Google Диска</a> прямо в застосунку.</p>
+</section>
+
+<!-- ================= 16. ПРОБЛЕМИ ================= -->
+<section id="trouble" class="page" data-group="Допомога" hidden>
+  <div class="title-block"><span class="eyebrow">Допомога</span><h2>Якщо щось не так</h2>
+  <p class="page-lead">Торкнись питання — відкриється відповідь. Не допомогло — зроби скрін вкладки «Запис» з рядком «Звук від Android» і напиши.</p></div>
+  <div class="acc">
+    <details><summary>Запис «невдало: тиша»</summary><div>Деякі застосунки забороняють записувати свій звук (часто — платний захищений контент). Під час запису буде попередження «… грає, а звук порожній — схоже, … не дає себе записувати». Спробуй інший плеєр. І перевір, що у вікні Android «Почати запис?» натиснуто «Почати».</div></details>
+    <details><summary>Усі пісні — «Невідома пісня» і не ріжуться</summary><div>Немає дозволу «Доступ до сповіщень» (<a href="#start">як дати</a>) або плеєр не показує пісню в шторці. Тоді все пишеться одним файлом.</div></details>
+    <details><summary>Запис зупинився сам</summary><div>Найчастіше телефон заблокувався (Android 15+) — користуйся <a href="#night">нічним екраном</a>. Записане до зупинки збережене. Якщо застосунок закрився посеред запису, шматки збережуться при наступному запуску як «неповні».</div></details>
+    <details><summary>«Android не віддає звук уже N с»</summary><div>Запис звуку завис на боці Android. Зупини запис і почни знову.</div></details>
+    <details><summary>«Збережено 0», хоча пісня грає давно</summary><div>Пісня зберігається, коли почнеться наступна або після «Зупинити». Якщо пісня вже мала закінчитись — подивись рядок «Звук від Android … плеєр 3:40 з 3:03» і надішли скрін.</div></details>
+    <details><summary>Пісня розрізалась не там</summary><div>«Налаштування» → «Краї пісні» → «Зсув розрізу»: «+», якщо на початку чути кінець попередньої пісні; «−», якщо в кінці чути початок наступної. Не допомагає — напиши, з якого плеєра й на якій пісні.</div></details>
+    <details><summary>У файлі тріск чи «чирк»</summary><div>Рядок «Звук від Android … пропусків N»: не 0 — телефон не встигав забирати звук, закрий важкі застосунки. У подробицях запису «Перевантаження»: число — пісня надто гучна, піки обрізано. Обидва 0, а тріск є — він, швидше за все, у самому плеєрі: послухай те саме місце в оригіналі.</div></details>
+    <details><summary>У файлі чути чуже відео чи звук повідомлення</summary><div>Track Catcher пише все, що телефон грає як «медіа». Під час запису не вмикай інші відео й музику і увімкни «Не турбувати» (<a href="#rules">докладно</a>).</div></details>
+    <details><summary>Перемикач «Доступ до сповіщень» сірий</summary><div>Налаштування телефона → Застосунки → Track Catcher → ⋮ → «Дозволити обмежені налаштування», потім увімкни доступ.</div></details>
+    <details><summary>Файлу не видно в плеєрі</summary><div>Плеєр міг ще не пересканувати пам'ять. «Налаштування» → «Відкрити папку» або «Мої файли» → Музика → Track Catcher.</div></details>
+    <details><summary>«У тебе остання версія», а автор каже — є новіша</summary><div>У тому ж вікні — «Інше посилання» (<a href="#update">докладно</a>). Версії 0.1.16 і старіші — один раз через меню Termux, пункт 2.</div></details>
+    <details><summary>«Шкідливий додаток заблоковано» при встановленні</summary><div>Google Play Захист не знає застосунків, встановлених не з Play Маркету, а Track Catcher читає сповіщення, записує звук і ходить на Диск за оновленнями. Застосунок зібраний з відкритого коду на GitHub, контрольна сума перевіряється. Щоб встановити — «Усе одно встановити».</div></details>
+    <details><summary>«Немає місця на телефоні — запис зупинено»</summary><div>Звільни місце або вибери FLAC чи MP3 замість WAV (<a href="#formats">розміри</a>). Записане до цього збережене.</div></details>
+  </div>
+</section>
+
+<nav class="pager" id="pager" hidden aria-label="Сусідні розділи"></nav>
 </div>
 
 <script>
 (function () {
+  // Хвиля на плівці: стовпчики між розрізами (детерміновано, щоб щоразу однаково).
+  var g = document.getElementById('wave');
+  if (g) {
+    var segs = [[2, 176, 0.62], [192, 386, 0.9], [402, 558, 0.55]], seed = 7, x, h, r, out = '';
+    function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+    for (var s = 0; s < segs.length; s++) {
+      for (x = segs[s][0]; x < segs[s][1]; x += 4) {
+        var edge = Math.min(x - segs[s][0], segs[s][1] - x) / 14;
+        h = (6 + rnd() * 20) * segs[s][2] * Math.min(1, edge);
+        r = Math.max(1.5, h);
+        out += '<rect class="bar" x="' + x + '" y="' + (100 - r) + '" width="2.4" height="' + (2 * r) + '" rx="1"/>';
+      }
+    }
+    g.innerHTML = out;
+  }
+
+  var home = document.getElementById('home');
+  var pages = Array.prototype.slice.call(document.querySelectorAll('section.page'));
+  var order = Array.prototype.map.call(document.querySelectorAll('#home a.tile'), function (a) { return a.getAttribute('href').slice(1); });
+  var pager = document.getElementById('pager');
+  var titleOf = {};
+  pages.forEach(function (p) { titleOf[p.id] = p.querySelector('h2').textContent; });
+
+  // Верхня смуга розділу: «← Зміст» і лічильник «03 / 16».
+  pages.forEach(function (p) {
+    var i = order.indexOf(p.id);
+    var bar = document.createElement('div');
+    bar.className = 'topbar';
+    bar.innerHTML = '<a class="back" href="#home">← Зміст</a><span class="counter"><b>' +
+      String(i + 1).padStart(2, '0') + '</b> / ' + String(order.length).padStart(2, '0') + '</span>';
+    p.insertBefore(bar, p.firstChild);
+  });
+
   function show() {
     var id = location.hash.slice(1);
     var target = id ? document.getElementById(id) : null;
     var isPage = !!(target && target.classList.contains('page'));
-    document.getElementById('home').hidden = isPage;
-    var pages = document.querySelectorAll('section.page');
-    for (var i = 0; i < pages.length; i++) pages[i].hidden = pages[i] !== target;
+    home.hidden = isPage;
+    pages.forEach(function (p) { p.hidden = p !== target; });
+    var shown = isPage ? target : home;
+    shown.classList.remove('enter'); void shown.offsetWidth; shown.classList.add('enter');
+    if (isPage) {
+      var i = order.indexOf(id), prev = order[i - 1], next = order[i + 1], html = '';
+      if (prev) html += '<a class="prev" href="#' + prev + '"><span>← Назад</span><b>' + titleOf[prev] + '</b></a>';
+      if (next) html += '<a class="next" href="#' + next + '"><span>Далі →</span><b>' + titleOf[next] + '</b></a>';
+      pager.innerHTML = html;
+      pager.hidden = false;
+    } else {
+      pager.hidden = true;
+    }
     window.scrollTo(0, 0);
   }
   window.addEventListener('hashchange', show);
   show();
 })();
 </script>
+</body>
+</html>
