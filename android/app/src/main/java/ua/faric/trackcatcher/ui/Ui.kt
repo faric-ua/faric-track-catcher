@@ -60,7 +60,7 @@ class Ui(val ctx: Context) {
     fun label(s: String, icon: LineIcon? = null): TextView = text(s.uppercase(), 11.5f, Palette.muted, medium = true).apply {
         letterSpacing = 0.08f
         if (icon != null) {
-            text = iconText(icon, s.uppercase(), Palette.accent, sizeDp = 17)
+            text = iconText(icon, s.uppercase(), Palette.accent, sizeDp = LineIcon.LABEL_DP)
             contentDescription = s
         }
     }
@@ -144,7 +144,7 @@ class Ui(val ctx: Context) {
     /** Кнопка зі значком перед підписом (значок — кольору тексту кнопки). */
     fun iconButton(icon: LineIcon, label: String, kind: Kind = Kind.NORMAL, large: Boolean = false, onClick: () -> Unit): TextView =
         button(label, kind, large, onClick).apply {
-            text = iconText(icon, label, currentTextColor, sizeDp = if (large) 22 else 19)
+            text = iconText(icon, label, currentTextColor, sizeDp = if (large) LineIcon.BUTTON_LARGE_DP else LineIcon.BUTTON_DP)
             contentDescription = label
         }
 
