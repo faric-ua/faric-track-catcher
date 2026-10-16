@@ -4,7 +4,7 @@ import android.content.Context
 import ua.faric.trackcatcher.core.OutputFormat
 import ua.faric.trackcatcher.core.RepeatPolicy
 
-/** Налаштування власника. Значення за замовчуванням: MP3 320, не зберігати коротше 30 с. */
+/** Налаштування власника. Значення за замовчуванням: FLAC (з v0.1.21, T55; раніше MP3 320), не зберігати коротше 30 с. */
 class Settings(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
@@ -34,6 +34,8 @@ class Settings(context: Context) {
             get() = when (format) {
                 OutputFormat.MP3 -> "MP3 $mp3Bitrate"
                 OutputFormat.WAV -> "WAV"
+                OutputFormat.FLAC -> "FLAC"
+                OutputFormat.MP3_FLAC -> "MP3 $mp3Bitrate + FLAC"
                 OutputFormat.BOTH -> "MP3 $mp3Bitrate + WAV"
             }
     }

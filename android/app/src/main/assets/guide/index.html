@@ -96,7 +96,7 @@ details > div{padding:0 0 12px; color:var(--muted)}
     <li><a href="#night"><span class="ic">☾</span><span><b>Нічний екран</b><span class="d">щоб запис не зупинився</span></span><span class="chev">›</span></a></li>
     <li><a href="#history"><span class="ic">☰</span><span><b>Історія записів</b><span class="d">повні, неповні, невдалі, пропущені</span></span><span class="chev">›</span></a></li>
     <li><a href="#actions"><span class="ic">▶︎</span><span><b>Слухати, поділитись, видалити</b><span class="d">що можна зробити з записом</span></span><span class="chev">›</span></a></li>
-    <li><a href="#settings"><span class="ic">⚙︎</span><span><b>Формат і якість</b><span class="d">MP3, WAV, мінімальна довжина, повтори</span></span><span class="chev">›</span></a></li>
+    <li><a href="#settings"><span class="ic">⚙︎</span><span><b>Формат і якість</b><span class="d">FLAC, MP3, WAV, мінімальна довжина, повтори</span></span><span class="chev">›</span></a></li>
     <li><a href="#files"><span class="ic">📁</span><span><b>Де лежать файли</b><span class="d">папка й назви файлів</span></span><span class="chev">›</span></a></li>
     <li><a href="#rotate"><span class="ic">⟲</span><span><b>Книжковий і альбомний вигляд</b><span class="d">поверни телефон — дві колонки</span></span><span class="chev">›</span></a></li>
     <li><a href="#update"><span class="ic">⤓</span><span><b>Оновити застосунок</b><span class="d">через меню Termux</span></span><span class="chev">›</span></a></li>
@@ -116,7 +116,7 @@ details > div{padding:0 0 12px; color:var(--muted)}
       <text x="212" y="100" fill="#A3AEBB" font-size="11.5">ріже на пісні</text>
       <rect x="440" y="16" width="112" height="54" rx="12" fill="#202733" stroke="#333D4B"/>
       <text x="496" y="40" fill="#F2F5F8" font-size="13" font-weight="600" text-anchor="middle">Музика</text>
-      <text x="496" y="58" fill="#A3AEBB" font-size="11" text-anchor="middle">MP3 / WAV</text>
+      <text x="496" y="58" fill="#A3AEBB" font-size="11" text-anchor="middle">FLAC / MP3</text>
       <rect x="440" y="82" width="112" height="54" rx="12" fill="#202733" stroke="#333D4B"/>
       <text x="496" y="106" fill="#F2F5F8" font-size="13" font-weight="600" text-anchor="middle">Історія</text>
       <text x="496" y="124" fill="#A3AEBB" font-size="11" text-anchor="middle">що вдалось</text>
@@ -284,7 +284,7 @@ details > div{padding:0 0 12px; color:var(--muted)}
   <h2>Формат і якість</h2>
   <p class="muted">Вкладка <b>Налаштування</b>. Вибране — у зеленій рамці. Зміни діють з наступного запису.</p>
   <table>
-    <tr><td><b>Формат</b></td><td><b>MP3</b> — для будь-якого плеєра, 4 хв ≈ 9 МБ (320). <b>WAV</b> — без втрат, 4 хв ≈ 46 МБ. <b>MP3 + WAV</b> — обидва файли.</td></tr>
+    <tr><td><b>Формат</b></td><td><b>FLAC</b> (типово з 0.1.21) — без втрат, точно як грало, 4 хв ≈ 26–30 МБ (удвічі менше за WAV); назва, виконавець, альбом і обкладинка — у файлі. <b>MP3</b> — для будь-якого плеєра, 4 хв ≈ 9 МБ (320). <b>WAV</b> — без втрат, 4 хв ≈ 46 МБ. <b>MP3 + FLAC</b>, <b>MP3 + WAV</b> — по два файли. Інші формати — з FLAC у застосунку «Audio Converter».</td></tr>
     <tr><td><b>Якість MP3</b></td><td>320 — на слух майже як оригінал. 192 — добре й удвічі менше місця. Також 128 і 256.</td></tr>
     <tr><td><b>Коротші не зберігати</b></td><td>Зберігати все / 15 / 30 / 45 / 60 с. Коротші (реклама) підуть в історію як «пропущено», без файлу.</td></tr>
     <tr><td><b>Краї пісні</b></td><td><b>Зрізати по 1 с</b> на початку й у кінці (Так / Ні) — прибирає хвіст попередньої пісні й «чирк» перемикання. <b>Наростання й затухання</b> — без / 0,1 … 2 с (типово 0,5 с). <b>Зсув розрізу</b> −1 … +1 с: «+», якщо на початку файлу чути кінець попередньої пісні; «−», якщо в кінці чути початок наступної.</td></tr>
