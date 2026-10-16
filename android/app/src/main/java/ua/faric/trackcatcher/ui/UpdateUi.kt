@@ -93,13 +93,13 @@ class UpdateUi(private val host: MainActivity) {
     // ---------- картка в «Налаштуваннях» ----------
 
     fun card(): View = ui.card(10).apply {
-        addView(ui.label("Оновлення застосунку"))
+        addView(ui.label("Оновлення застосунку", LineIcon.CLOUD))
         addView(ui.muted(
             if (manifestId() == null) "Посилання на оновлення ще не задано — натисни «Перевірити оновлення» й встав посилання від автора."
             else "Нові версії беруться з Google Диска автора. Записи, історія й налаштування лишаються.",
             13.5f,
         ))
-        addView(ui.button("Перевірити оновлення", Ui.Kind.PRIMARY) { check(quiet = false) }, ui.matchWrap())
+        addView(ui.iconButton(LineIcon.CLOUD, "Перевірити оновлення", Ui.Kind.PRIMARY) { check(quiet = false) }, ui.matchWrap())
         if (manifestId() != null) {
             // T54: змінити посилання можна завжди, а не лише після помилки перевірки.
             addView(ui.button("Інше посилання на оновлення", Ui.Kind.QUIET) { askForLink() }, ui.matchWrap())

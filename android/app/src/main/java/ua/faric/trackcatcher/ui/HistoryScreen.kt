@@ -263,7 +263,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 pane.addView(detailView(selected, inDialog = false), ui.matchWrap())
             } else {
                 pane.addView(ui.card(8).apply {
-                    addView(ui.label("Подробиці"))
+                    addView(ui.label("Подробиці", LineIcon.LIST))
                     addView(ui.muted("Вибери запис ліворуч — тут буде все про нього: тривалість, формат, файл, чому неповний. І плеєр: ⏮ ▶ ⏭, «Поділитись».", 14f))
                 }, ui.matchWrap())
             }

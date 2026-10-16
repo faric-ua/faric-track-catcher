@@ -55,7 +55,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val npExtra = ui.numbers(ui.text("", 13f, Palette.faint)).apply { maxLines = 2 }
 
     private val mainButton = ui.button("", Ui.Kind.REC, large = true) { onMain() }
-    private val nightButton = ui.button("☾\uFE0E Нічний екран — щоб телефон не заблокувався", Ui.Kind.PRIMARY) { host.showNightScreen() }
+    private val nightButton = ui.iconButton(LineIcon.MOON, "Нічний екран — щоб телефон не заблокувався", Ui.Kind.PRIMARY) { host.showNightScreen() }
     private val nightHint = ui.text(
         "Android 15+ зупиняє запис, коли екран блокується. Увімкни музику, повернись сюди й натисни «Нічний екран» — " +
             "екран стане чорним і майже без підсвітки, а запис ітиме далі.",
@@ -67,7 +67,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         setOnClickListener { host.showTab(MainActivity.Tab.SETTINGS) }
     }
     private val permsSlot = FrameLayout(host)
-    private val guideButton = ui.button("Як записувати — інструкція", Ui.Kind.QUIET) { GuideActivity.open(host, "record") }
+    private val guideButton = ui.iconButton(LineIcon.BOOK, "Як записувати — інструкція", Ui.Kind.QUIET) { GuideActivity.open(host, "record") }
     private val recentCard = ui.card(10)
     /** «Цей запис»: свій альбом (T39) і «Зупинитись після N пісень» (T40). */
     private val planCard = ui.card(10)
@@ -89,11 +89,11 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         errorBox.addView(ui.button("Зрозуміло", Ui.Kind.QUIET) { RecorderHub.update { it.copy(error = null) } }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
-        recentCard.addView(ui.label("Ця сесія"))
+        recentCard.addView(ui.label("Ця сесія", LineIcon.LIST))
         recentCard.addView(recentList)
 
         val statusCard = ui.card(10).apply {
-            addView(ui.label("Стан"))
+            addView(ui.label("Стан", LineIcon.REC))
             addView(statusTitle)
             addView(statusSub)
             addView(meter, ui.matchWrap())
@@ -102,7 +102,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             addView(errorBox)
         }
         val nowCard = ui.card(10).apply {
-            addView(ui.label("Зараз грає"))
+            addView(ui.label("Зараз грає", LineIcon.PLAY))
             val r = ui.row(14)
             val artBox = FrameLayout(host)
             artBox.addView(art, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -222,7 +222,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         if (key == planKey) return
         planKey = key
         planCard.removeAllViews()
-        planCard.addView(ui.label("Цей запис"))
+        planCard.addView(ui.label("Цей запис", LineIcon.DISC))
 
         planCard.addView(ui.title("Альбом", 15.5f))
         val albumRow = FlowLayout(host, ui.dp(8), ui.dp(8))

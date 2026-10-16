@@ -46,7 +46,7 @@ object PermissionsCard {
         )
         if (!alwaysShow && items.all { it.done }) return null
         val card = ui.card(12)
-        card.addView(ui.label(if (items.all { it.done }) "Дозволи — усе готово" else "Що дозволити"))
+        card.addView(ui.label(if (items.all { it.done }) "Дозволи — усе готово" else "Що дозволити", LineIcon.KEY))
         for (item in items) card.addView(itemView(host, item))
         return card
     }

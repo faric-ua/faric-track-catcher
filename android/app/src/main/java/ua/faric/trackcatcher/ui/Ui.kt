@@ -56,9 +56,13 @@ class Ui(val ctx: Context) {
 
     fun muted(s: CharSequence, sizeSp: Float = 13f): TextView = text(s, sizeSp, Palette.muted)
 
-    /** Підпис розділу: дрібні великі літери з розрядкою. */
-    fun label(s: String): TextView = text(s.uppercase(), 11.5f, Palette.muted, medium = true).apply {
+    /** Підпис розділу: дрібні великі літери з розрядкою; [icon] — бурштиновий значок перед ним (T58). */
+    fun label(s: String, icon: LineIcon? = null): TextView = text(s.uppercase(), 11.5f, Palette.muted, medium = true).apply {
         letterSpacing = 0.08f
+        if (icon != null) {
+            text = iconText(icon, s.uppercase(), Palette.accent, sizeDp = 17)
+            contentDescription = s
+        }
     }
 
     fun numbers(tv: TextView): TextView = tv.apply { fontFeatureSettings = "tnum" }
@@ -137,6 +141,13 @@ class Ui(val ctx: Context) {
             styleButton(this, kind)
         }
 
+    /** Кнопка зі значком перед підписом (значок — кольору тексту кнопки). */
+    fun iconButton(icon: LineIcon, label: String, kind: Kind = Kind.NORMAL, large: Boolean = false, onClick: () -> Unit): TextView =
+        button(label, kind, large, onClick).apply {
+            text = iconText(icon, label, currentTextColor, sizeDp = if (large) 22 else 19)
+            contentDescription = label
+        }
+
     fun styleButton(b: TextView, kind: Kind) {
         val (fill, stroke, color) = when (kind) {
             Kind.PRIMARY -> Triple(Palette.accentFill, Palette.accent, Palette.accent)
@@ -180,7 +191,7 @@ class Ui(val ctx: Context) {
             else rounded(Palette.surfaceAlt, Palette.border, radiusDp = 12),
             12,
         )
-        val base = v.text.toString().removeSuffix(SELECTED_SUFFIX)
+        val base = plainLabel(v.text).removeSuffix(SELECTED_SUFFIX)
         v.contentDescription = if (selected) base + SELECTED_SUFFIX else base
     }
 

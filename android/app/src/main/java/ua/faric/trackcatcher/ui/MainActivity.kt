@@ -37,10 +37,11 @@ import ua.faric.trackcatcher.state.RecorderHub
  * (вкладка, фільтр, пошук, вибраний запис, відкрите вікно) відновлюється, а запис іде у фоні.
  */
 class MainActivity : Activity() {
-    enum class Tab(val label: String, val glyph: String) {
-        RECORD("Запис", "●"),
-        HISTORY("Історія", "☰"),
-        SETTINGS("Налаштування", "⚙︎"),
+    /** Вкладки; значки — ті самі, що в інструкції (T58). */
+    enum class Tab(val label: String, val icon: LineIcon) {
+        RECORD("Запис", LineIcon.REC),
+        HISTORY("Історія", LineIcon.LIST),
+        SETTINGS("Налаштування", LineIcon.SLIDERS),
     }
 
     lateinit var ui: Ui
@@ -150,11 +151,12 @@ class MainActivity : Activity() {
             }
             rail.addView(brand(vertical = true), ui.matchWrap())
             for (t in Tab.entries) {
-                val b = ui.choice("${t.glyph}\n${t.label}", t == tab) { showTab(t) }.apply {
+                val b = ui.choice(t.label, t == tab) { showTab(t) }.apply {
                     textSize = 13f
                     oneLineLabel(this)
                     setPadding(ui.dp(6), ui.dp(8), ui.dp(6), ui.dp(8))
                 }
+                tabLabel(b, t, t == tab)
                 tabButtons[t] = b
                 rail.addView(b, ui.matchWrap())
             }
@@ -181,11 +183,12 @@ class MainActivity : Activity() {
                 setBackgroundColor(Palette.surface)
             }
             for (t in Tab.entries) {
-                val b = ui.choice("${t.glyph}\n${t.label}", t == tab) { showTab(t) }.apply {
+                val b = ui.choice(t.label, t == tab) { showTab(t) }.apply {
                     textSize = 12.5f
                     oneLineLabel(this)
                     setPadding(ui.dp(4), ui.dp(6), ui.dp(4), ui.dp(6))
                 }
+                tabLabel(b, t, t == tab)
                 tabButtons[t] = b
                 bar.addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             }
@@ -211,6 +214,12 @@ class MainActivity : Activity() {
      * Вкладка: значок + підпис в ОДИН рядок; не влазить — «Налашту…» (власник, 13.10 20:11).
      * Повна назва лишається для озвучування.
      */
+    /** Значок над назвою вкладки; вибрана — світліший значок і зелена рамка. */
+    private fun tabLabel(b: TextView, t: Tab, selected: Boolean) {
+        b.text = ui.iconText(t.icon, t.label, if (selected) Palette.text else Palette.muted, sizeDp = 22, above = true)
+        ui.styleChoice(b, selected)
+    }
+
     private fun oneLineLabel(tv: TextView) {
         tv.maxLines = 2
         tv.ellipsize = android.text.TextUtils.TruncateAt.END
@@ -247,7 +256,7 @@ class MainActivity : Activity() {
         screen = s
         content.removeAllViews()
         content.addView(s.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        tabButtons.forEach { (k, v) -> ui.styleChoice(v, k == t) }
+        tabButtons.forEach { (k, v) -> tabLabel(v, k, k == t) }
         renderChip(RecorderHub.state)
         if (started) {
             s.onStart()

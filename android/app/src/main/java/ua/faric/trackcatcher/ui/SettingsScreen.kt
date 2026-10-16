@@ -39,16 +39,16 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     init {
         val folderCard = ui.card(10).apply {
-            addView(ui.label("Куди зберігається"))
+            addView(ui.label("Куди зберігається", LineIcon.FOLDER))
             addView(folderTitle)
             addView(folderHint)
             addView(albumSlot)
             addView(folderButtons, ui.matchWrap())
         }
         val aboutCard = ui.card(8).apply {
-            addView(ui.label("Про застосунок"))
+            addView(ui.label("Про застосунок", LineIcon.INFO))
             addView(ui.title("Track Catcher ${BuildConfig.VERSION_NAME}", 17f))
-            addView(ui.button("Інструкція користувача", Ui.Kind.PRIMARY) { GuideActivity.open(host) }, wrap())
+            addView(ui.iconButton(LineIcon.BOOK, "Інструкція користувача", Ui.Kind.PRIMARY) { GuideActivity.open(host) }, wrap())
             addView(ui.numbers(ui.muted("Збірка ${BuildConfig.VERSION_CODE}", 13f)))
             addView(ui.muted("Записує звук, який грає телефон, і ріже його на пісні за назвою зі шторки. " +
                 "Записи лишаються на телефоні й нікуди не передаються: без реклами й аналітики. Інтернет — лише для перевірки оновлень " +
@@ -87,13 +87,13 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         val locked = RecorderHub.state.phase != RecorderHub.Phase.IDLE
 
         formatCard.removeAllViews()
-        formatCard.addView(ui.label("Формат файлів"))
+        formatCard.addView(ui.label("Формат файлів", LineIcon.FILE))
         formatCard.addView(flow(OutputFormat.entries.map { f -> ui.choice(f.label, v.format == f) { settings.format = f; renderChoices() } }))
         formatCard.addView(ui.muted(formatHint(v), 13.5f))
         if (locked) formatCard.addView(ui.text("Зміни почнуть діяти з наступного запису.", 12.5f, Palette.warning))
 
         qualityCard.removeAllViews()
-        qualityCard.addView(ui.label("Якість MP3"))
+        qualityCard.addView(ui.label("Якість MP3", LineIcon.BARS))
         val q = flow(Mp3Encoder.BITRATES.map { kbps -> ui.choice("$kbps кбіт/с", v.mp3Bitrate == kbps) { settings.mp3Bitrate = kbps; renderChoices() } })
         qualityCard.addView(q)
         qualityCard.addView(ui.muted("320 — на слух майже як оригінал. 192 — добре й удвічі менше місця.", 13.5f))
@@ -101,7 +101,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         for (i in 0 until q.childCount) q.getChildAt(i).isEnabled = v.format.mp3
 
         lengthCard.removeAllViews()
-        lengthCard.addView(ui.label("Коротші не зберігати"))
+        lengthCard.addView(ui.label("Коротші не зберігати", LineIcon.CUT))
         lengthCard.addView(flow(Settings.MIN_LENGTH_CHOICES.map { sec ->
             ui.choice(if (sec == 0) "Зберігати все" else "$sec с", v.minLengthSec == sec) { settings.minLengthSec = sec; renderChoices() }
         }))
@@ -133,7 +133,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         ))
 
         repeatCard.removeAllViews()
-        repeatCard.addView(ui.label("Якщо пісня вже є"))
+        repeatCard.addView(ui.label("Якщо пісня вже є", LineIcon.REPEAT))
         repeatCard.addView(flow(RepeatPolicy.entries.map { p -> ui.choice(p.label, v.repeat == p) { settings.repeat = p; renderChoices() } }))
         repeatCard.addView(ui.muted(
             if (v.repeat == RepeatPolicy.SKIP) "Якщо в історії вже є повний запис цієї пісні — новий не зберігається."
@@ -158,7 +158,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     /** «Краї пісні» (faric 14.10 05:29–05:31): зрізати по 1 с, наростання/затухання, зсув розрізу. */
     private fun renderEdges(v: Settings.Values) {
         edgesCard.removeAllViews()
-        edgesCard.addView(ui.label("Краї пісні"))
+        edgesCard.addView(ui.label("Краї пісні", LineIcon.EDGES))
         edgesCard.addView(ui.muted("Діє з наступного запису.", 13f))
 
         edgesCard.addView(ui.title("Зрізати по 1 с на початку й у кінці", 15.5f))
@@ -211,7 +211,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
         folderHint.setTextColor(if (ok) Palette.muted else Palette.warning)
         folderButtons.removeAllViews()
-        folderButtons.addView(ui.button("Відкрити папку", Ui.Kind.NORMAL) { openFolder() })
+        folderButtons.addView(ui.iconButton(LineIcon.FOLDER, "Відкрити папку", Ui.Kind.NORMAL) { openFolder() })
         folderButtons.addView(ui.button(if (tree == null) "Вибрати свою папку" else "Змінити папку", Ui.Kind.PRIMARY) { host.pickFolder() })
         if (tree != null) folderButtons.addView(ui.button("Повернути «Музику»", Ui.Kind.QUIET) { host.resetFolder() })
     }
