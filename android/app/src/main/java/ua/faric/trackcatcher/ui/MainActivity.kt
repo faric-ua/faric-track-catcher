@@ -216,7 +216,7 @@ class MainActivity : Activity() {
      */
     /** Значок над назвою вкладки; вибрана — світліший значок і зелена рамка. */
     private fun tabLabel(b: TextView, t: Tab, selected: Boolean) {
-        b.text = ui.iconText(t.icon, t.label, if (selected) Palette.text else Palette.muted, sizeDp = 22, above = true)
+        b.text = ui.iconText(t.icon, t.label, if (selected) Palette.text else Palette.muted, sizeDp = LineIcon.TAB_DP, above = true)
         ui.styleChoice(b, selected)
     }
 
