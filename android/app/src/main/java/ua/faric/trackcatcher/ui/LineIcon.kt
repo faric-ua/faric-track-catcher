@@ -53,7 +53,13 @@ enum class LineIcon(vararg val parts: Part) {
 
     companion object {
         /** Символ, на місці якого в тексті стоїть значок ([iconText]). */
-        const val OBJ = '￼'
+        const val OBJ = '\uFFFC'
+
+        // Розміри значків, dp. faric 16.10 16:25: «значки класно, але збільшуємо відсотків на 60–70» (було 22 / 17 / 19 / 22).
+        const val TAB_DP = 36
+        const val LABEL_DP = 28
+        const val BUTTON_DP = 31
+        const val BUTTON_LARGE_DP = 36
 
         fun toPath(segs: List<SvgPath.Seg>): Path = Path().apply {
             for (s in segs) when (s) {
