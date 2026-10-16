@@ -39,6 +39,17 @@ class GuideTests(unittest.TestCase):
         for section in re.findall(r'GuideActivity\.open\(host, "([^"]+)"\)', kotlin):
             self.assertRegex(self.html, rf'<section id="{section}" class="page"')
 
+    def test_app_icons_match_guide(self):
+        # T58: значки застосунку (ui/LineIcon.kt) — ті самі шляхи, що в інструкції.
+        kt = (ROOT / "android/app/src/main/java/ua/faric/trackcatcher/ui/LineIcon.kt").read_text(encoding="utf-8")
+        sprite = self.html[self.html.index('<svg width="0"'):self.html.index("</svg>", self.html.index('<svg width="0"'))]
+        names = {"i-key", "i-rec", "i-moon", "i-list", "i-disc", "i-shield", "i-cut", "i-play", "i-folder", "i-format", "i-edges", "i-cloud", "i-help"}
+        for sym in re.finditer(r'<symbol id="([^"]+)"[^>]*>(.*?)</symbol>', sprite, re.S):
+            if sym.group(1) not in names:
+                continue
+            for d in re.findall(r'<path d="([^"]+)"', sym.group(2)):
+                self.assertIn(f'"{d}"', kt, f"{sym.group(1)}: {d}")
+
     def test_images_exist_and_offline(self):
         for src in re.findall(r'src="([^"]+)"', self.html):
             self.assertFalse(src.startswith("http"), src)
