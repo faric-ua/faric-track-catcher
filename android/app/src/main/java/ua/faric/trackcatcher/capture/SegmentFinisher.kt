@@ -51,7 +51,7 @@ class SegmentFinisher(context: Context) {
         }
         val savable = verdict.status == RecStatus.COMPLETE || verdict.status == RecStatus.PARTIAL
         if (savable && settings.repeat == RepeatPolicy.SKIP && !job.meta.isUnknown &&
-            db.hasComplete(job.meta.artist, job.meta.title)
+            db.hasComplete(job.meta.artist, job.meta.title, job.meta.durationMs)
         ) {
             verdict = Verdict(RecStatus.SKIPPED, listOf("вже є повний запис цієї пісні"))
         }

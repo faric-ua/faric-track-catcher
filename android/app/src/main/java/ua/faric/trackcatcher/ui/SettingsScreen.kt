@@ -30,6 +30,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val qualityCard = ui.card(12)
     private val lengthCard = ui.card(12)
     private val repeatCard = ui.card(12)
+    private val soundCard = ui.card(12)
     private val edgesCard = ui.card(12)
     private val permsSlot = FrameLayout(host)
     private val albumSlot = ui.column(8)
@@ -57,11 +58,11 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             addView(ui.text("github.com/faric-ua/faric-track-catcher", 12.5f, Palette.faint))
         }
         val updateCard = UpdateUi(host).card()
-        val all = listOf(formatCard, qualityCard, lengthCard, repeatCard, edgesCard, folderCard, permsSlot, updateCard, aboutCard)
+        val all = listOf(formatCard, qualityCard, lengthCard, repeatCard, soundCard, edgesCard, folderCard, permsSlot, updateCard, aboutCard)
         view = if (ui.twoPane) {
             val left = ui.column(12)
             val right = ui.column(12)
-            listOf(formatCard, qualityCard, lengthCard, repeatCard, edgesCard).forEach { left.addView(it, ui.matchWrap()) }
+            listOf(formatCard, qualityCard, lengthCard, repeatCard, soundCard, edgesCard).forEach { left.addView(it, ui.matchWrap()) }
             listOf(folderCard, permsSlot, updateCard, aboutCard).forEach { right.addView(it, ui.matchWrap()) }
             ui.scroll(ui.row(12).apply {
                 gravity = Gravity.TOP
@@ -140,6 +141,20 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             else "Кожен раз — новий файл з номером «(2)», «(3)»…",
             13.5f,
         ))
+
+        // T43 (faric 14.10 19:48: «приходять повідомлення — звук буль-буль — і додаток їх записує»).
+        soundCard.removeAllViews()
+        soundCard.addView(ui.label("Звук для запису", LineIcon.SHIELD))
+        soundCard.addView(flow(listOf(true to "Лише плеєр", false to "Усе, що грає").map { (on, text) ->
+            ui.choice(text, v.onlyPlayer == on) { settings.onlyPlayer = on; renderChoices() }
+        }))
+        soundCard.addView(ui.muted(
+            if (v.onlyPlayer) "Пишеться лише звук плеєра, чия пісня в шторці. Звуки повідомлень, TikTok, YouTube у файл не потраплять. " +
+                "Плеєр не видно в шторці — пишеться все, як раніше."
+            else "Пишеться все, що телефон грає як «медіа»: і звуки повідомлень, і інші відео. Вибери, якщо плеєр «Лише плеєр» не записується.",
+            13.5f,
+        ))
+        if (locked) soundCard.addView(ui.text("Зміни почнуть діяти з наступного запису.", 12.5f, Palette.warning))
     }
 
     private fun formatHint(v: Settings.Values): String {
@@ -181,7 +196,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             when {
                 v.cutShiftMs > 0 -> "Розріз пізніше: якщо на початку файлу чути кінець попередньої пісні."
                 v.cutShiftMs < 0 -> "Розріз раніше: якщо в кінці файлу чути початок наступної пісні."
-                else -> "«+» — якщо на початку чути кінець попередньої пісні; «−» — якщо в кінці чути початок наступної."
+                else -> "«0» — найкраща точка, знайдена на телефоні (колишні +0,5 с). «+» — якщо на початку чути кінець попередньої пісні; «−» — якщо в кінці чути початок наступної."
             },
             13.5f,
         ))
