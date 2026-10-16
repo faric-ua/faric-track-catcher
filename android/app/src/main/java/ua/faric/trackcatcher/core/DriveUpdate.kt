@@ -37,6 +37,10 @@ object DriveUpdate {
      * Які файли версії пробувати по черзі: вставлене зараз — лише його; інакше збережене, потім
      * вбудоване в застосунок (якщо збережене виявиться не тим файлом).
      */
+    /** З прочитаних файлів версії — з найбільшим versionCode; при рівних — перший (збережене раніше за вбудоване). */
+    fun newest(read: List<Pair<String, Manifest>>): Pair<String, Manifest>? =
+        read.fold(null as Pair<String, Manifest>?) { best, cur -> if (best == null || cur.second.versionCode > best.second.versionCode) cur else best }
+
     fun manifestCandidates(pasted: String?, saved: String?, builtIn: String): List<String> =
         if (!pasted.isNullOrBlank()) listOf(pasted)
         else listOfNotNull(saved?.takeIf { it.isNotBlank() }, builtIn.takeIf { it.isNotBlank() }).distinct()

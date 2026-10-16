@@ -427,24 +427,29 @@ class UpdateUi(private val host: MainActivity) {
         val pkg = host.packageName
         val store = prefs
         Thread({
+            // Пробуємо всі кандидати (збережене посилання і вбудоване) і беремо найновішу версію (T56, 16.10):
+            // на M30s збережене посилання вело на старий файл версії (застряг на 0.1.15) і перекривало вбудоване —
+            // телефон чесно казав «у тебе новіша». Збережене, що старіше за вбудоване або зникло, — забуваємо.
             var manifest: DriveUpdate.Manifest? = null
             var problem: String? = null
+            val read = ArrayList<Pair<String, DriveUpdate.Manifest>>()
             for (id in candidates) {
                 try {
-                    manifest = DriveUpdate.Manifest.parse(DriveHttp.readText(id, 64 * 1024))
-                    if (pasted != null) store.edit().putString(KEY_MANIFEST_ID, id).apply()
-                    problem = null
-                    break
+                    read += id to DriveUpdate.Manifest.parse(DriveHttp.readText(id, 64 * 1024))
                 } catch (e: DriveUpdate.WrongFileException) {
                     problem = e.message
                     if (pasted == null && id == saved) store.edit().remove(KEY_MANIFEST_ID).apply()
                 } catch (e: IllegalArgumentException) {
                     problem = e.message
-                    break
                 } catch (e: Exception) {
                     problem = e.message ?: "Немає зв'язку з Google Диском."
-                    break
                 }
+            }
+            DriveUpdate.newest(read)?.let { (id, m) ->
+                manifest = m
+                problem = null
+                if (pasted != null) store.edit().putString(KEY_MANIFEST_ID, id).apply()
+                else if (saved != null && id != saved) store.edit().remove(KEY_MANIFEST_ID).apply()
             }
             Updater.busy = false
             val found = manifest
