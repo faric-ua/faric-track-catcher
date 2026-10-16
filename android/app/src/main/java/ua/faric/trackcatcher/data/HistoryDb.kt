@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import java.util.concurrent.CopyOnWriteArrayList
 import ua.faric.trackcatcher.core.RecStatus
+import ua.faric.trackcatcher.core.TrackMeta
 
 data class RecordingRow(
     val id: Long = 0,
@@ -164,10 +165,15 @@ class HistoryDb private constructor(context: Context) :
             }
         }
 
-    fun hasComplete(artist: String, title: String): Boolean =
+    /**
+     * Чи вже є повний запис цієї пісні. T18 (faric 13.10: в альбомі кілька різних пісень з однаковою назвою) —
+     * однакова назва ще не та сама пісня: якщо тривалість відома з обох боків і різниться більш як на 2 с — інша.
+     */
+    fun hasComplete(artist: String, title: String, durationMs: Long = 0L): Boolean =
         readableDatabase.rawQuery(
-            "SELECT 1 FROM recordings WHERE status=? AND lower(trim(artist))=? AND lower(trim(title))=? AND (mp3_uri IS NOT NULL OR wav_uri IS NOT NULL) LIMIT 1",
-            arrayOf(RecStatus.COMPLETE.code, artist.trim().lowercase(), title.trim().lowercase()),
+            "SELECT 1 FROM recordings WHERE status=? AND lower(trim(artist))=? AND lower(trim(title))=? AND (mp3_uri IS NOT NULL OR wav_uri IS NOT NULL)" +
+                " AND (? <= 0 OR duration_ms <= 0 OR abs(duration_ms - ?) <= ${TrackMeta.DURATION_TOLERANCE_MS}) LIMIT 1",
+            arrayOf(RecStatus.COMPLETE.code, artist.trim().lowercase(), title.trim().lowercase(), durationMs.toString(), durationMs.toString()),
         ).use { it.moveToFirst() }
 
     /** Видалити записи з історії (власник вибрав і підтвердив — T38). */

@@ -1,6 +1,7 @@
 package ua.faric.trackcatcher.data
 
 import android.content.Context
+import ua.faric.trackcatcher.core.CutShift
 import ua.faric.trackcatcher.core.OutputFormat
 import ua.faric.trackcatcher.core.RepeatPolicy
 
@@ -29,6 +30,8 @@ class Settings(context: Context) {
         val treeUri: String = "",
         /** Без смайликів у назвах файлів і папок (T36); теги — як є. */
         val plainNames: Boolean = true,
+        /** Писати лише звук плеєра, чия пісня в шторці (T43); false — усе, що грає як «медіа». */
+        val onlyPlayer: Boolean = true,
     ) {
         val label: String
             get() = when (format) {
@@ -68,9 +71,21 @@ class Settings(context: Context) {
         get() = prefs.getInt(KEY_FADE_MS, 500)
         set(v) = prefs.edit().putInt(KEY_FADE_MS, v).apply()
 
+    /** «Зсув розрізу» від еталона: 0 = колишні +0,5 с (T42, [CutShift]). */
     var cutShiftMs: Int
-        get() = prefs.getInt(KEY_CUT_SHIFT_MS, 0)
-        set(v) = prefs.edit().putInt(KEY_CUT_SHIFT_MS, v).apply()
+        get() {
+            migrateCutShift()
+            return prefs.getInt(KEY_CUT_SHIFT_MS, 0)
+        }
+        set(v) = prefs.edit().putInt(KEY_CUT_SHIFT_MS, v).putBoolean(KEY_CUT_SHIFT_V2, true).apply()
+
+    /** Один раз після оновлення до 0.1.25: збережений зсув — від нового нуля, щоб розріз не з'їхав на +0,5 с. */
+    private fun migrateCutShift() {
+        if (prefs.getBoolean(KEY_CUT_SHIFT_V2, false)) return
+        val e = prefs.edit().putBoolean(KEY_CUT_SHIFT_V2, true)
+        if (prefs.contains(KEY_CUT_SHIFT_MS)) e.putInt(KEY_CUT_SHIFT_MS, CutShift.migrate(prefs.getInt(KEY_CUT_SHIFT_MS, 0)))
+        e.apply()
+    }
 
     /** Свій альбом увімкнено (назва лишається в пам'яті, навіть коли вимкнено). */
     var useCustomAlbum: Boolean
@@ -91,7 +106,12 @@ class Settings(context: Context) {
         stopAfter = stopAfter,
         treeUri = treeUri,
         plainNames = plainNames,
+        onlyPlayer = onlyPlayer,
     )
+
+    var onlyPlayer: Boolean
+        get() = prefs.getBoolean(KEY_ONLY_PLAYER, true)
+        set(v) = prefs.edit().putBoolean(KEY_ONLY_PLAYER, v).apply()
 
     var plainNames: Boolean
         get() = prefs.getBoolean(KEY_PLAIN_NAMES, true)
@@ -115,10 +135,12 @@ class Settings(context: Context) {
         private const val KEY_STOP_AFTER = "stop_after"
         private const val KEY_TREE = "tree_uri"
         private const val KEY_PLAIN_NAMES = "plain_names"
+        private const val KEY_CUT_SHIFT_V2 = "cut_shift_v2"
+        private const val KEY_ONLY_PLAYER = "only_player"
         const val MAX_STOP_AFTER = 999
         const val TRIM_EDGE_MS = 1_000
         val FADE_CHOICES = listOf(0, 100, 250, 500, 1_000, 2_000)
-        val SHIFT_CHOICES = listOf(-1_000, -500, -200, 0, 200, 500, 1_000)
+        val SHIFT_CHOICES = CutShift.CHOICES
         val MIN_LENGTH_CHOICES = listOf(0, 15, 30, 45, 60)
     }
 }

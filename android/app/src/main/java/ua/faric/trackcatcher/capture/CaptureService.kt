@@ -26,6 +26,7 @@ import java.util.concurrent.LinkedBlockingQueue
 import ua.faric.trackcatcher.R
 import ua.faric.trackcatcher.TrackCatcherApp
 import ua.faric.trackcatcher.core.GapDetector
+import ua.faric.trackcatcher.core.CutShift
 import ua.faric.trackcatcher.core.Pcm
 import ua.faric.trackcatcher.core.TimeText
 import ua.faric.trackcatcher.core.TrackMeta
@@ -48,6 +49,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     private var tracker: NowPlayingTracker? = null
     private var queue: FinisherQueue? = null
     private var settings: Settings.Values? = null
+    /** Плеєр, лише чий звук пишеться (T43); null — пишеться все «медіа». */
+    private var capturedPackage: String? = null
     private val events = ConcurrentLinkedQueue<TrackEvent>()
 
     @Volatile private var running = false
@@ -174,10 +177,17 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         }, main)
         projection = proj
 
+        // T43: лише звук плеєра, чия пісня в шторці (без «буль-буль» повідомлень і чужих відео).
+        // Плеєра не видно або Android його не показує — як раніше, усе «медіа».
+        val onlyPlayer = Settings(this).onlyPlayer
+        val playerPkg = if (onlyPlayer) currentPlayerPackage() else null
+        val playerUid = playerPkg?.let { pkg -> runCatching { packageManager.getApplicationInfo(pkg, 0).uid }.getOrNull() }
+        capturedPackage = if (playerUid != null) playerPkg else null
         val config = AudioPlaybackCaptureConfiguration.Builder(proj)
             .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
             .addMatchingUsage(AudioAttributes.USAGE_GAME)
             .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
+            .apply { if (playerUid != null) addMatchingUid(playerUid) }
             .build()
         val format = AudioFormat.Builder()
             .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
@@ -217,7 +227,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         recoverOrphans(stopWhenNothing = false)
 
         val segmentsDir = segmentsDir(this)
-        val splitter = TrackSplitter(FileSegmentSink(segmentsDir, sessionId) { job -> queue?.submit(job, values) }, shiftMs = values.cutShiftMs)
+        val splitter = TrackSplitter(FileSegmentSink(segmentsDir, sessionId) { job -> queue?.submit(job, values) }, shiftMs = CutShift.effective(values.cutShiftMs))
 
         val t = NowPlayingTracker(this, this, watchLoops = true)
         tracker = t
@@ -392,9 +402,15 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         val playing = !playerPaused && tracker?.hasPlayer == true
         val quietSec = (now - lastLoudAt) / 1000
         val app = appName(RecorderHub.state.meta?.sourcePackage)
+        val nowPkg = tracker?.sourcePackage
+        val only = capturedPackage
         val warn = when {
             noDataSec >= 3 -> "Android не віддає звук уже $noDataSec с (жодного шматка). Зупини запис і почни знову."
-            playing && quietSec >= 5 -> "$app грає, а звук порожній уже $quietSec с — схоже, $app не дає себе записувати. Спробуй інший плеєр."
+            only != null && nowPkg != null && nowPkg != only ->
+                "Пишеться лише звук «${appName(only)}», а зараз грає «${appName(nowPkg)}» — його звук не потрапить у файл. " +
+                    "Зупини запис і почни знову (або «Налаштування» → «Звук для запису» → «Усе, що грає»)."
+            playing && quietSec >= 5 -> "$app грає, а звук порожній уже $quietSec с — схоже, $app не дає себе записувати. " +
+                (if (only != null) "Спробуй «Налаштування» → «Звук для запису» → «Усе, що грає» або інший плеєр." else "Спробуй інший плеєр.")
             else -> null
         }
         val level = if (lastDb <= Pcm.SILENT_DB + 1) "тиша" else "%d dB".format(Math.round(lastDb))
@@ -404,9 +420,22 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         val player = if (pos == null) "" else " · плеєр ${TimeText.clock(pos)}" + (if (dur > 0) " з ${TimeText.clock(dur)}" else "")
         val lost = if (gaps > 0 || dropped > 0) " · пропусків ${gaps + dropped} (~${lostMs + dropped * 100L} мс)" else " · пропусків 0"
         val lag = readerLagMs.let { if (it >= 0) " · затримка $it мс" else "" }
-        val diag = "Звук від Android: ${Pcm.framesToMs(framesRead) / 1000} с отримано · рівень $level$player$lost$lag"
+        val source = only?.let { " · лише ${appName(it)}" } ?: ""
+        val diag = "Звук від Android: ${Pcm.framesToMs(framesRead) / 1000} с отримано$source · рівень $level$player$lost$lag"
         if (warn != RecorderHub.state.warning || diag != RecorderHub.state.diag) {
             RecorderHub.update { it.copy(warning = warn, diag = diag) }
+        }
+    }
+
+    /** Який плеєр зараз у шторці (перед стартом запису): грає — він, інакше перший видимий. */
+    private fun currentPlayerPackage(): String? {
+        val probe = NowPlayingTracker(this, object : NowPlayingTracker.Listener {
+            override fun onTrack(meta: TrackMeta, positionMs: Long?, restart: Boolean) {}
+        })
+        return try {
+            if (probe.start() && probe.hasPlayer) probe.sourcePackage?.takeIf { it != packageName } else null
+        } finally {
+            probe.stop()
         }
     }
 

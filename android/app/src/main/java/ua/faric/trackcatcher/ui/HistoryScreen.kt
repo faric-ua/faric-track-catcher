@@ -432,6 +432,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
         if (r.sourcePackage.isNotBlank()) facts.addView(ui.fact("Плеєр", appLabel(r.sourcePackage)))
         facts.addView(ui.fact("Коли", TimeText.dateTime(r.createdAt)))
+        if (r.id > 0) facts.addView(ui.fact("Запис №", r.id.toString())) // T18: свій номер, навіть коли назви однакові
         box.addView(facts, ui.matchWrap())
 
         // Плеєр (v0.1.17, faric 15.10 15:36): одразу видно смугу й ⏮ ▶ ⏭; ⏮/⏭ — сусідні записи історії.
