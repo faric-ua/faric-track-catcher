@@ -99,6 +99,27 @@ class MediaStoreWriter(context: Context) : AudioStore {
         null
     }
 
+    /** Папка файлу в «Музиці» (RELATIVE_PATH, напр. «Music/Track Catcher/Neon/»); файл зі своєї папки — null. */
+    fun relativePath(uri: String): String? = try {
+        val u = Uri.parse(uri)
+        if (isDocument(u)) null else resolver.query(u, arrayOf(MediaStore.MediaColumns.RELATIVE_PATH), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+    } catch (e: Exception) {
+        null
+    }
+
+    /** Розмір файлу в байтах (0 — невідомо). */
+    fun sizeOf(uri: String): Long = try {
+        val u = Uri.parse(uri)
+        val col = if (isDocument(u)) DocumentsContract.Document.COLUMN_SIZE else MediaStore.MediaColumns.SIZE
+        resolver.query(u, arrayOf(col), null, null, null)?.use { c -> if (c.moveToFirst()) c.getLong(0) else 0L } ?: 0L
+    } catch (e: Exception) {
+        0L
+    }
+
+    fun isDocumentUri(uri: String): Boolean = runCatching { isDocument(Uri.parse(uri)) }.getOrDefault(false)
+
     private fun isDocument(u: Uri) = DocumentsContract.isDocumentUri(app, u)
 
     /** Чи файл ще є (його могли прибрати в «Моїх файлах»). Працює і для своєї папки (T29). */

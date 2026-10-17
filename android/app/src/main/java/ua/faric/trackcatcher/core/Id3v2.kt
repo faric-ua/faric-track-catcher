@@ -13,6 +13,10 @@ object Id3v2 {
         if (meta.title.isNotBlank()) frames.write(textFrame("TIT2", meta.title.trim()))
         if (meta.artist.isNotBlank()) frames.write(textFrame("TPE1", meta.artist.trim()))
         if (meta.album.isNotBlank()) frames.write(textFrame("TALB", meta.album.trim()))
+        // T68: виконавець альбому, номер, рік (ID3 2.3: TPE2, TRCK, TYER).
+        if (meta.artist.isNotBlank() && meta.album.isNotBlank()) frames.write(textFrame("TPE2", meta.artist.trim()))
+        if (meta.trackNo > 0) frames.write(latinFrame("TRCK", meta.trackNo.toString()))
+        if (meta.year > 0) frames.write(latinFrame("TYER", meta.year.toString()))
         if (lengthMs > 0) frames.write(latinFrame("TLEN", lengthMs.toString()))
         frames.write(latinFrame("TSSE", "Track Catcher"))
         for ((name, value) in extra) frames.write(userFrame(name, value))

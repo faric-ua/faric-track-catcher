@@ -348,6 +348,10 @@ class FlacEncoder(
             if (meta.title.isNotBlank()) add("TITLE" to meta.title.trim())
             if (meta.artist.isNotBlank()) add("ARTIST" to meta.artist.trim())
             if (meta.album.isNotBlank()) add("ALBUM" to meta.album.trim())
+            // T68: виконавець альбому — щоб плеєр не розбивав альбом; номер і рік.
+            if (meta.artist.isNotBlank() && meta.album.isNotBlank()) add("ALBUMARTIST" to meta.artist.trim())
+            if (meta.trackNo > 0) add("TRACKNUMBER" to meta.trackNo.toString())
+            if (meta.year > 0) add("DATE" to meta.year.toString())
             add("ENCODER" to VENDOR)
         }
     }

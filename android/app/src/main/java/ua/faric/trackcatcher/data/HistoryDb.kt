@@ -148,6 +148,24 @@ class HistoryDb private constructor(context: Context) :
         return readableDatabase.rawQuery(sql, args.toTypedArray()).use { c -> buildList { while (c.moveToNext()) add(row(c)) } }
     }
 
+    /** Записи однієї сесії від першого до останнього (номер пісні в альбомі, T68). */
+    fun sessionRows(sessionId: Long): List<RecordingRow> =
+        readableDatabase.rawQuery("SELECT * FROM recordings WHERE session_id=? ORDER BY created_at, id", arrayOf(sessionId.toString()))
+            .use { c -> buildList { while (c.moveToNext()) add(row(c)) } }
+
+    /** Замінити файл без втрат запису (T69: з WAV зроблено FLAC) і дописати примітку. */
+    fun replaceLossless(id: Long, uri: String, name: String, size: Long, note: String) {
+        val r = get(id) ?: return
+        val values = ContentValues().apply {
+            put("wav_uri", uri)
+            put("wav_name", name)
+            put("wav_size", size)
+            put("reason", listOf(r.reason, note).filter { it.isNotBlank() }.joinToString("; "))
+        }
+        writableDatabase.update("recordings", values, "id=?", arrayOf(id.toString()))
+        changed()
+    }
+
     /** Усі записи (для копії історії, T64). */
     fun all(): List<RecordingRow> = list(null, "", limit = Int.MAX_VALUE)
 

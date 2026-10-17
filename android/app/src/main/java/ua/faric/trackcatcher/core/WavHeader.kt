@@ -28,6 +28,8 @@ object WavHeader {
         if (meta.title.isNotBlank()) add("INAM" to meta.title.trim())
         if (meta.artist.isNotBlank()) add("IART" to meta.artist.trim())
         if (meta.album.isNotBlank()) add("IPRD" to meta.album.trim())
+        if (meta.trackNo > 0) add("ITRK" to meta.trackNo.toString())
+        if (meta.year > 0) add("ICRD" to meta.year.toString())
         add("ISFT" to "Track Catcher")
     }
 
