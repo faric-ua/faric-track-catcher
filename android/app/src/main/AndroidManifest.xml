@@ -76,6 +76,12 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
+        <!-- WAV → FLAC з обкладинками пачкою (T69): переживає поворот і згортання. -->
+        <service
+            android:name=".capture.FlacBatchService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- Плитка «Запис» у шторці (T62). -->
         <service
             android:name=".capture.RecordTile"

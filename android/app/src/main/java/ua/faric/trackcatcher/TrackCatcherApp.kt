@@ -19,9 +19,16 @@ class TrackCatcherApp : Application() {
                 setShowBadge(false)
             },
         )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_WORK, "Робота з файлами", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "WAV → FLAC з обкладинками: скільки зроблено, «Зупинити»"
+                setShowBadge(false)
+            },
+        )
     }
 
     companion object {
+        const val CHANNEL_WORK = "work"
         const val CHANNEL_RECORDING = "recording"
         const val CHANNEL_PLAYBACK = "playback"
     }
