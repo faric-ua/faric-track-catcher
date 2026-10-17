@@ -29,6 +29,7 @@ import ua.faric.trackcatcher.core.GapDetector
 import ua.faric.trackcatcher.core.CutShift
 import ua.faric.trackcatcher.core.Pcm
 import ua.faric.trackcatcher.core.TimeText
+import ua.faric.trackcatcher.core.StopRule
 import ua.faric.trackcatcher.core.TrackMeta
 import ua.faric.trackcatcher.core.TrackSplitter
 import ua.faric.trackcatcher.data.HistoryDb
@@ -62,6 +63,10 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     private var limit = 0
     private var songsStarted = 0
     private var limitReached = false
+    /** T60: хвилини (0 — без обмеження) і скільки звуку покладено у файл (без пауз плеєра). */
+    private var limitMin = 0
+    @Volatile private var keptFrames = 0L
+    private var timeUpShown = false
     private var customAlbum = ""
     @Volatile private var discardLast = false
 
@@ -215,6 +220,9 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         val values = Settings(this).snapshot()
         settings = values
         limit = values.stopAfter
+        limitMin = values.stopAfterMin
+        keptFrames = 0L
+        timeUpShown = false
         songsStarted = 0
         limitReached = false
         discardLast = false
@@ -265,6 +273,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
                 playing = t.playing,
                 limit = limit,
                 songs = songsStarted,
+                limitMin = limitMin,
                 notice = null,
             )
         }
@@ -325,6 +334,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
                 // На паузі тиша у файл не пишеться. Якщо плеєр «на паузі», а звук є — пишемо (плеєр міг збрехати).
                 if (!(paused && db < SILENT_DB)) {
                     if (pipe.size < MAX_PIPE) {
+                        keptFrames += n / Pcm.CHANNELS
                         pipe.put(Item.Audio(buf, n))
                     } else {
                         // Диск стоїть уже хвилини — звук нема куди класти.
@@ -422,8 +432,13 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         val lag = readerLagMs.let { if (it >= 0) " · затримка $it мс" else "" }
         val source = only?.let { " · лише ${appName(it)}" } ?: ""
         val diag = "Звук від Android: ${Pcm.framesToMs(framesRead) / 1000} с отримано$source · рівень $level$player$lost$lag"
-        if (warn != RecorderHub.state.warning || diag != RecorderHub.state.diag) {
-            RecorderHub.update { it.copy(warning = warn, diag = diag) }
+        val recMs = Pcm.framesToMs(keptFrames)
+        if (limitMin > 0 && !timeUpShown && StopRule.timeUp(recMs, limitMin)) {
+            timeUpShown = true
+            RecorderHub.update { it.copy(notice = "Час вийшов ($limitMin хв) — дограю цю пісню й зупинюсь на наступній.") }
+        }
+        if (warn != RecorderHub.state.warning || diag != RecorderHub.state.diag || (limitMin > 0 && recMs / 1000 != RecorderHub.state.recordedMs / 1000)) {
+            RecorderHub.update { it.copy(warning = warn, diag = diag, recordedMs = recMs) }
         }
     }
 
@@ -498,6 +513,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         RecorderHub.update { it.copy(meta = m, songs = songsStarted) }
         updateNotification()
         if (running && limit > 0 && songsStarted > limit) reachLimit()
+        // T60: «N хвилин» — зупинка на першій зміні пісні біля кінця часу; ця пісня вже не пишеться.
+        else if (running && !meta.isUnknown && StopRule.stopAtTrackChange(Pcm.framesToMs(keptFrames), limitMin)) reachLimit()
     }
 
     override fun onDetails(meta: TrackMeta) {
@@ -517,7 +534,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     private fun reachLimit() {
         limitReached = true
         tracker?.pausePlayer()
-        val done = TimeText.plural(limit, "пісню", "пісні", "пісень")
+        val done = if (limit > 0) TimeText.plural(limit, "пісню", "пісні", "пісень")
+        else "${TimeText.clock(Pcm.framesToMs(keptFrames))} (ліміт $limitMin хв)"
         RecorderHub.update { it.copy(notice = "Записано $done — плеєр на паузі, запис зупинено.") }
         main.postDelayed({
             if (running) {
