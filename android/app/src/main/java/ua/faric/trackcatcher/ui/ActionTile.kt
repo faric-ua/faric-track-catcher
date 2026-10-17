@@ -32,7 +32,7 @@ class ActionTile(
     danger: Boolean,
     onClick: () -> Unit,
 ) : LinearLayout(context) {
-    enum class Icon { SHARE, OPEN, DELETE }
+    enum class Icon { SHARE, OPEN, CONVERT, DELETE }
 
     init {
         orientation = VERTICAL
@@ -113,6 +113,14 @@ class ActionTile(
                     canvas.drawLine(cx - side * 0.04f, cy + side * 0.04f, tipX, tipY, paint)
                     canvas.drawLine(tipX - side * 0.13f, tipY, tipX, tipY, paint)
                     canvas.drawLine(tipX, tipY, tipX, tipY + side * 0.13f, paint)
+                }
+                Icon.CONVERT -> {
+                    // Дві стрілки по колу — той самий значок «Повтор / інший формат», що й в інструкції (LineIcon.REPEAT).
+                    val half = (side * 0.24f).toInt()
+                    LineIcon.REPEAT.drawable(ink, half * 2).apply {
+                        setBounds(cx.toInt() - half, cy.toInt() - half, cx.toInt() + half, cy.toInt() + half)
+                        draw(canvas)
+                    }
                 }
                 Icon.DELETE -> {
                     // Кошик: кришка з ручкою і корпус з двома рисками.

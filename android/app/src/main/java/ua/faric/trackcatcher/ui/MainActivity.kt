@@ -114,6 +114,10 @@ class MainActivity : Activity() {
         if (i == null) return
         DemoData.apply(this, i)
         i.getStringExtra(EXTRA_TAB)?.let { name -> Tab.entries.firstOrNull { it.name == name } }?.let { if (it != tab) showTab(it) }
+        if (i.getBooleanExtra(EXTRA_START, false)) {
+            i.removeExtra(EXTRA_START) // лише один раз: поворот чи повернення з «Недавніх» не почне запис знову
+            startCapture()
+        }
         if (BuildConfig.DEBUG) {
             i.getStringExtra("dialog")?.let { restoreDialog(it) }
         }
@@ -570,6 +574,9 @@ class MainActivity : Activity() {
 
     companion object {
         const val EXTRA_TAB = "tab"
+
+        /** Плитка «Запис» у шторці (T62): відкрити й одразу почати (вікно Android «Почати запис?»). */
+        const val EXTRA_START = "start_recording"
         private const val KEY_TAB = "tab"
         private const val KEY_SCREENS = "screens"
         private const val KEY_DIALOG = "dialog"

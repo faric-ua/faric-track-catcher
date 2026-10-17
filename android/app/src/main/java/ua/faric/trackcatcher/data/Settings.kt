@@ -34,6 +34,8 @@ class Settings(context: Context) {
         val plainNames: Boolean = true,
         /** Писати лише звук плеєра, чия пісня в шторці (T43); false — усе, що грає як «медіа». */
         val onlyPlayer: Boolean = true,
+        /** Мітка гучності ReplayGain у тегах (T63); звук не змінюється. Типово вимкнено (faric 17.10). */
+        val replayGain: Boolean = false,
     ) {
         val label: String
             get() = when (format) {
@@ -119,6 +121,7 @@ class Settings(context: Context) {
         treeUri = treeUri,
         plainNames = plainNames,
         onlyPlayer = onlyPlayer,
+        replayGain = replayGain,
     )
 
     /** Як групувати історію (T61): sessions / albums / artists. */
@@ -129,6 +132,10 @@ class Settings(context: Context) {
     var onlyPlayer: Boolean
         get() = prefs.getBoolean(KEY_ONLY_PLAYER, true)
         set(v) = prefs.edit().putBoolean(KEY_ONLY_PLAYER, v).apply()
+
+    var replayGain: Boolean
+        get() = prefs.getBoolean(KEY_REPLAY_GAIN, false)
+        set(v) = prefs.edit().putBoolean(KEY_REPLAY_GAIN, v).apply()
 
     var plainNames: Boolean
         get() = prefs.getBoolean(KEY_PLAIN_NAMES, true)
@@ -155,6 +162,7 @@ class Settings(context: Context) {
         private const val KEY_CUT_SHIFT_V2 = "cut_shift_v2"
         private const val KEY_ONLY_PLAYER = "only_player"
         private const val KEY_HISTORY_GROUP = "history_group"
+        private const val KEY_REPLAY_GAIN = "replay_gain"
         const val MAX_STOP_AFTER = 999
         const val MAX_STOP_AFTER_MIN = 24 * 60
         private const val KEY_STOP_AFTER_MIN = "stop_after_min"
