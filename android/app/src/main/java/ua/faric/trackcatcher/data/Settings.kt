@@ -141,6 +141,36 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_PLAIN_NAMES, true)
         set(v) = prefs.edit().putBoolean(KEY_PLAIN_NAMES, v).apply()
 
+    /**
+     * Налаштування для копії (T67): лише те, що має сенс на іншому телефоні. Без «своєї папки» (дозвіл Android —
+     * лише для цього телефона) і без плану «Цей запис» (свій альбом, «зупинитись після») — він для одного запису.
+     */
+    fun exportMap(): Map<String, Any?> {
+        cutShiftMs // перерахунок старої шкали (T42), щоб у копію пішло вже нове значення
+        val all = prefs.all
+        return PORTABLE.keys.filter { all.containsKey(it) }.associateWith { all[it] }
+    }
+
+    /** Повернути налаштування з копії. Невідоме й не того типу пропускається. Повертає, скільки повернуто. */
+    fun importMap(m: Map<*, *>): Int {
+        val e = prefs.edit()
+        var n = 0
+        for ((k, v) in m) {
+            val key = k as? String ?: continue
+            when (PORTABLE[key]) {
+                Kind.INT -> ((v as? Long) ?: (v as? Double)?.toLong())?.let { e.putInt(key, it.toInt()); n++ }
+                Kind.BOOL -> (v as? Boolean)?.let { e.putBoolean(key, it); n++ }
+                Kind.STRING -> (v as? String)?.let { e.putString(key, it); n++ }
+                null -> {}
+            }
+        }
+        if (m.containsKey(KEY_CUT_SHIFT_MS)) e.putBoolean(KEY_CUT_SHIFT_V2, true) // у копії — вже нова шкала
+        e.apply()
+        return n
+    }
+
+    private enum class Kind { INT, BOOL, STRING }
+
     var treeUri: String
         get() = prefs.getString(KEY_TREE, "") ?: ""
         set(v) = prefs.edit().putString(KEY_TREE, v).apply()
@@ -163,6 +193,12 @@ class Settings(context: Context) {
         private const val KEY_ONLY_PLAYER = "only_player"
         private const val KEY_HISTORY_GROUP = "history_group"
         private const val KEY_REPLAY_GAIN = "replay_gain"
+
+        private val PORTABLE = mapOf(
+            KEY_FORMAT to Kind.STRING, KEY_BITRATE to Kind.INT, KEY_MIN_LENGTH to Kind.INT, KEY_REPEAT to Kind.STRING,
+            KEY_ALBUM_FOLDERS to Kind.BOOL, KEY_TRIM_EDGES to Kind.BOOL, KEY_FADE_MS to Kind.INT, KEY_CUT_SHIFT_MS to Kind.INT,
+            KEY_PLAIN_NAMES to Kind.BOOL, KEY_ONLY_PLAYER to Kind.BOOL, KEY_HISTORY_GROUP to Kind.STRING, KEY_REPLAY_GAIN to Kind.BOOL,
+        )
         const val MAX_STOP_AFTER = 999
         const val MAX_STOP_AFTER_MIN = 24 * 60
         private const val KEY_STOP_AFTER_MIN = "stop_after_min"

@@ -320,6 +320,7 @@ class MainActivity : Activity() {
 
     override fun onStop() {
         started = false
+        ua.faric.trackcatcher.data.AutoBackup.request(this) // T67: змінені налаштування теж ідуть у копію
         if (overlay.key == NightScreen.KEY) night?.pause()
         handler.removeCallbacks(tick)
         unobserveHub?.invoke()
@@ -437,6 +438,10 @@ class MainActivity : Activity() {
             onFolderPicked(resultCode, data)
             return
         }
+        if (requestCode == REQ_AUTO_BACKUP) {
+            onAutoBackupPicked(resultCode, data)
+            return
+        }
         if (requestCode == REQ_BACKUP_SAVE || requestCode == REQ_BACKUP_OPEN) {
             onBackupPicked(requestCode, resultCode, data)
             return
@@ -467,6 +472,69 @@ class MainActivity : Activity() {
         }
     }
 
+    /** T67: вибрати файл автокопії — «Мої файли» або Google Диск (через ☰ у вікні вибору). */
+    fun enableAutoBackup() {
+        val i = Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("application/json").putExtra(Intent.EXTRA_TITLE, "track-catcher-avtokopiia.json")
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(i, REQ_AUTO_BACKUP)
+        } catch (e: ActivityNotFoundException) {
+            toast("На цьому телефоні немає вікна «Зберегти»")
+        }
+    }
+
+    private fun onAutoBackupPicked(resultCode: Int, data: Intent?) {
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null) return
+        try {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        } catch (e: SecurityException) {
+            showBackupResult("Автокопія", "Android не дав постійного доступу до цього файлу. Створи файл ще раз — у «Моїх файлах» або через «Google Диск» у меню ☰ вікна вибору.")
+            return
+        }
+        val name = runCatching {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        }.getOrNull() ?: "track-catcher-avtokopiia.json"
+        ua.faric.trackcatcher.data.AutoBackup.enable(this, uri, name)
+        screen?.onResume()
+        ua.faric.trackcatcher.data.AutoBackup.writeSoon(this) { r ->
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                screen?.onResume()
+                showBackupResult(
+                    "Автокопія ввімкнена",
+                    r.fold(
+                        { n -> "Перша копія — «$name»: " + ua.faric.trackcatcher.core.TimeText.plural(n, "запис", "записи", "записів") +
+                            " і налаштування. Далі файл оновлюється сам після кожного запису." },
+                        { e -> "Файл вибрано, але записати не вдалося: ${e.message ?: e.javaClass.simpleName}. Спробую ще після наступного запису." },
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun showBackupResult(title: String, message: String, settings: Map<*, *>? = null) {
+        val actions = if (settings != null) listOf("Повернути й налаштування" to Ui.Kind.PRIMARY, "Закрити" to Ui.Kind.QUIET)
+        else listOf("Закрити" to Ui.Kind.QUIET)
+        val body = overlay.dialog(
+            title = title,
+            message = message,
+            actions = actions,
+            onAction = { i ->
+                if (settings != null && i == 0) {
+                    val n = ua.faric.trackcatcher.data.Settings(this).importMap(settings)
+                    toast(if (n > 0) "Налаштування повернуто" else "У копії нема налаштувань для цієї версії")
+                    showTab(tab)
+                }
+                overlay.dismiss()
+            },
+        )
+        overlay.show("backup:result", body)
+    }
+
     fun openHistoryCopy() {
         val i = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
         try {
@@ -483,6 +551,7 @@ class MainActivity : Activity() {
         val save = requestCode == REQ_BACKUP_SAVE
         val app = applicationContext
         Thread({
+            var restored: Map<*, *>? = null
             val message = try {
                 val db = ua.faric.trackcatcher.data.HistoryDb.get(app)
                 if (save) {
@@ -494,8 +563,10 @@ class MainActivity : Activity() {
                 } else {
                     val r = app.contentResolver.openInputStream(uri)?.use { ua.faric.trackcatcher.data.HistoryBackup.import(db, it) }
                         ?: throw java.io.IOException("файл не відкривається")
+                    restored = r.settings
                     "Додано " + ua.faric.trackcatcher.core.TimeText.plural(r.added, "запис", "записи", "записів") +
-                        (if (r.skipped > 0) ", уже були — ${r.skipped}" else "") + ". Наявні записи не змінено."
+                        (if (r.skipped > 0) ", уже були — ${r.skipped}" else "") + ". Наявні записи не змінено." +
+                        (if (r.settings != null) "\n\nУ копії є й налаштування (формат, якість, краї пісні…). Повернути їх замість теперішніх?" else "")
                 }
             } catch (e: ua.faric.trackcatcher.data.HistoryBackup.BadFile) {
                 e.message ?: "Це не копія історії."
@@ -504,13 +575,7 @@ class MainActivity : Activity() {
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                val body = overlay.dialog(
-                    title = if (save) "Копія історії" else "Відновлення історії",
-                    message = message,
-                    actions = listOf("Закрити" to Ui.Kind.QUIET),
-                    onAction = { overlay.dismiss() },
-                )
-                overlay.show("backup:result", body)
+                showBackupResult(if (save) "Копія історії" else "Відновлення історії", message, restored)
             }
         }, "history-backup").start()
     }
@@ -586,5 +651,6 @@ class MainActivity : Activity() {
         private const val REQ_TREE = 30
         private const val REQ_BACKUP_SAVE = 40
         private const val REQ_BACKUP_OPEN = 41
+        private const val REQ_AUTO_BACKUP = 42
     }
 }
