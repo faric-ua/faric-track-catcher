@@ -15,6 +15,7 @@ MAP = {
     "p03-record-recording.png": "recording.webp",
     "p03b-night-screen.png": "night.webp",
     "p04-history.png": "history.webp",
+    "p04b-history-albums.png": "history-albums.webp",
     "p05-history-detail.png": "detail.webp",
     "p06-delete-confirm.png": "delete.webp",
     "p07-settings.png": "settings.webp",
