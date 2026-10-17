@@ -10,6 +10,8 @@ import android.view.View
 import kotlin.math.min
 
 /**
+ * Частина СПІЛЬНОЇ ПЛИТКИ ПЛЕЄРА (версія — [PlayerView.TILE_VERSION]; копіюється в Audio Converter).
+ *
  * Кругла кнопка плеєра зі значком, намальованим лініями (не шрифтом і не смайлом — Samsung малює «▶»
  * кольоровим смайлом, T33). Форма значків — як у PulseDeck з faric-music-visualizer
  * (`PulseDeckIconButton`: ⏮ ▶ ❚❚ ⏭), кольори — Track Catcher: головна («Грати») — бурштин, решта — спокійні.
