@@ -128,6 +128,7 @@ class MainActivity : Activity() {
         when {
             key == NightScreen.KEY -> showNightScreen()
             key.startsWith("update:") -> UpdateUi(this).restore(key)
+            key == "backup:result" -> lastBackupResult?.let { (t, m, st) -> showBackupResult(t, m, st) }
             else -> screen?.restoreDialog(key)
         }
     }
@@ -517,6 +518,7 @@ class MainActivity : Activity() {
     }
 
     private fun showBackupResult(title: String, message: String, settings: Map<*, *>? = null) {
+        lastBackupResult = Triple(title, message, settings) // поворот екрана не губить вікно
         val actions = if (settings != null) listOf("Повернути й налаштування" to Ui.Kind.PRIMARY, "Закрити" to Ui.Kind.QUIET)
         else listOf("Закрити" to Ui.Kind.QUIET)
         val body = overlay.dialog(
@@ -652,5 +654,8 @@ class MainActivity : Activity() {
         private const val REQ_BACKUP_SAVE = 40
         private const val REQ_BACKUP_OPEN = 41
         private const val REQ_AUTO_BACKUP = 42
+
+        /** Останнє вікно «Копія історії» — щоб пережило поворот (живе, доки живе процес). */
+        @Volatile private var lastBackupResult: Triple<String, String, Map<*, *>?>? = null
     }
 }
