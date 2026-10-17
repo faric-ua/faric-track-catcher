@@ -15,6 +15,7 @@ import ua.faric.trackcatcher.core.OutputFormat
 import ua.faric.trackcatcher.core.RepeatPolicy
 import ua.faric.trackcatcher.core.SizeEstimate
 import ua.faric.trackcatcher.core.TimeText
+import ua.faric.trackcatcher.data.AutoBackup
 import ua.faric.trackcatcher.data.Settings
 import ua.faric.trackcatcher.encode.Mp3Encoder
 import ua.faric.trackcatcher.state.RecorderHub
@@ -34,6 +35,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val loudCard = ui.card(12)
     private val edgesCard = ui.card(12)
     private val permsSlot = FrameLayout(host)
+    private val autoSlot = ui.column(8)
     private val albumSlot = ui.column(8)
     private val folderTitle = ui.title("", 17f)
     private val folderHint = ui.muted("", 13.5f)
@@ -71,6 +73,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 addView(ui.iconButton(LineIcon.FOLDER, "Відновити з копії", Ui.Kind.NORMAL) { host.openHistoryCopy() })
             }, ui.matchWrap())
             addView(ui.text("Відновлення лише додає записи, яких ще нема; наявні не змінює. Обкладинки в копію не входять.", 12.5f, Palette.faint))
+            addView(autoSlot, ui.matchWrap())
         }
         val updateCard = UpdateUi(host).card()
         val all = listOf(formatCard, qualityCard, lengthCard, repeatCard, soundCard, loudCard, edgesCard, folderCard, backupCard, permsSlot, updateCard, aboutCard)
@@ -92,8 +95,42 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     override fun onResume() {
         renderChoices()
+        renderAuto()
         permsSlot.removeAllViews()
         PermissionsCard.build(host, alwaysShow = true)?.let { permsSlot.addView(it) }
+    }
+
+    /** T67: автокопія — один файл, який застосунок сам оновлює після кожного запису. */
+    private fun renderAuto() {
+        val a = AutoBackup.state(host)
+        autoSlot.removeAllViews()
+        autoSlot.addView(ui.title("Автокопія", 16f))
+        if (!a.on) {
+            autoSlot.addView(ui.muted(
+                "Вибери один раз файл — у «Моїх файлах» або на своєму Google Диску (☰ → «Диск» у вікні вибору). " +
+                    "Далі застосунок сам оновлює його після кожного запису: історія й налаштування. На новому телефоні — «Відновити з копії» → цей файл.",
+                13.5f,
+            ))
+            autoSlot.addView(ui.iconButton(LineIcon.CLOUD, "Увімкнути автокопію", Ui.Kind.NORMAL) { host.enableAutoBackup() }, wrap())
+            return
+        }
+        val last = if (a.lastAt > 0) java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.getDefault()).format(java.util.Date(a.lastAt)) else "ще ні"
+        autoSlot.addView(ui.text("Увімкнено: ${a.name}", 15f, Palette.text, medium = true))
+        autoSlot.addView(ui.numbers(ui.muted("Остання копія: $last", 13.5f)))
+        a.error?.let { autoSlot.addView(ui.text("Не вдалося: $it", 12.5f, Palette.warning)) }
+        autoSlot.addView(FlowLayout(host, ui.dp(8), ui.dp(8)).apply {
+            addView(ui.iconButton(LineIcon.CLOUD, "Копія зараз", Ui.Kind.NORMAL) {
+                AutoBackup.writeSoon(host) { r ->
+                    host.runOnUiThread {
+                        host.toast(r.fold({ "Автокопію оновлено" }, { "Не вдалося: ${it.message ?: it.javaClass.simpleName}" }))
+                        renderAuto()
+                    }
+                }
+            })
+            addView(ui.iconButton(LineIcon.FOLDER, "Інший файл", Ui.Kind.NORMAL) { host.enableAutoBackup() })
+            addView(ui.button("Вимкнути", Ui.Kind.QUIET) { AutoBackup.disable(host); renderAuto() })
+        }, ui.matchWrap())
+        autoSlot.addView(ui.text("Вимкнути — застосунок перестане писати; сам файл лишиться, де був.", 12.5f, Palette.faint))
     }
 
     private fun wrap() = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)

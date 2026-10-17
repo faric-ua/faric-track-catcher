@@ -9,6 +9,7 @@ import ua.faric.trackcatcher.state.RecorderHub
 
 /** Черга збереження: по одному шматку, поки запис іде далі. */
 class FinisherQueue(context: Context, private val onIdle: () -> Unit) {
+    private val app = context.applicationContext
     private val finisher = SegmentFinisher(context)
     private val pending = AtomicInteger(0)
     private val executor: ExecutorService = Executors.newSingleThreadExecutor { r ->
@@ -27,6 +28,7 @@ class FinisherQueue(context: Context, private val onIdle: () -> Unit) {
                 finisher.failure(job, t)
             }
             RecorderHub.addResult(RecorderHub.Result(row.displayName, row.status, row.reason))
+            ua.faric.trackcatcher.data.AutoBackup.request(app) // T67: нічого не робить, якщо автокопію не ввімкнено
             if (pending.decrementAndGet() == 0) onIdle()
         }
     }

@@ -17,9 +17,11 @@ object HistoryBackup {
 
     class BadFile(message: String) : Exception(message)
 
-    data class Result(val added: Int, val skipped: Int)
+    /** [settings] — налаштування з копії (T67), якщо вони там є. */
+    data class Result(val added: Int, val skipped: Int, val settings: Map<*, *>? = null)
 
-    fun export(db: HistoryDb, out: OutputStream, appVersion: String): Int {
+    /** [settings] — налаштування (T67: автокопія кладе їх разом з історією); старі копії їх не мають. */
+    fun export(db: HistoryDb, out: OutputStream, appVersion: String, settings: Map<String, Any?>? = null): Int {
         val rows = db.all()
         val doc = linkedMapOf(
             "format" to FORMAT,
@@ -30,6 +32,7 @@ object HistoryBackup {
             },
             "recordings" to rows.map { toMap(it) },
         )
+        if (settings != null) doc["settings"] = settings
         out.write(JsonDoc.write(doc).toByteArray(Charsets.UTF_8))
         return rows.size
     }
@@ -59,7 +62,7 @@ object HistoryBackup {
             db.insert(r.copy(id = 0, sessionId = sid, artworkPath = r.artworkPath?.takeIf { File(it).isFile }))
             added++
         }
-        return Result(added, skipped)
+        return Result(added, skipped, (doc["settings"] as? Map<*, *>)?.takeIf { it.isNotEmpty() })
     }
 
     private fun toMap(r: RecordingRow): Map<String, Any?> = linkedMapOf(
