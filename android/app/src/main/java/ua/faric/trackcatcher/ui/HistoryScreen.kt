@@ -198,6 +198,11 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             13f,
         ))
         val actions = FlowLayout(host, ui.dp(8), ui.dp(8))
+        val pickedWavs = picked.mapNotNull { all[it] }.filter { isWav(it) }
+        if (pickedWavs.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.DISC, "У FLAC з обкладинками (${pickedWavs.size})", Ui.Kind.PRIMARY) {
+            clearPicked()
+            confirmMakeFlac(pickedWavs.sortedBy { it.createdAt })
+        })
         actions.addView(ui.button("Видалити (${picked.size})", Ui.Kind.DANGER) { confirmDeleteMany() })
         if (rows.any { it.id !in picked }) actions.addView(ui.button("Вибрати всі видимі", Ui.Kind.NORMAL) {
             rows.forEach { picked += it.id }
@@ -272,13 +277,20 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 ))
             }, ui.matchWrap())
         } else {
+            val allWavs = if (picked.isEmpty() && query.isBlank()) db.list(null, "", limit = Int.MAX_VALUE).filter { isWav(it) } else emptyList()
+            if (allWavs.isNotEmpty()) list.addView(ui.card(8, fill = Palette.warningFill, stroke = Palette.warning).apply {
+                addView(ui.text(ui.iconText(LineIcon.DISC, "WAV без обкладинки у файлі: ${allWavs.size}", Palette.warning, LineIcon.LABEL_DP - 6), 15f, Palette.warning, medium = true))
+                addView(ui.muted("Плеєри не бачать у них картинки. Одним натиском — усі у FLAC: звук той самий, усередині обкладинка з історії, назви й номер. WAV лишаються.", 13.5f))
+                addView(ui.iconButton(LineIcon.DISC, "Усі в FLAC з обкладинками (${allWavs.size})", Ui.Kind.PRIMARY) { confirmMakeFlac(allWavs.sortedBy { it.createdAt }) }, ui.matchWrap())
+                addView(ui.muted("Або по частинах: кнопка в шапці сесії чи альбому, або довге натискання на плитку — вибрати кілька.", 12.5f))
+            }, ui.matchWrap())
             if (group == Group.SESSIONS) {
                 val sessions = db.sessions()
                 var currentSession = -1L
                 for (r in rows) {
                     if (r.sessionId != currentSession) {
                         currentSession = r.sessionId
-                        list.addView(sessionHeader(sessions[r.sessionId], rows.count { it.sessionId == r.sessionId }), ui.matchWrap())
+                        list.addView(sessionHeader(sessions[r.sessionId], rows.filter { it.sessionId == r.sessionId }), ui.matchWrap())
                     }
                     list.addView(rowView(r), ui.matchWrap())
                 }
@@ -398,7 +410,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         reload()
     }
 
-    private fun sessionHeader(s: SessionRow?, count: Int): View {
+    private fun sessionHeader(s: SessionRow?, members: List<RecordingRow>): View {
+        val count = members.size
         val text = if (s == null) {
             "Сесія"
         } else {
@@ -409,7 +422,14 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 if (s.formatLabel.isNotBlank()) append(" · ").append(s.formatLabel)
             }
         }
-        return ui.numbers(ui.label(text)).apply { setPadding(ui.dp(4), ui.dp(8), ui.dp(4), 0) }
+        val label = ui.numbers(ui.label(text)).apply { setPadding(ui.dp(4), ui.dp(8), ui.dp(4), 0) }
+        // T69 (faric 17.10 21:45: «по одній — бажання нема»): уся сесія одним натиском.
+        val wavs = members.filter { isWav(it) }
+        if (wavs.isEmpty() || picked.isNotEmpty()) return label
+        return ui.column(6).apply {
+            addView(label)
+            addView(ui.iconButton(LineIcon.DISC, "Сесію в FLAC з обкладинками (${wavs.size})", Ui.Kind.NORMAL) { confirmMakeFlac(wavs) })
+        }
     }
 
     private fun rowView(r: RecordingRow): View {
@@ -788,7 +808,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         val box = ui.column(12).apply {
             addView(ui.title("Роблю FLAC з обкладинками", 19f))
             addView(progressText)
-            addView(ui.muted("Можна згорнути застосунок — робота йде далі. Не закривай його зовсім.", 13f))
+            addView(ui.muted("Не згортай застосунок до кінця — екран сам не згасне. Перервалось? Натисни ту саму кнопку ще раз: зроблені вже пропускаються.", 13f))
+            keepScreenOn = true
         }
         host.overlay.show("makeflac:run", box, dismissOnOutside = false)
         val app = host.applicationContext
