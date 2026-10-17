@@ -12,6 +12,10 @@ import ua.faric.trackcatcher.core.FileTags
 import ua.faric.trackcatcher.core.TimeText
 
 /**
+ * ── СПІЛЬНА ПАНЕЛЬ «ПРО ФАЙЛ» (Track Catcher → Audio Converter) ── версія [PANEL_VERSION].
+ * Цей файл, `core/FileTags.kt`, `ui/FlowLayout.kt` і `core/FlowRows.kt` копіюються в Audio Converter (`tools/dev/sync_style.py` там).
+ * Змінив панель — підніми [PANEL_VERSION] і рядок у «Журнал стилю».
+ *
  * Вікно «Про файл» (T68, faric 17.10 20:31: «щоб усі метадані були максимально; відкрив файл — зразу показало і картинку,
  * і хто виконує, і альбом, і все»). Макет — артефакт «Про файл — макет». Показує те, що **лежить у самому файлі**
  * ([FileTags]), тож видно й поля, які дописав інший застосунок (Audio Converter), — у «Усі теги у файлі».
@@ -19,6 +23,11 @@ import ua.faric.trackcatcher.core.TimeText
  */
 class FileInfoPanel(private val host: MainActivity) {
     private val ui: Ui get() = host.ui
+
+    companion object {
+        /** Версія спільної панелі (faric 17.10 23:39: «як у Track Catcher "Про файл" — зроби й у конвертері»). */
+        const val PANEL_VERSION = 1
+    }
 
     /** Що знає застосунок про запис, але чого нема у файлі (група «Як записано»), і що можна зробити. */
     class Extra(

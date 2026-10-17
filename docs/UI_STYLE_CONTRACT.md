@@ -58,3 +58,4 @@ Track Catcher — ведучий за стилем (faric 16.10 16:31); Audio Co
 | 17.10 | Новий значок `SHARE` (три кола й дві лінії — «Поділитись» у шапці групи історії); у спрайті інструкції — `i-share`. Кольори й розміри без змін. |
 | 16.10 | Значки лініями з інструкції (`LineIcon`, T58) у вкладках, підписах розділів і кнопках; розміри +60–70 % (36 / 28 / 31 / 36 dp). Стиль став спільним з Audio Converter (коміт f6ff458). |
 | 17.10 | Спільна плитка плеєра (`PlayerView` + `TransportButton` + `ActionTile`) — **версія плитки 1** (`PlayerView.TILE_VERSION`); Audio Converter бере її собі (faric 17.10 18:39–18:40). |
+| 17.10 | Спільна панель «Про файл» (`FileInfoPanel` + `FileTags` + `FlowLayout` + `FlowRows`) — **версія панелі 1** (`FileInfoPanel.PANEL_VERSION`); Audio Converter бере її собі (faric 17.10 23:39). |
