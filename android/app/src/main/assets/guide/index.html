@@ -184,7 +184,7 @@ details > div{padding:0 0 12px; color:var(--muted)}
 .rnd{width:46px; height:46px; border-radius:50%; display:grid; place-items:center; border:1px solid var(--line); background:var(--surface-2); color:var(--text)}
 .rnd.big{width:62px; height:62px; border:2px solid var(--amber); background:var(--amber-fill); color:var(--amber)}
 .rnd svg{width:22px; height:22px; fill:currentColor; stroke:none}
-.acts{display:grid; grid-template-columns:repeat(3,1fr); gap:6px; text-align:center; font-size:.8rem; color:var(--muted)}
+.acts{display:grid; grid-template-columns:repeat(4,1fr); gap:6px; text-align:center; font-size:.8rem; color:var(--muted)}
 .acts span{display:flex; flex-direction:column; align-items:center; gap:4px}
 .acts .c{width:38px; height:38px; border-radius:50%; border:1px solid var(--line); display:grid; place-items:center; color:var(--text)}
 .acts .del{color:var(--bad)}
@@ -242,6 +242,7 @@ details > div{padding:0 0 12px; color:var(--muted)}
   <symbol id="i-next" viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></symbol>
   <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></symbol>
   <symbol id="i-share" viewBox="0 0 24 24"><circle cx="17" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="17" cy="18.5" r="2.5"/><path d="M8.2 10.8l6.6-4M8.2 13.2l6.6 4"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 3v4h-4M6 21v-4h4"/></symbol>
   <symbol id="i-out" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
   <symbol id="i-bin" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
 </svg>
@@ -333,7 +334,7 @@ details > div{padding:0 0 12px; color:var(--muted)}
 
   <div class="foot">
     <p>Записи лишаються на телефоні й нікуди не передаються. Інтернет — лише для перевірки оновлень з Google Диска автора. Без реклами й аналітики. Для особистого користування.</p>
-    <p class="mono">Track Catcher 0.1.26 · github.com/faric-ua/faric-track-catcher</p>
+    <p class="mono">Track Catcher 0.1.27 · github.com/faric-ua/faric-track-catcher</p>
   </div>
 </main>
 
@@ -404,6 +405,13 @@ details > div{padding:0 0 12px; color:var(--muted)}
     <figure><img src="img/ready.webp" alt="Готово до запису"><figcaption>Готово до запису.</figcaption></figure>
     <figure><img src="img/recording.webp" alt="Іде запис"><figcaption>Іде запис: рівень, пісня, «Ця сесія».</figcaption></figure>
   </div>
+  <h3>Плитка «Запис» у шторці</h3>
+  <p>Почати й зупинити запис можна, не відкриваючи застосунок. Один раз: опусти шторку повністю → <b>✎ / «Змінити»</b> → знайди плитку <b>Track Catcher</b> (значок <svg class="ic"><use href="#i-rec"/></svg>) і перетягни її нагору.</p>
+  <div class="tbl kv"><table>
+    <tr><td class="k"><b>Сіра · «Track Catcher»</b></td><td>Запис не йде. Торкнись — відкриється Track Catcher і одразу вікно Android «Почати запис?» → «Почати». Без цього вікна Android записувати не дає.</td></tr>
+    <tr><td class="k"><b>Світла · «іде»</b></td><td>Іде запис (видно, скільки пісень). Торкнись — запис зупиниться, записане збережеться.</td></tr>
+    <tr><td class="k"><b>«зберігає…»</b></td><td>Дозберігає останні пісні — кілька секунд; плитка в цей час не реагує.</td></tr>
+  </table></div>
   <p class="note">Поставив плеєр на паузу — тиша у файл не пишеться, а пісня після паузи продовжиться в той самий файл. Плейлист закінчився — запис чекає («Нічого не грає»), доки не ввімкнеш ще або не натиснеш «Зупинити».</p>
 </section>
 
@@ -456,10 +464,11 @@ details > div{padding:0 0 12px; color:var(--muted)}
     <li><div>Торкнись запису — відкриються подробиці й плеєр (<a href="#player">докладно</a>). У подробицях — «Запис №»: свій номер у кожного запису, навіть коли назви однакові.</div></li>
   </ol>
   <h3>Сесії · Альбоми · Виконавці</h3>
-  <p>Над фільтрами — <b>«Групувати»</b>. <span class="btn sel">Сесії</span> — як записувалось. <span class="btn norm">Альбоми</span> — пісні одного альбому разом, найсвіжіший угорі. <span class="btn norm">Виконавці</span> — те саме за виконавцем. У шапці групи — скільки записів і часу, і дві кнопки:</p>
+  <p>Над фільтрами — <b>«Групувати»</b>. <span class="btn sel">Сесії</span> — як записувалось. <span class="btn norm">Альбоми</span> — пісні одного альбому разом, найсвіжіший угорі. <span class="btn norm">Виконавці</span> — те саме за виконавцем. У шапці групи — скільки записів і часу, і три кнопки:</p>
   <div class="grid2">
     <div class="panel"><h3>Слухати</h3><p class="muted">Грає весь альбом з першої пісні, далі сам по черзі; ⏮ / ⏭ і «дограла — наступна» лишаються всередині альбому. Шторка показує, що грає.</p></div>
     <div class="panel"><h3>Поділитись</h3><p class="muted">Усі файли альбому одним разом — у месенджер, на пошту, на Google Диск.</p></div>
+    <div class="panel"><h3>Конвертувати</h3><p class="muted">Увесь альбом — в Audio Converter (з FLAC — без втрат якості), там вибереш формат.</p></div>
   </div>
   <h3>Копія історії</h3>
   <p>«Налаштування» → «Копія історії». Історія живе всередині застосунку — після перевстановлення вона пропала б. <span class="btn prim">Зберегти копію</span> — один файл <span class="mono">track-catcher-istoriya-ДАТА.json</span>: у вікні Android вибери «Мої файли» або Google Диск. <span class="btn norm">Відновити з копії</span> — вибери цей файл: додадуться записи, яких ще нема; наявні не змінюються. Файли пісень і обкладинки в копію не йдуть.</p>
@@ -638,6 +647,7 @@ details > div{padding:0 0 12px; color:var(--muted)}
     <div class="acts">
       <span><span class="c"><svg class="ic"><use href="#i-share"/></svg></span>Поділити…</span>
       <span><span class="c"><svg class="ic"><use href="#i-out"/></svg></span>Плеєр</span>
+      <span><span class="c"><svg class="ic"><use href="#i-repeat"/></svg></span>Конвертер</span>
       <span class="del"><span class="c"><svg class="ic"><use href="#i-bin"/></svg></span>Видалити</span>
     </div>
     <div class="wide-btn">Закрити</div>
@@ -649,6 +659,7 @@ details > div{padding:0 0 12px; color:var(--muted)}
     <tr><td class="k"><b>Слухати: MP3 / FLAC</b></td><td>З'являється, коли збережено два файли (MP3 + FLAC або MP3 + WAV).</td></tr>
     <tr><td class="k"><b>Поділитись</b></td><td>Файл — у месенджер, на пошту, в Google Диск.</td></tr>
     <tr><td class="k"><b>Плеєр</b></td><td>Відкрити файл у твоєму звичайному плеєрі.</td></tr>
+    <tr><td class="k"><b>Конвертер</b></td><td>Відкрити запис у застосунку <b>Audio Converter</b> — зробити з нього MP3, M4A, Opus… Дається найкраща якість (FLAC чи WAV, якщо є). Конвертера нема на телефоні — Track Catcher так і скаже.</td></tr>
     <tr><td class="k"><b>Видалити</b></td><td>Спершу «Видалити файл?». Файл зникне з «Музики», запис в історії лишиться з поміткою «файл видалено».</td></tr>
   </table></div>
   <figure class="diagram" role="img" aria-label="Порядок записів: ⏮ веде до записаного раніше, ⏭ до записаного пізніше; записи без файлу пропускаються.">
@@ -740,6 +751,7 @@ details > div{padding:0 0 12px; color:var(--muted)}
     <div class="panel"><h3>Коротші не зберігати</h3><p class="muted">Зберігати все · 15 · <b>30</b> · 45 · 60 с. Реклама й короткі уривки підуть в історію як «пропущено», без файлу.</p></div>
     <div class="panel"><h3>Якщо пісня вже є</h3><p class="muted"><b>«Записати ще раз»</b> — новий файл з «(2)». «Пропустити» — якщо в історії вже є повний запис цієї пісні з тією самою тривалістю (±2 с). Кілька різних пісень з однаковою назвою не пропускаються.</p></div>
     <div class="panel"><h3>Звук для запису</h3><p class="muted"><b>Лише плеєр</b> · Усе, що грає. Докладно — <a href="#rules">«Що пишеться»</a>.</p></div>
+    <div class="panel"><h3>Рівна гучність</h3><p class="muted"><b>Вимкнено</b> · Мітка гучності. Звук <b>ніколи</b> не змінюється — ні нормалізації, ні стиснення. Увімкнена мітка лише дописує в теги FLAC/MP3, наскільки пісня голосна (ReplayGain, як у foobar2000, AIMP, Poweramp): плеєр з увімкненим ReplayGain робить усю пісню тихішою чи голоснішою однаково. Вмикається через три вікна-попередження — це експеримент.</p></div>
     <div class="panel"><h3>Папка для кожного альбому</h3><p class="muted"><b>Так</b> — «Track Catcher › Neon». Ні — усі пісні в одну папку.</p></div>
   </div>
   <p class="muted small">Жирним (і в зеленій рамці) — що стоїть спочатку. Під час запису налаштування видно, а зміни підуть у наступний запис.</p>

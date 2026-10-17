@@ -43,7 +43,7 @@ class GuideTests(unittest.TestCase):
         # T58: значки застосунку (ui/LineIcon.kt) — ті самі шляхи, що в інструкції.
         kt = (ROOT / "android/app/src/main/java/ua/faric/trackcatcher/ui/LineIcon.kt").read_text(encoding="utf-8")
         sprite = self.html[self.html.index('<svg width="0"'):self.html.index("</svg>", self.html.index('<svg width="0"'))]
-        names = {"i-key", "i-rec", "i-moon", "i-list", "i-disc", "i-shield", "i-cut", "i-play", "i-folder", "i-format", "i-edges", "i-cloud", "i-help"}
+        names = {"i-key", "i-rec", "i-moon", "i-list", "i-disc", "i-shield", "i-cut", "i-play", "i-folder", "i-format", "i-edges", "i-cloud", "i-help", "i-share", "i-repeat"}
         for sym in re.finditer(r'<symbol id="([^"]+)"[^>]*>(.*?)</symbol>', sprite, re.S):
             if sym.group(1) not in names:
                 continue
