@@ -18,7 +18,16 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import ua.faric.trackcatcher.capture.Artwork
+import ua.faric.trackcatcher.capture.AudioStore
 import ua.faric.trackcatcher.capture.MediaStoreWriter
+import ua.faric.trackcatcher.capture.TreeWriter
+import ua.faric.trackcatcher.core.FileNames
+import ua.faric.trackcatcher.core.FileTags
+import ua.faric.trackcatcher.core.FlacEncoder
+import ua.faric.trackcatcher.core.TrackMeta
+import ua.faric.trackcatcher.core.TrackNumber
+import ua.faric.trackcatcher.core.WavToFlac
 import ua.faric.trackcatcher.core.Lossless
 import ua.faric.trackcatcher.core.Playlist
 import ua.faric.trackcatcher.core.RecStatus
@@ -145,6 +154,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         val id = parts.getOrNull(1)?.toLongOrNull() ?: return false
         val row = db.get(id) ?: return false
         return when (parts[0]) {
+            "fileinfo" -> {
+                openFileInfo(row)
+                true
+            }
             "detail" -> {
                 if (detailPane == null) showDetailDialog(row) else select(row)
                 true
@@ -333,6 +346,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             actions.addView(ui.iconButton(LineIcon.PLAY, "Слухати", Ui.Kind.PRIMARY) { listenGroup(withFiles) })
             actions.addView(ui.iconButton(LineIcon.SHARE, "Поділитись", Ui.Kind.NORMAL) { shareGroup(name, withFiles) })
             actions.addView(ui.iconButton(LineIcon.REPEAT, "Конвертувати", Ui.Kind.NORMAL) { convert(withFiles) })
+            val wavs = withFiles.filter { isWav(it) }
+            if (wavs.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.DISC, "FLAC з обкладинками (${wavs.size})", Ui.Kind.NORMAL) { confirmMakeFlac(wavs) })
             box.addView(actions, ui.matchWrap())
         }
         return box
@@ -526,6 +541,14 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         if (r.id > 0) facts.addView(ui.fact("Запис №", r.id.toString())) // T18: свій номер, навіть коли назви однакові
         box.addView(facts, ui.matchWrap())
 
+        // T68 / T69: що насправді у файлі; старий WAV — FLAC з обкладинкою з історії.
+        if (r.hasFile) {
+            val more = FlowLayout(host, ui.dp(8), ui.dp(8))
+            more.addView(ui.iconButton(LineIcon.FILE, "Про файл", Ui.Kind.NORMAL) { openFileInfo(r) })
+            if (isWav(r)) more.addView(ui.iconButton(LineIcon.REPEAT, "Зробити FLAC з обкладинкою", Ui.Kind.NORMAL) { confirmMakeFlac(listOf(r)) })
+            box.addView(more, ui.matchWrap())
+        }
+
         // Плеєр (v0.1.17, faric 15.10 15:36): одразу видно смугу й ⏮ ▶ ⏭; ⏮/⏭ — сусідні записи історії.
         if (r.hasFile) {
             val both = r.mp3Uri != null && r.wavUri != null
@@ -689,6 +712,158 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             onAction = { host.overlay.dismiss() },
         )
         host.overlay.show(KEY_NO_CONVERTER, body)
+    }
+
+    // ---------- «Про файл» (T68) ----------
+
+    private fun isWav(r: RecordingRow) = r.wavUri != null && Lossless.ofName(r.wavName) == Lossless.WAV
+
+    /** Файл, який зараз вибрано для прослуховування (MP3 чи FLAC/WAV), — його й показуємо. */
+    private fun openFileInfo(r: RecordingRow) {
+        val uri = playUri(r) ?: return
+        val name = (if (uri == r.wavUri) r.wavName else r.mp3Name) ?: ""
+        val store = MediaStoreWriter(host)
+        val app = host.applicationContext
+        Thread({
+            val result = runCatching {
+                val size = store.sizeOf(uri)
+                app.contentResolver.openInputStream(Uri.parse(uri))?.buffered(64 * 1024)?.use { FileTags.read(it, size, name) to size }
+                    ?: throw java.io.IOException("файл не відкривається — можливо, його прибрали в «Моїх файлах»")
+            }
+            val folder = store.folderLabel(uri)
+            host.runOnUiThread {
+                if (host.isFinishing || host.isDestroyed) return@runOnUiThread
+                result.fold(
+                    { (info, size) ->
+                        val extra = FileInfoPanel.Extra(
+                            recorded = recordedFacts(r),
+                            historyArtwork = r.artworkPath,
+                            clips = r.clips,
+                            makeFlac = if (isWav(r) && uri == r.wavUri) ({ confirmMakeFlac(listOf(r)) }) else null,
+                        )
+                        val view = FileInfoPanel(host).build(info, name, folder, size, extra) { closeFileInfo(r) }
+                        host.overlay.show("fileinfo:${r.id}", view)
+                    },
+                    { e -> host.toast("Не вдалося прочитати файл: ${e.message ?: e.javaClass.simpleName}") },
+                )
+            }
+        }, "file-info").start()
+    }
+
+    /** «Закрити» в «Про файл» — назад до подробиць запису (у вікні) або просто закрити (дві колонки). */
+    private fun closeFileInfo(r: RecordingRow) {
+        if (detailPane == null) db.get(r.id)?.let { showDetailDialog(it) } ?: host.overlay.dismiss() else host.overlay.dismiss()
+    }
+
+    private fun recordedFacts(r: RecordingRow): List<Pair<String, String>> = buildList {
+        if (r.sourcePackage.isNotBlank()) add("Плеєр" to appLabel(r.sourcePackage))
+        add("Записано" to TimeText.clock(r.lengthMs) + if (r.durationMs > 0) " з ${TimeText.clock(r.durationMs)}" else "")
+        add("Статус" to r.status.label)
+        add("Розріз" to if (r.cutBySilence) "по тиші між піснями" else "по сигналу зі шторки")
+        add("Коли" to TimeText.dateTime(r.createdAt))
+        if (r.id > 0) add("Запис №" to r.id.toString())
+    }
+
+    // ---------- WAV → FLAC з обкладинкою (T69) ----------
+
+    private fun confirmMakeFlac(rows: List<RecordingRow>) {
+        if (RecorderHub.state.phase != RecorderHub.Phase.IDLE) {
+            host.toast("Спершу зупини запис — перетворення вантажить телефон")
+            return
+        }
+        val withArt = rows.count { r -> r.artworkPath?.let { java.io.File(it).isFile } == true }
+        val approx = TimeText.size(rows.sumOf { it.wavSize } * 6 / 10)
+        val body = host.overlay.dialog(
+            title = if (rows.size == 1) "Зробити FLAC з обкладинкою?" else "Зробити ${TimeText.plural(rows.size, "FLAC", "FLAC", "FLAC")} з обкладинками?",
+            message = "З WAV вийде FLAC: звук той самий до біта, а всередині — назва, виконавець, альбом, номер пісні й обкладинка з історії " +
+                "(є для $withArt з ${rows.size}).\n\nWAV лишаються, як були; FLAC з'являться поруч (≈ $approx). В історії запис почне показувати FLAC.",
+            actions = listOf("Зробити" to Ui.Kind.PRIMARY, "Скасувати" to Ui.Kind.QUIET),
+            onAction = { i -> if (i == 0) makeFlac(rows) else host.overlay.dismiss() },
+        )
+        host.overlay.show("makeflac:0", body)
+    }
+
+    private fun makeFlac(rows: List<RecordingRow>) {
+        val progressText = ui.muted("Готуюсь…", 14.5f)
+        val box = ui.column(12).apply {
+            addView(ui.title("Роблю FLAC з обкладинками", 19f))
+            addView(progressText)
+            addView(ui.muted("Можна згорнути застосунок — робота йде далі. Не закривай його зовсім.", 13f))
+        }
+        host.overlay.show("makeflac:run", box, dismissOnOutside = false)
+        val app = host.applicationContext
+        val settings = Settings(app).snapshot()
+        Thread({
+            var made = 0
+            val problems = ArrayList<String>()
+            for ((i, r) in rows.withIndex()) {
+                val label = r.title.ifBlank { r.displayName }
+                var shown = -1
+                fun say(p: Float) {
+                    val pct = (p * 100).toInt()
+                    if (pct == shown) return
+                    shown = pct
+                    host.runOnUiThread { progressText.text = "${i + 1} з ${rows.size}: $label · $pct %" }
+                }
+                say(0f)
+                try {
+                    makeOneFlac(app, r, settings) { say(it) }
+                    made++
+                } catch (e: Exception) {
+                    problems += "$label — ${e.message ?: e.javaClass.simpleName}"
+                }
+            }
+            host.runOnUiThread {
+                if (host.isFinishing || host.isDestroyed) return@runOnUiThread
+                val msg = "Готово: " + TimeText.plural(made, "FLAC", "FLAC", "FLAC") + " з обкладинками й тегами. WAV лишились на місці." +
+                    if (problems.isEmpty()) "" else "\n\nНе вийшло (${problems.size}):\n" + problems.joinToString("\n")
+                val body = host.overlay.dialog("FLAC з обкладинками", msg, listOf("Закрити" to Ui.Kind.QUIET), { host.overlay.dismiss() })
+                host.overlay.show("makeflac:done", body)
+            }
+        }, "wav-to-flac").start()
+    }
+
+    private fun makeOneFlac(app: android.content.Context, r: RecordingRow, settings: Settings.Values, progress: (Float) -> Unit) {
+        val wavUri = r.wavUri ?: throw java.io.IOException("нема WAV")
+        val resolver = app.contentResolver
+        val src = Uri.parse(wavUri)
+        val ms = MediaStoreWriter(app)
+        val info = resolver.openInputStream(src)?.buffered(64 * 1024)?.use { FileTags.read(it, ms.sizeOf(wavUri), r.wavName ?: "") }
+            ?: throw java.io.IOException("WAV не відкривається — можливо, його прибрали")
+        WavToFlac.problem(info)?.let { throw IllegalArgumentException(it) }
+        val meta = TrackMeta(
+            r.artist, r.title, r.album, r.durationMs,
+            trackNo = trackNoFor(r),
+            year = java.util.Calendar.getInstance().apply { timeInMillis = r.createdAt }.get(java.util.Calendar.YEAR),
+        )
+        // Поруч з WAV: у «Музиці» — та сама папка; своя папка — як для нових записів.
+        val (store: AudioStore, dir) = if (ms.isDocumentUri(wavUri)) {
+            val tree = settings.treeUri.takeIf { it.isNotBlank() }?.let { runCatching { TreeWriter(app, Uri.parse(it)) }.getOrNull() }
+                ?: throw java.io.IOException("своя папка недоступна — відкрий «Налаштування» → «Куди зберігається»")
+            tree to FileNames.folderFor(meta, settings.albumFolders, settings.plainNames)
+        } else {
+            ms to (ms.relativePath(wavUri) ?: FileNames.folderFor(meta, settings.albumFolders, settings.plainNames))
+        }
+        val base = (r.wavName ?: FileNames.baseName(meta, settings.plainNames)).removeSuffix(".wav").removeSuffix(".WAV")
+        val name = FileNames.unique(base, Lossless.FLAC.ext) { store.exists(it, dir) }
+        val jpeg = Artwork.readJpeg(r.artworkPath)
+        val saved = store.write(name, Lossless.FLAC.mime, dir) { out ->
+            val a = resolver.openInputStream(src) ?: throw java.io.IOException("WAV не відкривається")
+            val b = resolver.openInputStream(src) ?: throw java.io.IOException("WAV не відкривається")
+            a.buffered(256 * 1024).use { p1 -> b.buffered(256 * 1024).use { p2 -> WavToFlac.encode(info, p1, p2, FlacEncoder.tagsFor(meta), jpeg, out, progress) } }
+        }
+        db.replaceLossless(
+            r.id, saved.uri, saved.name, saved.size,
+            "FLAC з WAV зроблено ${TimeText.dateTime(System.currentTimeMillis())}" + (if (jpeg != null) " з обкладинкою" else "") + "; WAV лишився: ${r.wavName}",
+        )
+    }
+
+    /** Номер пісні в альбомі так само, як під час запису (T68): «TRACK 10» з назви або по порядку сесії. */
+    private fun trackNoFor(r: RecordingRow): Int {
+        val album = r.album.trim().lowercase()
+        val same = db.sessionRows(r.sessionId).filter { it.album.trim().lowercase() == album && (it.hasFile || it.id == r.id) }
+        val upTo = same.takeWhile { it.id != r.id } + r
+        return TrackNumber.all(upTo.map { it.title }).last()
     }
 
     private fun confirmDelete(r: RecordingRow) {

@@ -10,6 +10,10 @@ data class TrackMeta(
     val artworkPath: String? = null,
     /** Ідентифікатор пісні в плеєрі (якщо плеєр його дає) — лише для порівняння, у файл не пишеться. */
     val mediaId: String = "",
+    /** Номер пісні в альбомі (T68): ставиться при збереженні ([TrackNumber]); 0 — не писати. Не порівнюється. */
+    val trackNo: Int = 0,
+    /** Рік для тегу (T68): рік запису; 0 — не писати. */
+    val year: Int = 0,
 ) {
     val isUnknown: Boolean get() = artist.isBlank() && title.isBlank()
 

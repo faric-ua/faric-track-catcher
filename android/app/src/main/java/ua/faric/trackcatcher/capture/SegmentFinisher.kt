@@ -22,6 +22,7 @@ import ua.faric.trackcatcher.core.Lossless
 import ua.faric.trackcatcher.core.Pcm
 import ua.faric.trackcatcher.core.RecStatus
 import ua.faric.trackcatcher.core.RepeatPolicy
+import ua.faric.trackcatcher.core.TrackNumber
 import ua.faric.trackcatcher.core.Verdict
 import ua.faric.trackcatcher.core.WavHeader
 import ua.faric.trackcatcher.data.HistoryDb
@@ -39,7 +40,8 @@ class SegmentFinisher(context: Context) {
     private val mediaStore = MediaStoreWriter(app)
     private val db = HistoryDb.get(app)
 
-    fun finish(job: SegmentJob, settings: Settings.Values): RecordingRow {
+    fun finish(original: SegmentJob, settings: Settings.Values): RecordingRow {
+        var job = original
         val totalFrames = job.pcmFile.length() / Pcm.BYTES_PER_FRAME
         val clips = ClipCounter()
         val trimmed = LevelAnalysis.trim(blockLevels(job.pcmFile, clips), totalFrames)
@@ -61,6 +63,8 @@ class SegmentFinisher(context: Context) {
         var wav: MediaStoreWriter.Saved? = null
         var bitrate = 0
         if (verdict.status == RecStatus.COMPLETE || verdict.status == RecStatus.PARTIAL) {
+            // T68: номер пісні в альбомі (з «TRACK 10» у назві або по порядку цього запису) і рік — у теги.
+            job = job.copy(meta = job.meta.copy(trackNo = trackNumber(job), year = yearOf(job.closedAt)))
             val base = FileNames.baseName(job.meta, settings.plainNames)
             val dir = FileNames.folderFor(job.meta, settings.albumFolders, settings.plainNames)
             val fade = EdgeFade.frames(fadeMs = settings.fadeMs)
@@ -130,6 +134,16 @@ class SegmentFinisher(context: Context) {
         job.sidecar.delete()
         return row.copy(id = id)
     }
+
+    private fun trackNumber(job: SegmentJob): Int {
+        val album = job.meta.album.trim().lowercase()
+        val earlier = db.sessionRows(job.sessionId).filter {
+            it.album.trim().lowercase() == album && it.hasFile && it.createdAt <= job.closedAt
+        }
+        return TrackNumber.next(job.meta.title, TrackNumber.all(earlier.map { it.title }))
+    }
+
+    private fun yearOf(ms: Long): Int = java.util.Calendar.getInstance().apply { timeInMillis = ms }.get(java.util.Calendar.YEAR)
 
     /** Запис в історії, коли збереження впало зовсім. */
     fun failure(job: SegmentJob, error: Throwable): RecordingRow {
