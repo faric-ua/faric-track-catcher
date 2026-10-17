@@ -26,6 +26,7 @@ import ua.faric.trackcatcher.core.TimeText
 import ua.faric.trackcatcher.data.HistoryDb
 import ua.faric.trackcatcher.data.RecordingRow
 import ua.faric.trackcatcher.data.SessionRow
+import ua.faric.trackcatcher.data.Settings
 import ua.faric.trackcatcher.state.RecorderHub
 
 /**
@@ -59,6 +60,13 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         setText(query)
     }
     private val chips = ui.row(8)
+    /** T61: групувати за сесіями, альбомами чи виконавцями. */
+    private enum class Group(val code: String, val label: String) {
+        SESSIONS("sessions", "Сесії"), ALBUMS("albums", "Альбоми"), ARTISTS("artists", "Виконавці")
+    }
+    private val prefs = Settings(host)
+    private var group: Group = Group.entries.firstOrNull { it.code == (state?.getString(KEY_GROUP) ?: prefs.historyGroup) } ?: Group.SESSIONS
+    private val groupChips = ui.row(8)
     private val list = ui.column(10)
     private val detailPane: LinearLayout? = if (ui.twoPane) ui.column(12) else null
     private var detailScroll: android.widget.ScrollView? = null
@@ -78,6 +86,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         val top = ui.column(10).apply {
             setPadding(ui.dp(16), ui.dp(12), ui.dp(16), ui.dp(4))
             addView(search, ui.matchWrap())
+            addView(ui.hscroll(groupChips), ui.matchWrap())
             addView(ui.hscroll(chips), ui.matchWrap())
             addView(pickBar, ui.matchWrap())
         }
@@ -119,6 +128,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         out.putLong(KEY_SELECTED, selectedId)
         out.putBoolean(KEY_LISTEN_WAV, listenWav)
         out.putLongArray(KEY_PICKED, picked.toLongArray())
+        out.putString(KEY_GROUP, group.code)
     }
 
     override val wantsBack: Boolean get() = picked.isNotEmpty()
@@ -232,7 +242,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     // ---------- список ----------
 
     private fun reload() {
-        rows = db.list(filter, query)
+        val found = db.list(filter, query)
+        // У групах — альбом (виконавець) разом; найсвіжіший угорі, усередині — новіші згори, як завжди.
+        rows = if (group == Group.SESSIONS) found else Playlist.groupInOrder(found) { groupKeyOf(it) }.flatMap { it.second }
+        renderGroupChips()
         renderChips(db.counts())
         renderPickBar()
         list.removeAllViews()
@@ -246,14 +259,21 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 ))
             }, ui.matchWrap())
         } else {
-            val sessions = db.sessions()
-            var currentSession = -1L
-            for (r in rows) {
-                if (r.sessionId != currentSession) {
-                    currentSession = r.sessionId
-                    list.addView(sessionHeader(sessions[r.sessionId], rows.count { it.sessionId == r.sessionId }), ui.matchWrap())
+            if (group == Group.SESSIONS) {
+                val sessions = db.sessions()
+                var currentSession = -1L
+                for (r in rows) {
+                    if (r.sessionId != currentSession) {
+                        currentSession = r.sessionId
+                        list.addView(sessionHeader(sessions[r.sessionId], rows.count { it.sessionId == r.sessionId }), ui.matchWrap())
+                    }
+                    list.addView(rowView(r), ui.matchWrap())
                 }
-                list.addView(rowView(r), ui.matchWrap())
+            } else {
+                for ((_, members) in Playlist.groupInOrder(rows) { groupKeyOf(it) }) {
+                    list.addView(groupHeader(members), ui.matchWrap())
+                    for (r in members) list.addView(rowView(r), ui.matchWrap())
+                }
             }
         }
         detailPane?.let { pane ->
@@ -267,6 +287,76 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                     addView(ui.muted("Вибери запис ліворуч — тут буде все про нього: тривалість, формат, файл, чому неповний. І плеєр: ⏮ ▶ ⏭, «Поділитись».", 14f))
                 }, ui.matchWrap())
             }
+        }
+    }
+
+    private fun renderGroupChips() {
+        groupChips.removeAllViews()
+        groupChips.addView(ui.muted("Групувати:", 13.5f))
+        for (g in Group.entries) groupChips.addView(ui.choice(g.label, group == g) {
+            if (group != g) {
+                group = g
+                prefs.historyGroup = g.code
+                reload()
+            }
+        })
+    }
+
+    private fun groupName(r: RecordingRow): String = when (group) {
+        Group.ALBUMS -> r.album.trim()
+        Group.ARTISTS -> r.artist.trim()
+        Group.SESSIONS -> r.sessionId.toString()
+    }
+
+    private fun groupKeyOf(r: RecordingRow): String = if (group == Group.SESSIONS) r.sessionId.toString() else Playlist.groupKey(groupName(r))
+
+    /** Записи тієї самої групи, що й [r] (в альбомі ⏮/⏭ і «дограла» лишаються в альбомі). */
+    private fun scope(r: RecordingRow): List<RecordingRow> =
+        if (group == Group.SESSIONS) rows else groupKeyOf(r).let { k -> rows.filter { groupKeyOf(it) == k } }
+
+    /** Шапка альбому / виконавця: назва, скільки пісень і часу, «Слухати» й «Поділитись» (T61). */
+    private fun groupHeader(members: List<RecordingRow>): View {
+        val first = members.first()
+        val name = groupName(first).ifBlank { if (group == Group.ALBUMS) "Без альбому" else "Невідомий виконавець" }
+        val withFiles = members.filter { it.hasFile }
+        val box = ui.card(8)
+        box.addView(ui.label(name, if (group == Group.ALBUMS) LineIcon.DISC else LineIcon.LIST))
+        box.addView(ui.numbers(ui.muted(buildString {
+            append(TimeText.plural(members.size, "запис", "записи", "записів"))
+            if (withFiles.isNotEmpty()) {
+                append(" · ").append(TimeText.plural(withFiles.size, "файл", "файли", "файлів"))
+                append(" · ").append(TimeText.clock(withFiles.sumOf { it.lengthMs }))
+            }
+        }, 13.5f)))
+        if (withFiles.isNotEmpty()) {
+            val actions = FlowLayout(host, ui.dp(8), ui.dp(8))
+            actions.addView(ui.iconButton(LineIcon.PLAY, "Слухати", Ui.Kind.PRIMARY) { listenGroup(withFiles) })
+            actions.addView(ui.iconButton(LineIcon.SHARE, "Поділитись", Ui.Kind.NORMAL) { shareGroup(name, withFiles) })
+            box.addView(actions, ui.matchWrap())
+        }
+        return box
+    }
+
+    /** Альбом з першої пісні (найстарішої — як у плеєрі), далі сам по черзі. */
+    private fun listenGroup(members: List<RecordingRow>) {
+        val start = members.last()
+        listen(start)
+        if (InAppPlayer.uri != null) host.toast("Грає ${TimeText.plural(members.size, "пісня", "пісні", "пісень")} — з першої")
+    }
+
+    private fun shareGroup(name: String, members: List<RecordingRow>) {
+        val uris = ArrayList<Uri>()
+        for (r in members.asReversed()) {
+            r.mp3Uri?.let { uris += Uri.parse(it) }
+            r.wavUri?.let { uris += Uri.parse(it) }
+        }
+        val send = Intent(Intent.ACTION_SEND_MULTIPLE).setType("audio/*").putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            .putExtra(Intent.EXTRA_SUBJECT, name)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try {
+            host.startActivity(Intent.createChooser(send, "Поділитись: $name"))
+        } catch (e: ActivityNotFoundException) {
+            host.toast("Немає застосунку, щоб поділитись")
         }
     }
 
@@ -486,8 +576,9 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private fun isPlaying(r: RecordingRow): Boolean = InAppPlayer.uri != null && (InAppPlayer.uri == r.mp3Uri || InAppPlayer.uri == r.wavUri)
 
     private fun neighbor(r: RecordingRow, next: Boolean): RecordingRow? {
-        val id = Playlist.neighbor(rows.map { it.id }, { id -> rows.firstOrNull { it.id == id }?.hasFile == true }, r.id, next)
-        return id?.let { found -> rows.firstOrNull { it.id == found } }
+        val pool = scope(r)
+        val id = Playlist.neighbor(pool.map { it.id }, { id -> pool.firstOrNull { it.id == id }?.hasFile == true }, r.id, next)
+        return id?.let { found -> pool.firstOrNull { it.id == found } }
     }
 
     /**
@@ -538,7 +629,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             return
         }
         val t = track(r) ?: return
-        InAppPlayer.play(host, t, rows.filter { it.hasFile }.mapNotNull { track(it) })
+        InAppPlayer.play(host, t, scope(r).filter { it.hasFile }.mapNotNull { track(it) })
     }
 
     private fun playExternal(uri: String, mime: String) {
@@ -603,6 +694,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         private const val KEY_QUERY = "query"
         private const val KEY_SELECTED = "selected"
         private const val KEY_LISTEN_WAV = "listen_wav"
+        private const val KEY_GROUP = "group"
         private const val KEY_PICKED = "picked"
         private const val KEY_DELETE_MANY = "deletemany:0"
     }

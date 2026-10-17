@@ -21,4 +21,18 @@ object Playlist {
         val j = if (next) i - 1 else i + 1
         return playable.getOrNull(j)?.takeIf { it != current }
     }
+
+    /**
+     * Групи історії (T61, faric 17.10: «пишу альбомами — хочу альбоми прослухати; групувати по сесіях, по альбомах, по всьому»).
+     * Порядок груп — як першої появи в [items] (новіші згори → найсвіжіший альбом угорі), усередині — як у [items].
+     */
+    fun <T> groupInOrder(items: List<T>, key: (T) -> String): List<Pair<String, List<T>>> {
+        val groups = LinkedHashMap<String, MutableList<T>>()
+        for (it in items) groups.getOrPut(key(it)) { ArrayList() } += it
+        return groups.map { (k, v) -> k to v }
+    }
+
+    /** Ключ групи без різниці у великих літерах і пробілах по краях: «Neon» = «neon ». */
+    fun groupKey(name: String): String = name.trim().lowercase()
 }
+

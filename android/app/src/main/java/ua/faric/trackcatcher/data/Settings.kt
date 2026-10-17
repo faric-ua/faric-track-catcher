@@ -26,6 +26,8 @@ class Settings(context: Context) {
         val customAlbum: String = "",
         /** Зупинитись після стількох пісень (T40); 0 — без обмеження. */
         val stopAfter: Int = 0,
+        /** Зупинитись через стільки хвилин записаного звуку — на зміні пісні (T60); 0 — без обмеження. */
+        val stopAfterMin: Int = 0,
         /** Своя папка (T29): дозвіл Android на папку; порожньо — «Музика › Track Catcher». */
         val treeUri: String = "",
         /** Без смайликів у назвах файлів і папок (T36); теги — як є. */
@@ -96,18 +98,33 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_ALBUM, "") ?: ""
         set(v) = prefs.edit().putString(KEY_ALBUM, v.trim()).apply()
 
+    /** «N пісень» і «N хвилин» — щось одне: вибір одного скидає інше. */
     var stopAfter: Int
         get() = prefs.getInt(KEY_STOP_AFTER, 0)
-        set(v) = prefs.edit().putInt(KEY_STOP_AFTER, v.coerceIn(0, MAX_STOP_AFTER)).apply()
+        set(v) = prefs.edit().putInt(KEY_STOP_AFTER, v.coerceIn(0, MAX_STOP_AFTER)).also {
+            if (v > 0) it.putInt(KEY_STOP_AFTER_MIN, 0)
+        }.apply()
+
+    var stopAfterMin: Int
+        get() = prefs.getInt(KEY_STOP_AFTER_MIN, 0)
+        set(v) = prefs.edit().putInt(KEY_STOP_AFTER_MIN, v.coerceIn(0, MAX_STOP_AFTER_MIN)).also {
+            if (v > 0) it.putInt(KEY_STOP_AFTER, 0)
+        }.apply()
 
     fun snapshot() = Values(
         format, mp3Bitrate, minLengthSec, repeat, albumFolders, trimEdges, fadeMs, cutShiftMs,
         customAlbum = if (useCustomAlbum) customAlbum else "",
         stopAfter = stopAfter,
+        stopAfterMin = stopAfterMin,
         treeUri = treeUri,
         plainNames = plainNames,
         onlyPlayer = onlyPlayer,
     )
+
+    /** Як групувати історію (T61): sessions / albums / artists. */
+    var historyGroup: String
+        get() = prefs.getString(KEY_HISTORY_GROUP, "sessions") ?: "sessions"
+        set(v) = prefs.edit().putString(KEY_HISTORY_GROUP, v).apply()
 
     var onlyPlayer: Boolean
         get() = prefs.getBoolean(KEY_ONLY_PLAYER, true)
@@ -137,7 +154,10 @@ class Settings(context: Context) {
         private const val KEY_PLAIN_NAMES = "plain_names"
         private const val KEY_CUT_SHIFT_V2 = "cut_shift_v2"
         private const val KEY_ONLY_PLAYER = "only_player"
+        private const val KEY_HISTORY_GROUP = "history_group"
         const val MAX_STOP_AFTER = 999
+        const val MAX_STOP_AFTER_MIN = 24 * 60
+        private const val KEY_STOP_AFTER_MIN = "stop_after_min"
         const val TRIM_EDGE_MS = 1_000
         val FADE_CHOICES = listOf(0, 100, 250, 500, 1_000, 2_000)
         val SHIFT_CHOICES = CutShift.CHOICES

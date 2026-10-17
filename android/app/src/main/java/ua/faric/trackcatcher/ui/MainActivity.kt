@@ -433,6 +433,10 @@ class MainActivity : Activity() {
             onFolderPicked(resultCode, data)
             return
         }
+        if (requestCode == REQ_BACKUP_SAVE || requestCode == REQ_BACKUP_OPEN) {
+            onBackupPicked(requestCode, resultCode, data)
+            return
+        }
         if (requestCode == UpdateUi.REQ_APK || requestCode == UpdateUi.REQ_JSON) {
             UpdateUi(this).onFilePicked(requestCode, resultCode, data)
             return
@@ -443,6 +447,68 @@ class MainActivity : Activity() {
         } else {
             RecorderHub.update { it.copy(error = "Запис не почато: у вікні Android не натиснули «Почати».") }
         }
+    }
+
+    // ---------- копія історії (T64) ----------
+
+    fun saveHistoryCopy() {
+        val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(java.util.Date())
+        val i = Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("application/json").putExtra(Intent.EXTRA_TITLE, "track-catcher-istoriya-$day.json")
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(i, REQ_BACKUP_SAVE)
+        } catch (e: ActivityNotFoundException) {
+            toast("На цьому телефоні немає вікна «Зберегти»")
+        }
+    }
+
+    fun openHistoryCopy() {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(i, REQ_BACKUP_OPEN)
+        } catch (e: ActivityNotFoundException) {
+            toast("На цьому телефоні немає вікна вибору файлу")
+        }
+    }
+
+    private fun onBackupPicked(requestCode: Int, resultCode: Int, data: Intent?) {
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null) return
+        val save = requestCode == REQ_BACKUP_SAVE
+        val app = applicationContext
+        Thread({
+            val message = try {
+                val db = ua.faric.trackcatcher.data.HistoryDb.get(app)
+                if (save) {
+                    val n = app.contentResolver.openOutputStream(uri, "wt")?.use {
+                        ua.faric.trackcatcher.data.HistoryBackup.export(db, it, ua.faric.trackcatcher.BuildConfig.VERSION_NAME)
+                    } ?: throw java.io.IOException("файл не відкривається на запис")
+                    "Збережено: " + ua.faric.trackcatcher.core.TimeText.plural(n, "запис", "записи", "записів") +
+                        ". Тримай файл у надійному місці (напр. Google Диск) — з нього історію можна відновити."
+                } else {
+                    val r = app.contentResolver.openInputStream(uri)?.use { ua.faric.trackcatcher.data.HistoryBackup.import(db, it) }
+                        ?: throw java.io.IOException("файл не відкривається")
+                    "Додано " + ua.faric.trackcatcher.core.TimeText.plural(r.added, "запис", "записи", "записів") +
+                        (if (r.skipped > 0) ", уже були — ${r.skipped}" else "") + ". Наявні записи не змінено."
+                }
+            } catch (e: ua.faric.trackcatcher.data.HistoryBackup.BadFile) {
+                e.message ?: "Це не копія історії."
+            } catch (e: Exception) {
+                (if (save) "Не вдалося зберегти: " else "Не вдалося відновити: ") + (e.message ?: e.javaClass.simpleName)
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                val body = overlay.dialog(
+                    title = if (save) "Копія історії" else "Відновлення історії",
+                    message = message,
+                    actions = listOf("Закрити" to Ui.Kind.QUIET),
+                    onAction = { overlay.dismiss() },
+                )
+                overlay.show("backup:result", body)
+            }
+        }, "history-backup").start()
     }
 
     /** Своя папка (T29): вікно Android «Вибрати папку» — там видно й карту пам'яті. */
@@ -511,5 +577,7 @@ class MainActivity : Activity() {
         private const val REQ_PERMS_THEN_START = 11
         private const val REQ_PROJECTION = 20
         private const val REQ_TREE = 30
+        private const val REQ_BACKUP_SAVE = 40
+        private const val REQ_BACKUP_OPEN = 41
     }
 }

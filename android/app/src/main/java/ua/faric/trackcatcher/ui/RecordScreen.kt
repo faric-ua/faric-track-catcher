@@ -218,7 +218,8 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         val useAlbum = settings.useCustomAlbum
         val album = settings.customAlbum
         val limit = settings.stopAfter
-        val key = "$locked|$useAlbum|$album|$limit"
+        val minutes = settings.stopAfterMin
+        val key = "$locked|$useAlbum|$album|$limit|$minutes"
         if (key == planKey) return
         planKey = key
         planCard.removeAllViews()
@@ -232,16 +233,26 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
         planCard.addView(ui.title("Зупинитись після", 15.5f))
         val limitRow = FlowLayout(host, ui.dp(8), ui.dp(8))
-        limitRow.addView(ui.choice("Без обмеження", limit == 0) { settings.stopAfter = 0; planKey = ""; renderPlan(RecorderHub.state) })
+        limitRow.addView(ui.choice("Без обмеження", limit == 0 && minutes == 0) {
+            settings.stopAfter = 0
+            settings.stopAfterMin = 0
+            planKey = ""
+            renderPlan(RecorderHub.state)
+        })
         limitRow.addView(ui.choice(if (limit == 0) "Кількість пісень…" else TimeText.plural(limit, "пісні", "пісень", "пісень"), limit > 0) { askLimit() })
+        limitRow.addView(ui.choice(if (minutes == 0) "Хвилин…" else "$minutes хв", minutes > 0) { askMinutes() })
         planCard.addView(limitRow, ui.matchWrap())
 
         planCard.addView(ui.muted(
             buildString {
                 append(if (useAlbum && album.isNotBlank()) "Усі пісні підуть в альбом «$album» (папка й теги). " else "Альбом — як показує плеєр. ")
                 append(
-                    if (limit > 0) "Після ${limit}-ї пісні плеєр стане на паузу, а запис зупиниться сам."
-                    else "Запис іде, доки не натиснеш «Зупинити»."
+                    when {
+                        limit > 0 -> "Після ${limit}-ї пісні плеєр стане на паузу, а запис зупиниться сам."
+                        minutes > 0 -> "Через $minutes хв записаного звуку — на першій зміні пісні плеєр стане на паузу, а запис зупиниться " +
+                            "(пісня, що почнеться в останні ~45 с, уже не пишеться). Паузи плеєра не рахуються."
+                        else -> "Запис іде, доки не натиснеш «Зупинити»."
+                    }
                 )
                 if (locked) append(" Змінити можна після цього запису.")
             },
@@ -329,9 +340,35 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         host.overlay.show(KEY_LIMIT, body)
     }
 
+    /** T60: скільки хвилин записати (як пише Suno в кінці альбому). */
+    private fun askMinutes() {
+        val current = settings.stopAfterMin
+        val field = input(if (current > 0) current.toString() else "", number = true).apply { hint = "Напр. 47" }
+        val extra = ui.column(10)
+        extra.addView(field, ui.matchWrap())
+        val row = FlowLayout(host, ui.dp(8), ui.dp(8))
+        listOf(30, 40, 45, 60, 90).forEach { n -> row.addView(ui.choice("$n хв", n == current) { field.setText("$n"); field.setSelection(field.text.length) }) }
+        extra.addView(row, ui.matchWrap())
+        val body = host.overlay.dialog(
+            title = "Зупинитись через",
+            message = "Скільки хвилин записати — напр. скільки пише Suno в кінці альбому. Коли час майже вийде, Track Catcher дочекається " +
+                "кінця пісні, поставить плеєр на паузу й зупинить запис.",
+            actions = listOf("Готово" to Ui.Kind.PRIMARY, "Скасувати" to Ui.Kind.QUIET),
+            onAction = { i ->
+                if (i == 0) settings.stopAfterMin = field.text.toString().trim().toIntOrNull() ?: 0
+                host.overlay.dismiss()
+                planKey = ""
+                renderPlan(RecorderHub.state)
+            },
+            extra = extra,
+        )
+        host.overlay.show(KEY_MINUTES, body)
+    }
+
     override fun restoreDialog(key: String): Boolean = when (key) {
         KEY_ALBUM -> { askAlbum(); true }
         KEY_LIMIT -> { askLimit(); true }
+        KEY_MINUTES -> { askMinutes(); true }
         else -> false
     }
 
@@ -358,6 +395,9 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private fun sessionLine(s: RecorderHub.State): String = buildString {
         append(TimeText.plural(s.tracks.coerceAtLeast(if (s.phase == RecorderHub.Phase.RECORDING) 1 else 0), "пісня", "пісні", "пісень"))
         if (s.limit > 0 && s.phase == RecorderHub.Phase.RECORDING) append(" (").append(s.songs.coerceAtMost(s.limit)).append(" з ").append(s.limit).append(")")
+        if (s.limitMin > 0 && s.phase == RecorderHub.Phase.RECORDING) {
+            append(" (").append(TimeText.clock(s.recordedMs)).append(" з ").append(TimeText.clock(s.limitMin * 60_000L)).append(")")
+        }
         append(" · збережено ").append(s.saved)
         if (s.queued > 0) append(" · у черзі ").append(s.queued)
         if (s.failed > 0) append(" · невдало ").append(s.failed)
@@ -441,5 +481,6 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     companion object {
         private const val KEY_ALBUM = "plan:album"
         private const val KEY_LIMIT = "plan:limit"
+        private const val KEY_MINUTES = "plan:minutes"
     }
 }

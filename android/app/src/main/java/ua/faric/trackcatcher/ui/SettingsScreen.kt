@@ -57,13 +57,27 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             addView(ui.text("MP3 — LAME 3.98.4 у Java-версії jump3r (LGPL-2.1).", 12.5f, Palette.faint))
             addView(ui.text("github.com/faric-ua/faric-track-catcher", 12.5f, Palette.faint))
         }
+        // T64: копія історії.
+        val backupCard = ui.card(10).apply {
+            addView(ui.label("Копія історії", LineIcon.LIST))
+            addView(ui.muted(
+                "Історія (статуси, причини, назви, де лежать файли) живе всередині застосунку — після перевстановлення вона пропала б. " +
+                    "Копія — один файл: збережи його в «Мої файли» або на Google Диск. Файли пісень у копію не йдуть — вони й так у «Музиці».",
+                13.5f,
+            ))
+            addView(FlowLayout(host, ui.dp(8), ui.dp(8)).apply {
+                addView(ui.iconButton(LineIcon.CLOUD, "Зберегти копію", Ui.Kind.PRIMARY) { host.saveHistoryCopy() })
+                addView(ui.iconButton(LineIcon.FOLDER, "Відновити з копії", Ui.Kind.NORMAL) { host.openHistoryCopy() })
+            }, ui.matchWrap())
+            addView(ui.text("Відновлення лише додає записи, яких ще нема; наявні не змінює. Обкладинки в копію не входять.", 12.5f, Palette.faint))
+        }
         val updateCard = UpdateUi(host).card()
-        val all = listOf(formatCard, qualityCard, lengthCard, repeatCard, soundCard, edgesCard, folderCard, permsSlot, updateCard, aboutCard)
+        val all = listOf(formatCard, qualityCard, lengthCard, repeatCard, soundCard, edgesCard, folderCard, backupCard, permsSlot, updateCard, aboutCard)
         view = if (ui.twoPane) {
             val left = ui.column(12)
             val right = ui.column(12)
             listOf(formatCard, qualityCard, lengthCard, repeatCard, soundCard, edgesCard).forEach { left.addView(it, ui.matchWrap()) }
-            listOf(folderCard, permsSlot, updateCard, aboutCard).forEach { right.addView(it, ui.matchWrap()) }
+            listOf(folderCard, backupCard, permsSlot, updateCard, aboutCard).forEach { right.addView(it, ui.matchWrap()) }
             ui.scroll(ui.row(12).apply {
                 gravity = Gravity.TOP
                 addView(left, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))

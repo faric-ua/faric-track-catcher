@@ -41,6 +41,10 @@ enum class LineIcon(vararg val parts: Part) {
     FILE(Part("M6 3h8l4 4v14H6z"), Part("M14 3v4h4M9 13h6M9 17h6")),
     REPEAT(Part("M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"), Part("M18 3v4h-4M6 21v-4h4")),
     INFO(Part(SvgPath.circle(12f, 12f, 9f)), Part("M12 11v6M12 7.5v.3")),
+    SHARE(
+        Part(SvgPath.circle(17f, 5.5f, 2.5f)), Part(SvgPath.circle(6f, 12f, 2.5f)), Part(SvgPath.circle(17f, 18.5f, 2.5f)),
+        Part("M8.2 10.8l6.6-4M8.2 13.2l6.6 4"),
+    ),
     BOOK(Part("M4 5a2 2 0 0 1 2-2h13v15H6a2 2 0 0 0-2 2z"), Part("M4 20a2 2 0 0 0 2 2h13v-4M9 7h6")),
     ;
 

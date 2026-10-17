@@ -148,6 +148,30 @@ class HistoryDb private constructor(context: Context) :
         return readableDatabase.rawQuery(sql, args.toTypedArray()).use { c -> buildList { while (c.moveToNext()) add(row(c)) } }
     }
 
+    /** Усі записи (для копії історії, T64). */
+    fun all(): List<RecordingRow> = list(null, "", limit = Int.MAX_VALUE)
+
+    fun allSessions(): List<SessionRow> = sessions().values.sortedBy { it.startedAt }
+
+    /** Сесія з таким самим початком (відновлення копії) або нова. */
+    fun sessionFor(startedAt: Long, stoppedAt: Long, formatLabel: String): Long {
+        readableDatabase.rawQuery("SELECT id FROM sessions WHERE started_at=? LIMIT 1", arrayOf(startedAt.toString())).use { c ->
+            if (c.moveToFirst()) return c.getLong(0)
+        }
+        return writableDatabase.insert("sessions", null, ContentValues().apply {
+            put("started_at", startedAt)
+            put("stopped_at", stoppedAt)
+            put("format_label", formatLabel)
+        })
+    }
+
+    /** Чи вже є такий запис (той самий час, виконавець, назва) — відновлення копії не дублює. */
+    fun exists(createdAt: Long, artist: String, title: String): Boolean =
+        readableDatabase.rawQuery(
+            "SELECT 1 FROM recordings WHERE created_at=? AND artist=? AND title=? LIMIT 1",
+            arrayOf(createdAt.toString(), artist, title),
+        ).use { it.moveToFirst() }
+
     fun get(id: Long): RecordingRow? =
         readableDatabase.rawQuery("SELECT * FROM recordings WHERE id=?", arrayOf(id.toString())).use { c ->
             if (c.moveToFirst()) row(c) else null
