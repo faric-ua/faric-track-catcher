@@ -9,12 +9,14 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import ua.faric.trackcatcher.core.FileTags
+import ua.faric.trackcatcher.core.TagNames
 import ua.faric.trackcatcher.core.TimeText
 
 /**
  * ── СПІЛЬНА ПАНЕЛЬ «ПРО ФАЙЛ» (Track Catcher → Audio Converter) ── версія [PANEL_VERSION].
  * Цей файл, `core/FileTags.kt`, `ui/FlowLayout.kt` і `core/FlowRows.kt` копіюються в Audio Converter (`tools/dev/sync_style.py` там).
  * Змінив панель — підніми [PANEL_VERSION] і рядок у «Журнал стилю».
+ * Версія 2 (faric 18.10): «Усі теги у файлі» словами й по групах — [TagNames] (копіюється разом з панеллю).
  *
  * Вікно «Про файл» (T68, faric 17.10 20:31: «щоб усі метадані були максимально; відкрив файл — зразу показало і картинку,
  * і хто виконує, і альбом, і все»). Макет — артефакт «Про файл — макет». Показує те, що **лежить у самому файлі**
@@ -26,7 +28,7 @@ class FileInfoPanel(private val host: MainActivity) {
 
     companion object {
         /** Версія спільної панелі (faric 17.10 23:39: «як у Track Catcher "Про файл" — зроби й у конвертері»). */
-        const val PANEL_VERSION = 1
+        const val PANEL_VERSION = 2
     }
 
     /** Що знає застосунок про запис, але чого нема у файлі (група «Як записано»), і що можна зробити. */
@@ -72,12 +74,12 @@ class FileInfoPanel(private val host: MainActivity) {
             if (info.raw.isEmpty()) {
                 card.addView(ui.muted("У файлі нема жодного тегу.", 13.5f))
             } else {
-                val mono = ui.column(4).apply {
-                    background = ui.rounded(Palette.bg, radiusDp = 12)
-                    setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10))
+                // Версія 2 (faric 18.10): не «TIT2 = …», а «Назва» + дрібно «TITLE», по групах.
+                TagNames.grouped(info.raw) { it.key }.forEachIndexed { i, (group, items) ->
+                    if (i > 0) card.addView(View(host).apply { setBackgroundColor(Palette.surfaceAlt) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(1)))
+                    card.addView(ui.text(group.title.uppercase(), 11.5f, Palette.faint, medium = true).apply { letterSpacing = 0.08f })
+                    items.forEach { r -> card.addView(tagRow(r)) }
                 }
-                info.raw.forEach { r -> mono.addView(ui.text("${r.key} = ${r.value}", 12.5f, Palette.text).apply { typeface = Typeface.MONOSPACE }) }
-                card.addView(mono, ui.matchWrap())
             }
         }
 
@@ -161,6 +163,19 @@ class FileInfoPanel(private val host: MainActivity) {
         addView(v, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
     }
 
+    /** Тег словами: ліворуч «Назва» і під нею дрібно «TITLE», праворуч — значення. */
+    private fun tagRow(r: FileTags.Raw): View = ui.row(12).apply {
+        gravity = Gravity.TOP
+        val name = TagNames.of(r.key)
+        val left = ui.column(0)
+        left.addView(ui.muted(name.label, 13f))
+        left.addView(ui.text(name.word, 10.5f, Palette.faint).apply { typeface = Typeface.MONOSPACE })
+        addView(left, LinearLayout.LayoutParams(ui.dp(124), ViewGroup.LayoutParams.WRAP_CONTENT))
+        val v = TagNames.value(r.key, r.value)
+        addView(if (v.isBlank()) ui.text("— порожньо", 14f, Palette.faint) else ui.numbers(ui.text(v, 14f, Palette.text)),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+    }
+
     private fun chip(text: String, color: Int, fill: Int): View = ui.text(text, 12.5f, color, medium = true).apply {
         background = ui.rounded(fill, radiusDp = 12)
         setPadding(ui.dp(10), ui.dp(5), ui.dp(10), ui.dp(5))
@@ -187,7 +202,7 @@ class FileInfoPanel(private val host: MainActivity) {
             appendLine("${formatName(info)} · ${info.sampleRate} Гц · ${info.channels} кан. · ${TimeText.clock(info.durationMs)} · ${TimeText.size(size)}")
             appendLine("Обкладинка: " + (info.picture?.let { "${it.width}×${it.height} у файлі" } ?: "нема у файлі"))
             extra.recorded.forEach { (k, v) -> appendLine("$k: $v") }
-            info.raw.forEach { appendLine("${it.key} = ${it.value}") }
+            info.raw.forEach { appendLine(TagNames.line(it.key, it.value)) }
         }
         val cm = host.getSystemService(android.content.ClipboardManager::class.java)
         cm?.setPrimaryClip(android.content.ClipData.newPlainText("Про файл", text))
