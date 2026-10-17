@@ -43,6 +43,11 @@ shot p03b-night-screen
 adb shell input keyevent KEYCODE_BACK
 start --es tab HISTORY
 shot p04-history
+# Групи в історії (T61): «Альбоми», потім назад «Сесії» (вибір зберігається).
+adb shell input tap 546 494
+shot p04b-history-albums
+adb shell input tap 320 494
+sleep 1
 start --es tab HISTORY --es dialog detail:3
 shot p05-history-detail
 start --es tab HISTORY --es dialog delete:3
@@ -85,6 +90,10 @@ adb shell input swipe 540 1800 540 300 300
 sleep 1
 adb shell input swipe 540 1800 540 300 300
 shot p07b-settings-edges-folder
+# Рівна гучність (T63): друге з трьох вікон-попереджень.
+start --es tab SETTINGS --es dialog loud:2
+shot p07c-loudness-warning
+adb shell input keyevent KEYCODE_BACK
 # інструкція користувача (окреме вікно; singleTop — розділи змінюються без закриття)
 guide() { adb shell am start -n "$PKG/ua.faric.trackcatcher.ui.GuideActivity" --es section "$1" >/dev/null; }
 guide home

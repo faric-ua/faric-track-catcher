@@ -31,6 +31,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val lengthCard = ui.card(12)
     private val repeatCard = ui.card(12)
     private val soundCard = ui.card(12)
+    private val loudCard = ui.card(12)
     private val edgesCard = ui.card(12)
     private val permsSlot = FrameLayout(host)
     private val albumSlot = ui.column(8)
@@ -72,11 +73,11 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             addView(ui.text("Відновлення лише додає записи, яких ще нема; наявні не змінює. Обкладинки в копію не входять.", 12.5f, Palette.faint))
         }
         val updateCard = UpdateUi(host).card()
-        val all = listOf(formatCard, qualityCard, lengthCard, repeatCard, soundCard, edgesCard, folderCard, backupCard, permsSlot, updateCard, aboutCard)
+        val all = listOf(formatCard, qualityCard, lengthCard, repeatCard, soundCard, loudCard, edgesCard, folderCard, backupCard, permsSlot, updateCard, aboutCard)
         view = if (ui.twoPane) {
             val left = ui.column(12)
             val right = ui.column(12)
-            listOf(formatCard, qualityCard, lengthCard, repeatCard, soundCard, edgesCard).forEach { left.addView(it, ui.matchWrap()) }
+            listOf(formatCard, qualityCard, lengthCard, repeatCard, soundCard, loudCard, edgesCard).forEach { left.addView(it, ui.matchWrap()) }
             listOf(folderCard, backupCard, permsSlot, updateCard, aboutCard).forEach { right.addView(it, ui.matchWrap()) }
             ui.scroll(ui.row(12).apply {
                 gravity = Gravity.TOP
@@ -169,6 +170,70 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             13.5f,
         ))
         if (locked) soundCard.addView(ui.text("Зміни почнуть діяти з наступного запису.", 12.5f, Palette.warning))
+
+        // T63 (faric 17.10: «не хочу нормалізації — самий кайф цих хвиль; можна як опцію, з одним, другим, третім вікном підтвердження»).
+        loudCard.removeAllViews()
+        loudCard.addView(ui.label("Рівна гучність", LineIcon.BARS))
+        loudCard.addView(flow(listOf(false to "Вимкнено", true to "Мітка гучності").map { (on, text) ->
+            ui.choice(text, v.replayGain == on) {
+                if (on && !v.replayGain) askLoudness(1) else if (!on) { settings.replayGain = false; renderChoices() }
+            }
+        }))
+        loudCard.addView(ui.muted(
+            if (v.replayGain) "У теги FLAC і MP3 дописується, наскільки голосна пісня (ReplayGain). Сам звук не змінюється. " +
+                "Плеєр з увімкненим ReplayGain зробить усю пісню тихішою чи голоснішою — однаково, без зрізання піків. У WAV мітки нема."
+            else "Звук пишеться точно як грав — без вирівнювання. Мітку гучності можна ввімкнути, але це експеримент.",
+            13.5f,
+        ))
+        if (locked) loudCard.addView(ui.text("Зміни почнуть діяти з наступного запису.", 12.5f, Palette.warning))
+    }
+
+    /** Три вікна поспіль, як просив faric: що це, чого ми не знаємо, остаточне «Увімкнути». */
+    private fun askLoudness(step: Int) {
+        val (title, message, yes) = when (step) {
+            1 -> Triple(
+                "Рівна гучність — що це?",
+                "Track Catcher виміряє, наскільки голосна кожна пісня, і допише це число в теги файлу (ReplayGain).\n\n" +
+                    "Сам звук НЕ змінюється: ні нормалізації, ні стиснення — хвилі й піки лишаються такими, як грав плеєр.",
+                "Далі",
+            )
+            2 -> Triple(
+                "Ми цього ще не перевіряли",
+                "Що зробить з міткою твій плеєр — залежить від плеєра. Якщо в ньому ввімкнено ReplayGain, він зробить пісню " +
+                    "тихішою або голоснішою — усю однаково. Голосні пісні можуть зазвучати помітно тихіше, ніж ти звик.\n\n" +
+                    "Як це буде з твоїми плеєрами, невідомо, доки не спробуєш.",
+                "Розумію, далі",
+            )
+            else -> Triple(
+                "Увімкнути мітку гучності?",
+                "Лише для нових записів у FLAC і MP3. Уже записані файли не змінюються.\n\n" +
+                    "Не сподобається — тут «Вимкнено», або вимкни ReplayGain у плеєрі.",
+                "Увімкнути",
+            )
+        }
+        val body = host.overlay.dialog(
+            title = title,
+            message = message,
+            actions = listOf(yes to (if (step < 3) Ui.Kind.NORMAL else Ui.Kind.PRIMARY), "Скасувати" to Ui.Kind.QUIET),
+            onAction = { i ->
+                when {
+                    i != 0 -> host.overlay.dismiss()
+                    step < 3 -> askLoudness(step + 1)
+                    else -> {
+                        settings.replayGain = true
+                        host.overlay.dismiss()
+                        renderChoices()
+                    }
+                }
+            },
+        )
+        host.overlay.show("$KEY_LOUD$step", body)
+    }
+
+    override fun restoreDialog(key: String): Boolean {
+        if (!key.startsWith(KEY_LOUD)) return false
+        askLoudness(key.removePrefix(KEY_LOUD).toIntOrNull()?.coerceIn(1, 3) ?: 1)
+        return true
     }
 
     private fun formatHint(v: Settings.Values): String {
@@ -277,5 +342,9 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         } catch (e: SecurityException) {
             host.toast("Відкрий «Мої файли» → Музика → Track Catcher")
         }
+    }
+
+    companion object {
+        private const val KEY_LOUD = "loud:"
     }
 }

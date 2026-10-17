@@ -17,6 +17,7 @@ import ua.faric.trackcatcher.core.FlacEncoder
 import ua.faric.trackcatcher.core.FileNames
 import ua.faric.trackcatcher.core.Id3v2
 import ua.faric.trackcatcher.core.LevelAnalysis
+import ua.faric.trackcatcher.core.Loudness
 import ua.faric.trackcatcher.core.Lossless
 import ua.faric.trackcatcher.core.Pcm
 import ua.faric.trackcatcher.core.RecStatus
@@ -63,16 +64,22 @@ class SegmentFinisher(context: Context) {
             val base = FileNames.baseName(job.meta, settings.plainNames)
             val dir = FileNames.folderFor(job.meta, settings.albumFolders, settings.plainNames)
             val fade = EdgeFade.frames(fadeMs = settings.fadeMs)
+            // T63: мітка гучності — лише якщо ввімкнено; міряємо той самий звук, що піде у файл. Звук не міняється.
+            val gainTags = if (settings.replayGain && (settings.format.mp3 || settings.format.lossless == Lossless.FLAC)) {
+                runCatching { measureLoudness(job, stats, fade)?.tags() }.getOrNull().orEmpty()
+            } else {
+                emptyList()
+            }
             fun saveTo(store: AudioStore) {
                 // «wav» тут і в історії — файл без втрат: WAV або FLAC (T55; тип — за розширенням імені).
                 when (settings.format.lossless) {
                     Lossless.WAV -> wav = writeWav(store, job, stats, base, dir, fade)
-                    Lossless.FLAC -> wav = writeFlac(store, job, stats, base, dir, fade)
+                    Lossless.FLAC -> wav = writeFlac(store, job, stats, base, dir, fade, gainTags)
                     null -> {}
                 }
                 if (settings.format.mp3) {
                     bitrate = settings.mp3Bitrate
-                    mp3 = writeMp3(store, job, stats, base, dir, fade, settings.mp3Bitrate, lengthMs)
+                    mp3 = writeMp3(store, job, stats, base, dir, fade, settings.mp3Bitrate, lengthMs, gainTags)
                 }
             }
             // Своя папка (T29). Недоступна (карту вийняли, дозвіл забрали) — пісня не губиться: іде в «Музику».
@@ -153,22 +160,28 @@ class SegmentFinisher(context: Context) {
      * FLAC (T55): спершу MD5 усього звуку (той самий шлях, що й запис, — з наростанням/затуханням),
      * потім кодування. Читати файл двічі дешевше, ніж кодувати: MD5 — частки секунди.
      */
-    private fun writeFlac(store: AudioStore, job: SegmentJob, stats: AudioStats, base: String, dir: String, fade: Int): MediaStoreWriter.Saved {
+    private fun measureLoudness(job: SegmentJob, stats: AudioStats, fade: Int): Loudness.Result? {
+        val meter = Loudness()
+        copyRange(job.pcmFile, stats, fade) { buf, n -> meter.feed(buf, n) }
+        return meter.result()
+    }
+
+    private fun writeFlac(store: AudioStore, job: SegmentJob, stats: AudioStats, base: String, dir: String, fade: Int, extraTags: List<Pair<String, String>>): MediaStoreWriter.Saved {
         val name = FileNames.unique(base, Lossless.FLAC.ext) { store.exists(it, dir) }
         val md5 = MessageDigest.getInstance("MD5")
         copyRange(job.pcmFile, stats, fade) { buf, n -> md5.update(buf, 0, n) }
         val sum = md5.digest()
         return store.write(name, Lossless.FLAC.mime, dir) { out ->
-            val enc = FlacEncoder(out, stats.keptFrames, sum, FlacEncoder.tagsFor(job.meta), Artwork.readJpeg(job.meta.artworkPath))
+            val enc = FlacEncoder(out, stats.keptFrames, sum, FlacEncoder.tagsFor(job.meta) + extraTags, Artwork.readJpeg(job.meta.artworkPath))
             copyRange(job.pcmFile, stats, fade) { buf, n -> enc.encode(buf, 0, n) }
             enc.finish()
         }
     }
 
-    private fun writeMp3(store: AudioStore, job: SegmentJob, stats: AudioStats, base: String, dir: String, fade: Int, kbps: Int, lengthMs: Long): MediaStoreWriter.Saved {
+    private fun writeMp3(store: AudioStore, job: SegmentJob, stats: AudioStats, base: String, dir: String, fade: Int, kbps: Int, lengthMs: Long, extraTags: List<Pair<String, String>>): MediaStoreWriter.Saved {
         val name = FileNames.unique(base, "mp3") { store.exists(it, dir) }
         return store.write(name, "audio/mpeg", dir) { out: OutputStream ->
-            out.write(Id3v2.build(job.meta, lengthMs, Artwork.readJpeg(job.meta.artworkPath)))
+            out.write(Id3v2.build(job.meta, lengthMs, Artwork.readJpeg(job.meta.artworkPath), extraTags))
             Mp3Encoder(bitrateKbps = kbps).use { enc ->
                 copyRange(job.pcmFile, stats, fade) { buf, n -> enc.encode(buf, 0, n, out) }
                 enc.finish(out)

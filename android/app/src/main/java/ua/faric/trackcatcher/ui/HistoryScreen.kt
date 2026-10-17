@@ -332,6 +332,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             val actions = FlowLayout(host, ui.dp(8), ui.dp(8))
             actions.addView(ui.iconButton(LineIcon.PLAY, "Слухати", Ui.Kind.PRIMARY) { listenGroup(withFiles) })
             actions.addView(ui.iconButton(LineIcon.SHARE, "Поділитись", Ui.Kind.NORMAL) { shareGroup(name, withFiles) })
+            actions.addView(ui.iconButton(LineIcon.REPEAT, "Конвертувати", Ui.Kind.NORMAL) { convert(withFiles) })
             box.addView(actions, ui.matchWrap())
         }
         return box
@@ -550,6 +551,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             val actions = listOf(
                 ActionTile(host, ui, ActionTile.Icon.SHARE, "Поділитись", danger = false) { share(r) },
                 ActionTile(host, ui, ActionTile.Icon.OPEN, "Плеєр", danger = false) { InAppPlayer.pause(); playExternal(uri, playMime(r)) },
+                ActionTile(host, ui, ActionTile.Icon.CONVERT, "Конвертер", danger = false) { convert(listOf(r)) },
                 ActionTile(host, ui, ActionTile.Icon.DELETE, "Видалити", danger = true) { confirmDelete(r) },
             )
             box.addView(PlayerView(
@@ -658,6 +660,37 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
     }
 
+    /**
+     * T65: файли — в Audio Converter (окремий застосунок faric, там A2). Дається найкраща якість:
+     * FLAC/WAV, а якщо його нема — MP3. Конвертера нема на телефоні — пояснення замість «нема застосунку».
+     */
+    private fun convert(rows: List<RecordingRow>) {
+        val files = rows.mapNotNull { r -> (r.wavUri ?: r.mp3Uri)?.let { Uri.parse(it) to if (r.wavUri != null) Lossless.ofName(r.wavName).mime else "audio/mpeg" } }
+        if (files.isEmpty()) return
+        val send = if (files.size == 1) {
+            Intent(Intent.ACTION_SEND).setType(files[0].second).putExtra(Intent.EXTRA_STREAM, files[0].first)
+        } else {
+            Intent(Intent.ACTION_SEND_MULTIPLE).setType("audio/*").putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(files.map { it.first }))
+        }
+        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        for (pkg in CONVERTER_PACKAGES) {
+            try {
+                host.startActivity(Intent(send).setPackage(pkg))
+                return
+            } catch (e: ActivityNotFoundException) {
+                // нема цього варіанта — пробуємо наступний
+            }
+        }
+        val body = host.overlay.dialog(
+            title = "Audio Converter не встановлено",
+            message = "Audio Converter — окремий застосунок faric: з найкращої якості (FLAC) робить MP3, M4A, Opus та інші формати. " +
+                "Коли він стоїть на цьому телефоні, ця кнопка відкриває в ньому вибрані записи.",
+            actions = listOf("Закрити" to Ui.Kind.QUIET),
+            onAction = { host.overlay.dismiss() },
+        )
+        host.overlay.show(KEY_NO_CONVERTER, body)
+    }
+
     private fun confirmDelete(r: RecordingRow) {
         val files = listOfNotNull(r.mp3Name, r.wavName).joinToString("\n")
         val body = host.overlay.dialog(
@@ -697,5 +730,9 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         private const val KEY_GROUP = "group"
         private const val KEY_PICKED = "picked"
         private const val KEY_DELETE_MANY = "deletemany:0"
+        private const val KEY_NO_CONVERTER = "noconverter"
+
+        /** Audio Converter (`faric-ua/faric-audio-converter`): звичайна збірка і збірка для перевірки (.dev). */
+        private val CONVERTER_PACKAGES = listOf("ua.faric.audioconverter", "ua.faric.audioconverter.dev")
     }
 }

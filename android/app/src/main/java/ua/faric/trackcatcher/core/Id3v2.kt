@@ -7,13 +7,15 @@ import java.io.ByteArrayOutputStream
  * Текст — UTF-16 з BOM, щоб кирилиця читалась у будь-якому плеєрі.
  */
 object Id3v2 {
-    fun build(meta: TrackMeta, lengthMs: Long, artworkJpeg: ByteArray?): ByteArray {
+    /** [extra] — власні поля TXXX (напр. мітка гучності ReplayGain, T63). */
+    fun build(meta: TrackMeta, lengthMs: Long, artworkJpeg: ByteArray?, extra: List<Pair<String, String>> = emptyList()): ByteArray {
         val frames = ByteArrayOutputStream()
         if (meta.title.isNotBlank()) frames.write(textFrame("TIT2", meta.title.trim()))
         if (meta.artist.isNotBlank()) frames.write(textFrame("TPE1", meta.artist.trim()))
         if (meta.album.isNotBlank()) frames.write(textFrame("TALB", meta.album.trim()))
         if (lengthMs > 0) frames.write(latinFrame("TLEN", lengthMs.toString()))
         frames.write(latinFrame("TSSE", "Track Catcher"))
+        for ((name, value) in extra) frames.write(userFrame(name, value))
         if (artworkJpeg != null && artworkJpeg.isNotEmpty()) frames.write(apicFrame(artworkJpeg))
         val body = frames.toByteArray()
         val out = ByteArrayOutputStream()
@@ -46,6 +48,15 @@ object Id3v2 {
         payload.write(0)
         payload.write(text.toByteArray(Charsets.ISO_8859_1))
         return frame(id, payload.toByteArray())
+    }
+
+    /** TXXX: опис і значення латиницею (так їх шукають плеєри: «REPLAYGAIN_TRACK_GAIN»). */
+    fun userFrame(name: String, value: String): ByteArray {
+        val payload = ByteArrayOutputStream()
+        payload.write(0)
+        payload.write(name.toByteArray(Charsets.ISO_8859_1)); payload.write(0)
+        payload.write(value.toByteArray(Charsets.ISO_8859_1))
+        return frame("TXXX", payload.toByteArray())
     }
 
     private fun apicFrame(jpeg: ByteArray): ByteArray {
