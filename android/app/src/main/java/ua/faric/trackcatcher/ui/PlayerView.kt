@@ -15,6 +15,11 @@ import android.widget.TextView
 import ua.faric.trackcatcher.core.TimeText
 
 /**
+ * ── СПІЛЬНА ПЛИТКА ПЛЕЄРА (Track Catcher → Audio Converter) ── версія [TILE_VERSION].
+ * Цей файл, [TransportButton] і [ActionTile] копіюються в Audio Converter (`tools/dev/sync_style.py` там) — змінив плитку
+ * (вигляд, кнопки, розміри) — підніми [TILE_VERSION] і допиши рядок у «Журнал стилю» (`docs/UI_STYLE_CONTRACT.md`).
+ * Програвач ([InAppPlayer]) у кожного застосунку свій — плитка кличе лише uri / playing / toggle / seekTo / слухачів.
+ *
  * Плеєр у подробицях запису (v0.1.17, faric 15.10 15:36: «блок прослуховування перероби, як у Music
  * Visualizer — плей, пауза, попередня, наступна»). Згори — смуга (торкнись або потягни — перемотка),
  * під нею «1:12» ліворуч і «−3:09» праворуч; нижче — круглі ⏮ ▶ ⏭ ([TransportButton]).
@@ -121,6 +126,8 @@ class PlayerView(
     }
 
     companion object {
+        /** Версія спільної плитки (faric 17.10 18:40: «конвертер звіряє з кетчером; різна — вирівняти, де відстає»). */
+        const val TILE_VERSION = 1
         const val PLAY_DP = 72
         const val SIDE_DP = 56
     }
