@@ -46,6 +46,8 @@ enum class LineIcon(vararg val parts: Part) {
         Part("M8.2 10.8l6.6-4M8.2 13.2l6.6 4"),
     ),
     BOOK(Part("M4 5a2 2 0 0 1 2-2h13v15H6a2 2 0 0 0-2 2z"), Part("M4 20a2 2 0 0 0 2 2h13v-4M9 7h6")),
+    /** Хрестик — «нема обкладинки» в історії Audio Converter (faric 18.10 00:39: «якщо її немає, хай буде хрест»). */
+    CROSS(Part("M6 6l12 12M18 6L6 18")),
     ;
 
     class Part(val d: String, val filled: Boolean = false) {
