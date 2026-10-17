@@ -146,7 +146,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         // Вікна, що мають пережити поворот (faric 17.10 22:25: «перевір усі вікна на переворот»).
         when (key) {
             KEY_FLAC_CONFIRM -> {
-                val rows = FlacBatch.pendingConfirm?.mapNotNull { db.get(it) }.orEmpty()
+                val rows = FlacBatch.pendingConfirm?.toList().orEmpty().mapNotNull { db.get(it) }
                 if (rows.isEmpty()) return false
                 confirmMakeFlac(rows)
                 return true
