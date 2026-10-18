@@ -40,6 +40,12 @@ object TitleFix {
      */
     fun fix(app: Context, r: RecordingRow, tail: String): List<String> {
         val title = newTitle(r, tail) ?: return emptyList()
+        return fixTo(app, r, title, "прибрано «${tail.trim()}»")
+    }
+
+    /** Нова назва [title] запису: тег TITLE (FLAC, MP3), ім'я файлу (якщо зроблене з назви), історія. [why] — у примітку. */
+    fun fixTo(app: Context, r: RecordingRow, title: String, why: String): List<String> {
+        if (title.isBlank() || title == r.title) return emptyList()
         val store = MediaStoreWriter(app)
         val problems = ArrayList<String>()
         fun one(uri: String?, name: String?): Pair<String, String>? {
@@ -64,7 +70,7 @@ object TitleFix {
         val wav = one(r.wavUri, r.wavName)
         if (problems.isEmpty()) {
             val wavNote = if (r.wavName != null && Retag.kindOf(r.wavName) == null) " (у WAV назва всередині лишилась стара — WAV тегів так не переписати)" else ""
-            HistoryDb.get(app).updateTitle(r.id, title, mp3, wav, "назву очищено ${TimeText.dateTime(System.currentTimeMillis())}: прибрано «${tail.trim()}»$wavNote")
+            HistoryDb.get(app).updateTitle(r.id, title, mp3, wav, "назву змінено ${TimeText.dateTime(System.currentTimeMillis())}: $why$wavNote")
         } else if (mp3 != null || wav != null) {
             // Частина файлів перейменована — історія має знати нові імена, назву лишаємо стару (її ще не скрізь змінено).
             HistoryDb.get(app).updateTitle(r.id, r.title, mp3, wav, "")
