@@ -32,7 +32,7 @@ class FileInfoPanel(private val host: MainActivity) {
 
     companion object {
         /** Версія спільної панелі (faric 17.10 23:39: «як у Track Catcher "Про файл" — зроби й у конвертері»). */
-        const val PANEL_VERSION = 3
+        const val PANEL_VERSION = 4
 
         /** Значення до стількох знаків стає в пів рядка (по два в ряд). */
         private const val SHORT = 18
@@ -56,11 +56,13 @@ class FileInfoPanel(private val host: MainActivity) {
         box.addView(fileCard(info, fileName, folder), ui.matchWrap())
         if (info.raw.isNotEmpty()) box.addView(rawCard(info), ui.matchWrap())
 
+        // faric 18.10 03:35: «кнопки різних розмірів — хай займають на двох один рядок»: порівну завширшки
+        // й однакової висоти (кнопка зі значком вища — друга тягнеться до неї), підпис в один рядок.
         val actions = LinearLayout(host).apply { orientation = LinearLayout.HORIZONTAL }
-        actions.addView(ui.iconButton(LineIcon.FILE, "Копіювати все", Ui.Kind.NORMAL) { copy(info, fileName, folder, size, extra) },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        actions.addView(ui.button("Закрити", Ui.Kind.QUIET) { onClose() },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = ui.dp(8) })
+        actions.addView(ui.iconButton(LineIcon.FILE, "Копіювати", Ui.Kind.NORMAL) { copy(info, fileName, folder, size, extra) }.apply { maxLines = 1 },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+        actions.addView(ui.button("Закрити", Ui.Kind.QUIET) { onClose() }.apply { maxLines = 1 },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply { marginStart = ui.dp(8) })
         box.addView(actions, ui.matchWrap())
         return box
     }
