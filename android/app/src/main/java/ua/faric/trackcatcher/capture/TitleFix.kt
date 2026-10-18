@@ -44,6 +44,7 @@ object TitleFix {
         val problems = ArrayList<String>()
         fun one(uri: String?, name: String?): Pair<String, String>? {
             if (uri == null || name == null) return null
+            if (!store.stillThere(uri)) return null // файла нема на місці (перенесли) — пропускаємо
             try {
                 if (Retag.kindOf(name) != null) {
                     val tags = Renumber.readTags(app, uri, name)

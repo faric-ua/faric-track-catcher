@@ -26,6 +26,17 @@ object Renumber {
         return rows.filter { it.hasFile || it.id == r.id }
     }
 
+    /**
+     * Лише записи, чий файл справді є на місці (faric 18.10 15:38: «чужі файли я виніс — щоб їх і не враховувало;
+     * спершу перевірка, чи є файл, потім пробувати змінити»). Перенесені / видалені не рахуються й у нумерації.
+     * null — не видно жодного файла альбому (карта пам'яті вийнята?): тоді нічого не робимо, щоб не перенумерувати хибно.
+     */
+    fun present(app: Context, rows: List<RecordingRow>): List<RecordingRow>? {
+        val store = MediaStoreWriter(app)
+        val here = rows.filter { r -> listOfNotNull(r.mp3Uri, r.wavUri).any { store.stillThere(it) } }
+        return if (here.isEmpty() && rows.isNotEmpty()) null else here
+    }
+
     /** Ключ альбому для групування перевірки. */
     fun scopeKey(r: RecordingRow): String = r.album.trim().lowercase().ifBlank { "#session-${r.sessionId}" }
 
