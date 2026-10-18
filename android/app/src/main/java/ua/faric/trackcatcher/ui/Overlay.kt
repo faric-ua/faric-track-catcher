@@ -23,6 +23,12 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
     private var barTop = 0
     private var barRight = 0
     private var barBottom = 0
+    /**
+     * Верх вікна після першого показу (faric 18.10 04:33, відео: вікно «Публікую версію на Диск» стрибало, коли
+     * текст поступу ставав довшим, — бо вікно щоразу ставало по центру заново). Далі верх стоїть на місці,
+     * вікно росте лише вниз (не нижче системних кнопок — тоді прокрутка всередині). -1 — ще не показано.
+     */
+    private var pinnedTop = -1
 
     val isShowing: Boolean get() = layer != null
 
@@ -58,6 +64,15 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
         layer = scrim
         this.panel = panel
         this.scroll = scroll
+        pinnedTop = -1
+        panel.addOnLayoutChangeListener { v, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (v !== this.panel) return@addOnLayoutChangeListener
+            if (pinnedTop < 0 && bottom > top) {
+                pinnedTop = top // перший показ — по центру, як завжди; запам'ятали, де верх
+            } else if (pinnedTop >= 0 && bottom - top != oldBottom - oldTop && top != pinnedTop) {
+                v.post { pinTop() } // висота змінилась і вікно поїхало — повернути верх на місце
+            }
+        }
         placePanel()
         fromBottom?.let { restoreFromBottom(scroll, it) }
         onChange(key)
@@ -88,12 +103,22 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
         // Вікно — між системними панелями з запасом 16 dp; вище не влазить — прокручується всередині.
         lp.leftMargin = barLeft
         lp.rightMargin = barRight
-        lp.topMargin = barTop + ui.dp(16)
+        lp.topMargin = if (lp.gravity and Gravity.VERTICAL_GRAVITY_MASK == Gravity.TOP) maxOf(pinnedTop, barTop + ui.dp(16)) else barTop + ui.dp(16)
         lp.bottomMargin = barBottom + ui.dp(16)
         p.layoutParams = lp
     }
 
+    private fun pinTop() {
+        val p = panel ?: return
+        val lp = p.layoutParams as? FrameLayout.LayoutParams ?: return
+        if (pinnedTop < 0) return
+        lp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        lp.topMargin = maxOf(pinnedTop, barTop + ui.dp(16))
+        p.layoutParams = lp
+    }
+
     fun dismiss(notify: Boolean = true) {
+        pinnedTop = -1
         layer?.let { host.removeView(it) }
         layer = null
         panel = null
