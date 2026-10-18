@@ -589,6 +589,11 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         stopping = false
         queue?.shutdown()
         queue = null
+        // T70: сам після запису перевірити номери пісень в альбомах цієї сесії (поки служба ще на передньому плані).
+        runCatching {
+            val ids = HistoryDb.get(this).sessionRows(sessionId).filter { Renumber.files(it).isNotEmpty() }.map { it.id }.toLongArray()
+            FlacBatch.startRenumber(this, ids, auto = true)
+        }
         RecorderHub.update { it.copy(phase = RecorderHub.Phase.IDLE, queued = 0) }
         stopForegroundCompat()
         stopSelf()

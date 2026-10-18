@@ -135,11 +135,12 @@ class SegmentFinisher(context: Context) {
         return row.copy(id = id)
     }
 
+    /** T68/T70: номер на весь альбом (усі записи цього альбому в історії; без альбому — ця сесія). */
     private fun trackNumber(job: SegmentJob): Int {
         val album = job.meta.album.trim().lowercase()
-        val earlier = db.sessionRows(job.sessionId).filter {
-            it.album.trim().lowercase() == album && it.hasFile && it.createdAt <= job.closedAt
-        }
+        val earlier = (if (album.isBlank()) db.sessionRows(job.sessionId).filter { it.album.isBlank() }
+        else db.all().filter { it.album.trim().lowercase() == album }.sortedWith(compareBy({ it.createdAt }, { it.id })))
+            .filter { it.hasFile && it.createdAt <= job.closedAt }
         return TrackNumber.all(earlier.map { it.title } + job.meta.title).last()
     }
 
