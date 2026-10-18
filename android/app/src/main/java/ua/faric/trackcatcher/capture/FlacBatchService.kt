@@ -88,7 +88,7 @@ class FlacBatchService : Service() {
     private fun renumber(ids: LongArray, auto: Boolean) {
         val app = applicationContext
         val db = HistoryDb.get(app)
-        val starts = ids.mapNotNull { db.get(it) }
+        val starts = ids.toList().mapNotNull { db.get(it) }
         val seen = HashSet<String>()
         // Усі файли всіх зачеплених альбомів, з правильним номером кожного.
         val work = ArrayList<Triple<ua.faric.trackcatcher.data.RecordingRow, Pair<String, String>, Int>>()
