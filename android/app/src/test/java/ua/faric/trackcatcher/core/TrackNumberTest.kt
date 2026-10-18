@@ -39,4 +39,15 @@ class TrackNumberTest {
     @Test fun bonusWithoutTracksIsCountedInOrder() {
         assertEquals(listOf(1, 2), TrackNumber.all(listOf("BONUS 01 — A", "BONUS 02 — B")))
     }
+
+    /** faric 18.10 13:36: Suno дописав у назви хвіст «TRACK 04 — PHOTON HIGHWAY» — номер береться з першої позначки. */
+    @Test fun tailFromAnotherSongDoesNotWin() {
+        val tail = ". ⚡ 🎵 TRACK 04 — PHOTON HIGHWAY"
+        val titles = listOf("TRACK 01 — A", "TRACK 02 — B", "TRACK 03 — C",
+            "🎵 TRACK 04 — PHOTON HIGHWAY$tail", "BONUS 01 — X$tail", "BONUS 02 — Y$tail", "BONUS 03 — Z$tail", "TRACK 05 — D$tail")
+        assertEquals(listOf(1, 2, 3, 4, 6, 7, 8, 5), TrackNumber.all(titles))
+        assertEquals(null, TrackNumber.fromTitle("BONUS 03 — Z$tail"))
+        assertEquals(3, TrackNumber.bonusOf("BONUS 03 — Z$tail"))
+        assertEquals(3, TrackNumber.bonusOf("BONUS TRACK 03 — Z"))
+    }
 }
