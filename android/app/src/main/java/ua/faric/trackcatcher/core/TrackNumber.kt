@@ -15,6 +15,16 @@ object TrackNumber {
     /** [previous] — номери попередніх пісень того самого альбому в цьому записі, по порядку. */
     fun next(title: String, previous: List<Int>): Int = fromTitle(title) ?: ((previous.lastOrNull() ?: 0) + 1)
 
-    /** Номери для цілого списку назв по порядку запису. */
-    fun all(titles: List<String>): List<Int> = titles.fold(mutableListOf<Int>()) { acc, t -> acc.apply { add(next(t, acc)) } }
+    /**
+     * Номери для цілого списку назв по порядку запису. Та сама пісня вдруге (неповна, потім повна; альбом по колу) —
+     * той самий номер і далі не зсуває (faric 18.10 03:35: «записував 10 треків, а BONUS 3 під номером 16»).
+     */
+    fun all(titles: List<String>): List<Int> {
+        val seen = HashMap<String, Int>()
+        val fresh = ArrayList<Int>() // номери перших появ — від них рахується «наступний»
+        return titles.map { t ->
+            val key = t.trim().lowercase()
+            seen[key] ?: next(t, fresh).also { n -> seen[key] = n; fresh += n }
+        }
+    }
 }
