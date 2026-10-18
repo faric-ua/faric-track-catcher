@@ -51,14 +51,29 @@ object Renumber {
      * знову перевірка; збій під час заміни — оригінал записується назад.
      */
     fun fixFile(app: Context, r: RecordingRow, uri: String, name: String, number: Int): Boolean {
-        val kind = Retag.kindOf(name) ?: return false
-        val resolver = app.contentResolver
-        val u = Uri.parse(uri)
-        val size = MediaStoreWriter(app).sizeOf(uri)
-        val current = resolver.openInputStream(u)?.buffered(64 * 1024)?.use { FileTags.read(it, size, name) }
-            ?: throw IOException("файл не відкривається — можливо, його прибрали")
+        val current = readTags(app, uri, name)
         val set = wanted(r, number, current)
         if (set.isEmpty()) return false
+        safeRetag(app, uri, name, set) { it[FileTags.Field.TRACK]?.substringBefore('/')?.trim()?.toIntOrNull() == number }
+        return true
+    }
+
+    /** Теги файлу (лише заголовок). */
+    fun readTags(app: Context, uri: String, name: String): FileTags.FileInfo {
+        val size = MediaStoreWriter(app).sizeOf(uri)
+        return app.contentResolver.openInputStream(Uri.parse(uri))?.buffered(64 * 1024)?.use { FileTags.read(it, size, name) }
+            ?: throw IOException("файл не відкривається — можливо, його прибрали")
+    }
+
+    /**
+     * Переписати теги [set] у FLAC / MP3 безпечно (T70, T71): копія оригіналу → новий файл → звук той самий
+     * (MD5 після тегів) і [check] нового тегу пройдено → заміна → знову перевірка; збій під час заміни —
+     * оригінал записується назад. Кидає помилку з поясненням; файл тоді лишається, як був.
+     */
+    fun safeRetag(app: Context, uri: String, name: String, set: Map<String, String>, check: (FileTags.FileInfo) -> Boolean) {
+        val kind = Retag.kindOf(name) ?: throw IOException("теги вмію лише у FLAC і MP3")
+        val resolver = app.contentResolver
+        val u = Uri.parse(uri)
         val dir = File(app.cacheDir, "retag").apply { mkdirs() }
         val backup = File(dir, "original.bak")
         val fresh = File(dir, "new.tmp")
@@ -67,17 +82,16 @@ object Renumber {
             backup.inputStream().buffered(256 * 1024).use { i -> fresh.outputStream().buffered(256 * 1024).use { o -> Retag.rewrite(kind, i, o, set) } }
             val sound = backup.inputStream().buffered(256 * 1024).use { Retag.audioDigest(kind, it) }
             if (fresh.inputStream().buffered(256 * 1024).use { Retag.audioDigest(kind, it) } != sound) throw IOException("перевірка звуку не зійшлась — файл не чіпаю")
-            val check = fresh.inputStream().buffered(64 * 1024).use { FileTags.read(it, fresh.length(), name) }
-            if (check[FileTags.Field.TRACK]?.substringBefore('/')?.trim()?.toIntOrNull() != number) throw IOException("новий номер не записався — файл не чіпаю")
+            val after = fresh.inputStream().buffered(64 * 1024).use { FileTags.read(it, fresh.length(), name) }
+            if (!check(after)) throw IOException("новий тег не записався — файл не чіпаю")
             try {
                 write(app, u, fresh)
-                val after = resolver.openInputStream(u)?.buffered(256 * 1024)?.use { Retag.audioDigest(kind, it) }
-                if (after != sound) throw IOException("після заміни звук не той")
+                val written = resolver.openInputStream(u)?.buffered(256 * 1024)?.use { Retag.audioDigest(kind, it) }
+                if (written != sound) throw IOException("після заміни звук не той")
             } catch (e: Exception) {
                 runCatching { write(app, u, backup) }
                 throw IOException("не вдалося переписати (${e.message}) — повернув файл, як був")
             }
-            return true
         } finally {
             backup.delete()
             fresh.delete()

@@ -22,6 +22,7 @@ import ua.faric.trackcatcher.core.Lossless
 import ua.faric.trackcatcher.core.Pcm
 import ua.faric.trackcatcher.core.RecStatus
 import ua.faric.trackcatcher.core.RepeatPolicy
+import ua.faric.trackcatcher.core.TitleTail
 import ua.faric.trackcatcher.core.TrackNumber
 import ua.faric.trackcatcher.core.Verdict
 import ua.faric.trackcatcher.core.WavHeader
@@ -42,6 +43,11 @@ class SegmentFinisher(context: Context) {
 
     fun finish(original: SegmentJob, settings: Settings.Values): RecordingRow {
         var job = original
+        // T71: Suno в шторці дописує до назви назву пісні, з якої почалась черга («X X», «Y X») — прибрати.
+        val raw = job.meta.title
+        TitleTail.doubled(raw)?.let { TitleFix.learn(app, it) }
+        val cleanTitle = TitleTail.clean(raw, TitleFix.known(app))
+        if (cleanTitle != raw) job = job.copy(meta = job.meta.copy(title = cleanTitle))
         val totalFrames = job.pcmFile.length() / Pcm.BYTES_PER_FRAME
         val clips = ClipCounter()
         val trimmed = LevelAnalysis.trim(blockLevels(job.pcmFile, clips), totalFrames)
@@ -52,6 +58,7 @@ class SegmentFinisher(context: Context) {
         if (job.recovered && verdict.status == RecStatus.PARTIAL || job.recovered && verdict.status == RecStatus.COMPLETE) {
             verdict = Verdict(RecStatus.PARTIAL, verdict.reasons + "застосунок закрився під час запису")
         }
+        if (cleanTitle != raw) verdict = verdict.copy(reasons = verdict.reasons + "назву очищено: у шторці було «$raw»")
         val savable = verdict.status == RecStatus.COMPLETE || verdict.status == RecStatus.PARTIAL
         if (savable && settings.repeat == RepeatPolicy.SKIP && !job.meta.isUnknown &&
             db.hasComplete(job.meta.artist, job.meta.title, job.meta.durationMs)
