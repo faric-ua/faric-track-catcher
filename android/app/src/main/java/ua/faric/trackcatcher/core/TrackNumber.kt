@@ -15,16 +15,29 @@ object TrackNumber {
     /** [previous] — номери попередніх пісень того самого альбому в цьому записі, по порядку. */
     fun next(title: String, previous: List<Int>): Int = fromTitle(title) ?: ((previous.lastOrNull() ?: 0) + 1)
 
+    private val BONUS = Regex("""(?<![\p{L}\d])(?:BONUS|БОНУС)\s*(?:TRACK\s*)?№?\s*0*(\d{1,3})(?!\d)""", RegexOption.IGNORE_CASE)
+
+    /** «BONUS 03» → 3. */
+    fun bonusOf(title: String): Int? = BONUS.find(title)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 1..999 }
+
     /**
-     * Номери для цілого списку назв по порядку запису. Та сама пісня вдруге (неповна, потім повна; альбом по колу) —
-     * той самий номер і далі не зсуває (faric 18.10 03:35: «записував 10 треків, а BONUS 3 під номером 16»).
+     * Номери для альбому — назви по порядку запису, з повторами (faric 18.10 04:11: «де TRACK 10, хоч він двічі
+     * повторюється, — номер 10; BONUS 03 — 13; пробіжиться й передивиться»):
+     * «TRACK 10» → 10; «BONUS 03» → найбільший TRACK альбому + 3; інша назва → наступний по порядку.
+     * Та сама назва вдруге — той самий номер, нічого не зсуває.
      */
     fun all(titles: List<String>): List<Int> {
+        val maxTrack = titles.mapNotNull { fromTitle(it) }.maxOrNull() ?: 0
         val seen = HashMap<String, Int>()
-        val fresh = ArrayList<Int>() // номери перших появ — від них рахується «наступний»
+        var last = 0
         return titles.map { t ->
             val key = t.trim().lowercase()
-            seen[key] ?: next(t, fresh).also { n -> seen[key] = n; fresh += n }
+            seen[key] ?: run {
+                val n = fromTitle(t) ?: bonusOf(t)?.takeIf { maxTrack > 0 }?.let { maxTrack + it } ?: (last + 1)
+                seen[key] = n
+                last = n
+                n
+            }
         }
     }
 }

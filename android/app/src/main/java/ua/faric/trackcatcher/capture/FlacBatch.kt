@@ -12,7 +12,6 @@ import ua.faric.trackcatcher.core.FlacEncoder
 import ua.faric.trackcatcher.core.Lossless
 import ua.faric.trackcatcher.core.TimeText
 import ua.faric.trackcatcher.core.TrackMeta
-import ua.faric.trackcatcher.core.TrackNumber
 import ua.faric.trackcatcher.core.WavToFlac
 import ua.faric.trackcatcher.data.HistoryDb
 import ua.faric.trackcatcher.data.RecordingRow
@@ -24,7 +23,13 @@ import ua.faric.trackcatcher.data.Settings
  * (повідомлення в шторці, можна згорнути й повертати), екран лише показує [state].
  */
 object FlacBatch {
+    /** Що робить служба: WAV → FLAC (T69) чи перевірка номерів (T70). */
+    enum class Mode { FLAC, RENUMBER }
+
     data class State(
+        val mode: Mode = Mode.FLAC,
+        /** Після запису, без натискання: підсумок показуємо, лише якщо щось виправлено чи не вийшло. */
+        val auto: Boolean = false,
         val running: Boolean = false,
         val index: Int = 0,
         val total: Int = 0,
@@ -34,13 +39,19 @@ object FlacBatch {
         val problems: List<String> = emptyList(),
         val finished: Boolean = false,
         val cancelled: Boolean = false,
-    )
+    ) {
+        /** Чи показувати підсумок вікном (сам після запису — лише коли є що сказати). */
+        val worthShowing: Boolean get() = !auto || made > 0 || problems.isNotEmpty()
+    }
 
     @Volatile var state = State()
         private set
 
     /** Вікно «Зробити?» відкрите — які записи (щоб воно пережило поворот). */
     @Volatile var pendingConfirm: LongArray? = null
+
+    /** Яке саме вікно «Зробити?» відкрите. */
+    @Volatile var pendingMode: Mode = Mode.FLAC
 
     @Volatile internal var cancel = false
 
@@ -66,6 +77,20 @@ object FlacBatch {
         context.startForegroundService(Intent(context, FlacBatchService::class.java).putExtra(FlacBatchService.EXTRA_IDS, ids))
     }
 
+    /** Перевірити номери в альбомах цих записів (T70). [auto] — сам після запису. */
+    fun startRenumber(context: Context, ids: LongArray, auto: Boolean = false) {
+        if (state.running || ids.isEmpty()) return
+        cancel = false
+        update { State(mode = Mode.RENUMBER, auto = auto, running = true) }
+        context.startForegroundService(
+            Intent(context, FlacBatchService::class.java)
+                .putExtra(FlacBatchService.EXTRA_IDS, ids)
+                .putExtra(FlacBatchService.EXTRA_MODE, Mode.RENUMBER.name)
+                .putExtra(FlacBatchService.EXTRA_AUTO, auto),
+        )
+    }
+
+
     fun stop() {
         cancel = true
     }
@@ -88,7 +113,7 @@ object FlacBatch {
         WavToFlac.problem(info)?.let { throw IllegalArgumentException(it) }
         val meta = TrackMeta(
             r.artist, r.title, r.album, r.durationMs,
-            trackNo = trackNoFor(HistoryDb.get(app), r),
+            trackNo = Renumber.numbers(Renumber.scope(HistoryDb.get(app), r))[r.id] ?: 0,
             year = java.util.Calendar.getInstance().apply { timeInMillis = r.createdAt }.get(java.util.Calendar.YEAR),
         )
         // Поруч з WAV: у «Музиці» — та сама папка; своя папка — як для нових записів.
@@ -111,13 +136,5 @@ object FlacBatch {
             r.id, saved.uri, saved.name, saved.size,
             "FLAC з WAV зроблено ${TimeText.dateTime(System.currentTimeMillis())}" + (if (jpeg != null) " з обкладинкою" else "") + "; WAV лишився: ${r.wavName}",
         )
-    }
-
-    /** Номер пісні в альбомі так само, як під час запису (T68): «TRACK 10» з назви або по порядку сесії. */
-    fun trackNoFor(db: HistoryDb, r: RecordingRow): Int {
-        val album = r.album.trim().lowercase()
-        val same = db.sessionRows(r.sessionId).filter { it.album.trim().lowercase() == album && (it.hasFile || it.id == r.id) }
-        val upTo = same.takeWhile { it.id != r.id } + r
-        return TrackNumber.all(upTo.map { it.title }).last()
     }
 }

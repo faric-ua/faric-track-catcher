@@ -36,7 +36,9 @@ class FlacBatchService : Service() {
             if (worker == null) stopSelf()
             return START_NOT_STICKY
         }
-        worker = Thread({ run(ids) }, "wav-to-flac").also { it.start() }
+        val renumber = intent.getStringExtra(EXTRA_MODE) == FlacBatch.Mode.RENUMBER.name
+        val auto = intent.getBooleanExtra(EXTRA_AUTO, false)
+        worker = Thread({ if (renumber) renumber(ids, auto) else run(ids) }, "wav-to-flac").also { it.start() }
         return START_NOT_STICKY
     }
 
@@ -82,6 +84,53 @@ class FlacBatchService : Service() {
         stopSelf()
     }
 
+    /** T70: перевірити номери в альбомах цих записів; виправити лише теги там, де номер не той. */
+    private fun renumber(ids: LongArray, auto: Boolean) {
+        val app = applicationContext
+        val db = HistoryDb.get(app)
+        val starts = ids.mapNotNull { db.get(it) }
+        val seen = HashSet<String>()
+        // Усі файли всіх зачеплених альбомів, з правильним номером кожного.
+        val work = ArrayList<Triple<ua.faric.trackcatcher.data.RecordingRow, Pair<String, String>, Int>>()
+        for (r in starts) {
+            if (!seen.add(Renumber.scopeKey(r))) continue
+            val rows = Renumber.scope(db, r)
+            val nums = Renumber.numbers(rows)
+            for (row in rows) for (f in Renumber.files(row)) work += Triple(row, f, nums[row.id] ?: continue)
+        }
+        FlacBatch.update { it.copy(total = work.size) }
+        val problems = ArrayList<String>()
+        var fixed = 0
+        var cancelled = false
+        for ((i, w) in work.withIndex()) {
+            if (FlacBatch.cancel) { cancelled = true; break }
+            val (row, file, n) = w
+            val label = "№$n · " + row.title.ifBlank { row.displayName }
+            FlacBatch.update { it.copy(index = i + 1, label = label, percent = (i * 100) / maxOf(1, work.size)) }
+            notify("Перевіряю номери: ${i + 1} з ${work.size}", label, (i * 100) / maxOf(1, work.size))
+            try {
+                if (Renumber.fixFile(app, row, file.first, file.second, n)) {
+                    fixed++
+                    FlacBatch.update { it.copy(made = fixed) }
+                }
+            } catch (e: Exception) {
+                problems += "${file.second} — ${e.message ?: e.javaClass.simpleName}"
+                FlacBatch.update { it.copy(problems = problems.toList()) }
+            }
+        }
+        FlacBatch.update { it.copy(running = false, finished = true, made = fixed, problems = problems.toList(), cancelled = cancelled, index = work.size) }
+        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
+        val nm = getSystemService(NotificationManager::class.java)
+        if (auto && fixed == 0 && problems.isEmpty()) {
+            nm.cancel(NOTIF_ID) // після запису й усе гаразд — не заважаємо
+        } else {
+            val title = if (fixed == 0) "Номери пісень правильні (${work.size})" else "Номери виправлено: $fixed з ${work.size}"
+            nm.notify(NOTIF_ID, notification(title, if (problems.isEmpty()) "Звук не змінювався — лише теги" else "Не вийшло: ${problems.size} — подробиці в застосунку", -1, ongoing = false))
+        }
+        worker = null
+        stopSelf()
+    }
+
     private fun enter(n: Notification) {
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else startForeground(NOTIF_ID, n)
     }
@@ -121,6 +170,8 @@ class FlacBatchService : Service() {
 
     companion object {
         const val EXTRA_IDS = "ids"
+        const val EXTRA_MODE = "mode"
+        const val EXTRA_AUTO = "auto"
         private const val ACTION_STOP = "ua.faric.trackcatcher.flac.STOP"
         private const val NOTIF_ID = 3
     }

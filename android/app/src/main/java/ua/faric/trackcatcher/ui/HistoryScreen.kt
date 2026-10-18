@@ -19,6 +19,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import ua.faric.trackcatcher.capture.FlacBatch
+import ua.faric.trackcatcher.capture.Renumber
 import ua.faric.trackcatcher.capture.MediaStoreWriter
 import ua.faric.trackcatcher.core.FileTags
 import ua.faric.trackcatcher.core.Lossless
@@ -148,7 +149,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             KEY_FLAC_CONFIRM -> {
                 val rows = FlacBatch.pendingConfirm?.toList().orEmpty().mapNotNull { db.get(it) }
                 if (rows.isEmpty()) return false
-                confirmMakeFlac(rows)
+                if (FlacBatch.pendingMode == FlacBatch.Mode.RENUMBER) confirmRenumber(rows) else confirmMakeFlac(rows)
                 return true
             }
             KEY_FLAC_RUN, KEY_FLAC_DONE -> {
@@ -301,6 +302,14 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 addView(ui.iconButton(LineIcon.DISC, "Усі в FLAC з обкладинками (${allWavs.size})", Ui.Kind.PRIMARY) { confirmMakeFlac(allWavs.sortedBy { it.createdAt }) }, ui.matchWrap())
                 addView(ui.muted("Або по частинах: кнопка в шапці сесії чи альбому, або довге натискання на плитку — вибрати кілька.", 12.5f))
             }, ui.matchWrap())
+            if (group == Group.ALBUMS && picked.isEmpty() && query.isBlank()) {
+                val taggable = db.list(null, "", limit = Int.MAX_VALUE).filter { Renumber.files(it).isNotEmpty() }
+                if (taggable.isNotEmpty()) list.addView(ui.card(8).apply {
+                    addView(ui.label("Номери пісень", LineIcon.LIST))
+                    addView(ui.muted("TRACK 10 — 10, BONUS 03 — останній TRACK + 3. Після кожного запису Track Catcher перевіряє сам; для старих альбомів — тут.", 13.5f))
+                    addView(ui.iconButton(LineIcon.LIST, "Перевірити номери в усіх альбомах", Ui.Kind.NORMAL) { confirmRenumber(taggable) }, ui.matchWrap())
+                }, ui.matchWrap())
+            }
             if (group == Group.SESSIONS) {
                 val sessions = db.sessions()
                 var currentSession = -1L
@@ -377,6 +386,9 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             actions.addView(ui.iconButton(LineIcon.REPEAT, "Конвертувати", Ui.Kind.NORMAL) { convert(withFiles) })
             val wavs = withFiles.filter { isWav(it) }
             if (wavs.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.DISC, "FLAC з обкладинками (${wavs.size})", Ui.Kind.NORMAL) { confirmMakeFlac(wavs) })
+            // T70: номери пісень альбому — перевірити й виправити в тегах.
+            val taggable = withFiles.filter { Renumber.files(it).isNotEmpty() }
+            if (group == Group.ALBUMS && taggable.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.LIST, "Перевірити номери", Ui.Kind.NORMAL) { confirmRenumber(taggable) })
             box.addView(actions, ui.matchWrap())
         }
         return box
@@ -818,6 +830,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
         val ids = rows.map { it.id }.toLongArray()
         FlacBatch.pendingConfirm = ids
+        FlacBatch.pendingMode = FlacBatch.Mode.FLAC
         val withArt = rows.count { r -> r.artworkPath?.let { java.io.File(it).isFile } == true }
         val approx = TimeText.size(rows.sumOf { it.wavSize } * 6 / 10)
         val body = host.overlay.dialog(
@@ -839,6 +852,40 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         host.overlay.show(KEY_FLAC_CONFIRM, body)
     }
 
+    /** T70: «Перевірити номери?» — перелік альбомів і що станеться. */
+    private fun confirmRenumber(rows: List<RecordingRow>) {
+        if (RecorderHub.state.phase != RecorderHub.Phase.IDLE) {
+            host.toast("Спершу зупини запис")
+            return
+        }
+        if (FlacBatch.state.running) {
+            showBatch(FlacBatch.state)
+            return
+        }
+        val ids = rows.map { it.id }.toLongArray()
+        FlacBatch.pendingConfirm = ids
+        FlacBatch.pendingMode = FlacBatch.Mode.RENUMBER
+        val albums = rows.map { it.album.ifBlank { "без альбому" } }.distinct()
+        val body = host.overlay.dialog(
+            title = "Перевірити номери пісень?",
+            message = (if (albums.size == 1) "Альбом «${albums[0]}»." else "Альбомів: ${albums.size}.") +
+                " Track Catcher перечитає файли (FLAC, MP3) і там, де номер не той, перепише лише тег — звук не змінюється. " +
+                "TRACK 10 — 10, BONUS 03 — останній TRACK + 3, повтор пісні — той самий номер.\n\n" +
+                "Безпечно: перед заміною — копія, нове перевіряється; щось не так — файл лишається, як був.",
+            actions = listOf("Перевірити" to Ui.Kind.PRIMARY, "Скасувати" to Ui.Kind.QUIET),
+            onAction = { i ->
+                FlacBatch.pendingConfirm = null
+                if (i == 0) {
+                    FlacBatch.startRenumber(host, ids)
+                    showBatch(FlacBatch.state)
+                } else {
+                    host.overlay.dismiss()
+                }
+            },
+        )
+        host.overlay.show(KEY_FLAC_CONFIRM, body)
+    }
+
     private var batchText: android.widget.TextView? = null
 
     /** Поступ або підсумок перетворення — з [FlacBatch.state], тож переживає поворот (faric 17.10 22:25). */
@@ -847,7 +894,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             val text = ui.numbers(ui.muted(batchLine(s), 14.5f))
             batchText = text
             val box = ui.column(12).apply {
-                addView(ui.title("Роблю FLAC з обкладинками", 19f))
+                addView(ui.title(if (s.mode == FlacBatch.Mode.RENUMBER) "Перевіряю номери пісень" else "Роблю FLAC з обкладинками", 19f))
                 addView(text)
                 addView(ui.muted("Можна повертати екран і згортати застосунок — поступ і «Зупинити» є в шторці. Перервалось? Ту саму кнопку ще раз: зроблені пропускаються.", 13f))
                 val row = FlowLayout(host, ui.dp(8), ui.dp(8), alignEnd = true)
@@ -858,10 +905,16 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             host.overlay.show(KEY_FLAC_RUN, box, dismissOnOutside = false)
         } else if (s.finished) {
             batchText = null
-            val head = if (s.cancelled) "Зупинено: зроблено ${s.made} з ${s.total}." else "Готово: " + TimeText.plural(s.made, "FLAC", "FLAC", "FLAC") + " з обкладинками й тегами."
-            val msg = "$head WAV лишились на місці." +
+            val head = when {
+                s.mode == FlacBatch.Mode.RENUMBER && s.cancelled -> "Зупинено: перевірено ${s.index} з ${s.total}, виправлено ${s.made}."
+                s.mode == FlacBatch.Mode.RENUMBER -> "Перевірено файлів: ${s.total}. " +
+                    (if (s.made == 0) "Усі номери правильні." else "Виправлено: ${s.made} (лише теги, звук той самий).")
+                s.cancelled -> "Зупинено: зроблено ${s.made} з ${s.total}. WAV лишились на місці."
+                else -> "Готово: " + TimeText.plural(s.made, "FLAC", "FLAC", "FLAC") + " з обкладинками й тегами. WAV лишились на місці."
+            }
+            val msg = head +
                 if (s.problems.isEmpty()) "" else "\n\nНе вийшло (${s.problems.size}):\n" + s.problems.joinToString("\n")
-            val body = host.overlay.dialog("FLAC з обкладинками", msg, listOf("Закрити" to Ui.Kind.QUIET), {
+            val body = host.overlay.dialog(if (s.mode == FlacBatch.Mode.RENUMBER) "Номери пісень" else "FLAC з обкладинками", msg, listOf("Закрити" to Ui.Kind.QUIET), {
                 FlacBatch.acknowledge()
                 host.overlay.dismiss()
             })
@@ -869,12 +922,16 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
     }
 
-    private fun batchLine(s: FlacBatch.State) =
-        if (s.index == 0) "Готуюсь… (${s.total})" else "${s.index} з ${s.total}: ${s.label} · ${s.percent} %"
+    private fun batchLine(s: FlacBatch.State) = when {
+        s.index == 0 -> "Готуюсь…" + if (s.total > 0) " (${s.total})" else ""
+        s.mode == FlacBatch.Mode.RENUMBER -> "${s.index} з ${s.total}: ${s.label} · виправлено ${s.made}"
+        else -> "${s.index} з ${s.total}: ${s.label} · ${s.percent} %"
+    }
 
     private fun onBatch(s: FlacBatch.State) {
         when {
             s.running -> batchText?.takeIf { host.overlay.key == KEY_FLAC_RUN }?.text = batchLine(s)
+            s.finished && !s.worthShowing -> FlacBatch.acknowledge() // сам після запису й усе гаразд — мовчки
             s.finished && (host.overlay.key == null || host.overlay.key == KEY_FLAC_RUN) -> showBatch(s)
         }
     }

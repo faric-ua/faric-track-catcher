@@ -29,4 +29,14 @@ class TrackNumberTest {
         // Неповний запис, потім повний тієї самої пісні — один номер.
         assertEquals(listOf(1, 2, 2, 3), TrackNumber.all(listOf("Ранок", "Вечір", "Вечір", "Ніч")))
     }
+
+    @Test fun bonusIsMaxTrackPlusItsOwnNumber() {
+        // BONUS 03 — завжди 13 після TRACK 10, навіть якщо бонуси записано не по порядку чи без BONUS 01.
+        assertEquals(listOf(13, 1, 10, 11), TrackNumber.all(listOf("BONUS 03 — D", "TRACK 01 — A", "TRACK 10 — J", "BONUS 01 — B")))
+        assertEquals(3, TrackNumber.bonusOf("⚡ BONUS 03 — TWO VOICES, ONE HORIZON"))
+    }
+
+    @Test fun bonusWithoutTracksIsCountedInOrder() {
+        assertEquals(listOf(1, 2), TrackNumber.all(listOf("BONUS 01 — A", "BONUS 02 — B")))
+    }
 }
