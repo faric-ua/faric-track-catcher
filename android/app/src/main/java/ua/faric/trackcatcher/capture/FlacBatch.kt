@@ -37,6 +37,8 @@ object FlacBatch {
         val percent: Int = 0,
         val made: Int = 0,
         val problems: List<String> = emptyList(),
+        /** Пропущено: файла нема на місці (перенесли чи видалили) — не рахувались. */
+        val skipped: Int = 0,
         val finished: Boolean = false,
         val cancelled: Boolean = false,
     ) {

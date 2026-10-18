@@ -1008,7 +1008,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 s.cancelled -> "Зупинено: зроблено ${s.made} з ${s.total}. WAV лишились на місці."
                 else -> "Готово: " + TimeText.plural(s.made, "FLAC", "FLAC", "FLAC") + " з обкладинками й тегами. WAV лишились на місці."
             }
-            val msg = head + if (s.problems.isEmpty()) "" else "\n\nНе вийшло (${s.problems.size}):\n" + problemsText(s.problems)
+            val skippedText = if (s.skipped > 0) "\n\nПропущено: ${s.skipped} — файлів нема там, де їх пам'ятає історія (перенесли чи видалили). Їх не рахував і не чіпав." else ""
+            val msg = head + skippedText + if (s.problems.isEmpty()) "" else "\n\nНе вийшло (${s.problems.size}):\n" + problemsText(s.problems)
             val head2 = when (s.mode) {
                 FlacBatch.Mode.RENUMBER -> "Номери пісень"
                 FlacBatch.Mode.TITLES -> "Назви пісень"

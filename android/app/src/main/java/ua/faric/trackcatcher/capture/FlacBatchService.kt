@@ -99,14 +99,27 @@ class FlacBatchService : Service() {
         val seen = HashSet<String>()
         // Усі файли всіх зачеплених альбомів, з правильним номером кожного.
         val work = ArrayList<Triple<ua.faric.trackcatcher.data.RecordingRow, Pair<String, String>, Int>>()
+        val problems = ArrayList<String>()
+        val store = MediaStoreWriter(app)
+        var skipped = 0
         for (r in starts) {
             if (!seen.add(Renumber.scopeKey(r))) continue
-            val rows = Renumber.scope(db, r)
+            val all = Renumber.scope(db, r)
+            // Спершу — чи файли на місці; перенесені не рахуються й у номерах (faric 18.10 15:38).
+            val rows = Renumber.present(app, all)
+            if (rows == null) {
+                problems += "${r.album.ifBlank { "без альбому" }}\tне видно жодного файла альбому — карта пам'яті вставлена? Нічого не змінено"
+                continue
+            }
+            skipped += all.size - rows.size
             val nums = Renumber.numbers(rows)
-            for (row in rows) for (f in Renumber.files(row)) work += Triple(row, f, nums[row.id] ?: continue)
+            for (row in rows) for (f in Renumber.files(row)) {
+                if (!store.stillThere(f.first)) { skipped++; continue }
+                work += Triple(row, f, nums[row.id] ?: continue)
+            }
         }
+        FlacBatch.update { it.copy(skipped = skipped, problems = problems.toList()) }
         FlacBatch.update { it.copy(total = work.size) }
-        val problems = ArrayList<String>()
         var fixed = 0
         var cancelled = false
         for ((i, w) in work.withIndex()) {
@@ -125,7 +138,7 @@ class FlacBatchService : Service() {
                 FlacBatch.update { it.copy(problems = problems.toList()) }
             }
         }
-        FlacBatch.update { it.copy(running = false, finished = true, made = fixed, problems = problems.toList(), cancelled = cancelled, index = work.size) }
+        FlacBatch.update { it.copy(running = false, finished = true, made = fixed, problems = problems.toList(), cancelled = cancelled, index = work.size, skipped = skipped) }
         if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
         val nm = getSystemService(NotificationManager::class.java)
         if (auto && fixed == 0 && problems.isEmpty()) {
@@ -144,6 +157,7 @@ class FlacBatchService : Service() {
         val db = HistoryDb.get(app)
         TitleFix.learn(app, tail) // нові записи з цим хвостом очищаються самі
         val problems = ArrayList<String>()
+        var skipped = 0
         var fixed = 0
         var cancelled = false
         for ((i, id) in ids.withIndex()) {
@@ -153,6 +167,11 @@ class FlacBatchService : Service() {
             FlacBatch.update { it.copy(index = i + 1, label = label, percent = (i * 100) / ids.size) }
             notify("Прибираю зайве з назв: ${i + 1} з ${ids.size}", label, (i * 100) / ids.size)
             if (TitleFix.newTitle(r, tail) == null) continue
+            if (r.hasFile && Renumber.present(app, listOf(r)).isNullOrEmpty()) {
+                skipped++ // файла нема на місці — не чіпаємо (faric 18.10 15:38)
+                FlacBatch.update { it.copy(skipped = skipped) }
+                continue
+            }
             val bad = runCatching { TitleFix.fix(app, r, tail) }.getOrElse { listOf("${r.title}\t${ua.faric.trackcatcher.core.ErrorText.human(it)}") }
             if (bad.isEmpty()) {
                 fixed++
