@@ -140,7 +140,7 @@ class SegmentFinisher(context: Context) {
         val earlier = db.sessionRows(job.sessionId).filter {
             it.album.trim().lowercase() == album && it.hasFile && it.createdAt <= job.closedAt
         }
-        return TrackNumber.next(job.meta.title, TrackNumber.all(earlier.map { it.title }))
+        return TrackNumber.all(earlier.map { it.title } + job.meta.title).last()
     }
 
     private fun yearOf(ms: Long): Int = java.util.Calendar.getInstance().apply { timeInMillis = ms }.get(java.util.Calendar.YEAR)

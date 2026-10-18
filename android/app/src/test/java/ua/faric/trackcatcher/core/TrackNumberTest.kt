@@ -21,4 +21,12 @@ class TrackNumberTest {
     @Test fun plainTitlesAreCountedInOrder() {
         assertEquals(listOf(1, 2, 3), TrackNumber.all(listOf("Ранок", "Вечір", "Ніч")))
     }
+
+    @Test fun repeatedSongKeepsItsNumber() {
+        // Бонуси записались двічі (по колу): 13-й лишається 13-м, а не 16-м.
+        val t = listOf("TRACK 10 — A", "BONUS 01 — B", "BONUS 02 — C", "BONUS 03 — D", "BONUS 01 — B", "BONUS 02 — C", "BONUS 03 — D")
+        assertEquals(listOf(10, 11, 12, 13, 11, 12, 13), TrackNumber.all(t))
+        // Неповний запис, потім повний тієї самої пісні — один номер.
+        assertEquals(listOf(1, 2, 2, 3), TrackNumber.all(listOf("Ранок", "Вечір", "Вечір", "Ніч")))
+    }
 }
