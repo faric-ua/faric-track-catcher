@@ -639,7 +639,9 @@ class UpdateUi(private val host: MainActivity) {
     private fun showProgress() {
         val box = ui.column(14)
         box.addView(ui.title(Updater.progressTitle, 19f))
-        val status = ui.text(Updater.progressText, 15f, Palette.muted)
+        // faric 18.10 05:10 (відео): кнопка стрибала вниз, коли замість «Копіюю APK…» з'являвся підсумок на 5 рядків.
+        // Місце під текст — одразу на весь підсумок: вікно не міняє висоти, кнопка стоїть на місці.
+        val status = ui.text(Updater.progressText, 15f, Palette.muted).apply { minLines = PROGRESS_LINES }
         box.addView(status)
         val close = ui.button(if (Updater.progressFinished) "Закрити" else "Сховати (робота йде далі)", Ui.Kind.QUIET) {
             Updater.progressView = null
@@ -701,6 +703,9 @@ class UpdateUi(private val host: MainActivity) {
         private const val KEY_LAST_RESULT = "last_publish_result"
         private const val KEY_AUTO = "auto_check"
         private const val KEY_LAST_AUTO = "last_auto_check"
+
+        /** Скільки рядків тримати під текст поступу (найдовший підсумок на вузькому екрані — 5–6). */
+        const val PROGRESS_LINES = 6
 
         const val KEY_DIALOG_PUBLISH = "update:publish"
         const val KEY_DIALOG_RESET = "update:reset"
