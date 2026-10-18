@@ -604,9 +604,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
         // T68 / T69: що насправді у файлі; старий WAV — FLAC з обкладинкою з історії.
         if (r.hasFile) {
-            val more = FlowLayout(host, ui.dp(8), ui.dp(8))
-            more.addView(ui.iconButton(LineIcon.FILE, "Про файл", Ui.Kind.NORMAL) { openFileInfo(r) })
-            if (isWav(r)) more.addView(ui.iconButton(LineIcon.REPEAT, "Зробити FLAC з обкладинкою", Ui.Kind.NORMAL) { confirmMakeFlac(listOf(r)) })
+            // На всю ширину (faric 18.10 15:19: «кнопку "Про файл" розтягни на всю ширину»).
+            val more = ui.column(8)
+            more.addView(ui.iconButton(LineIcon.FILE, "Про файл", Ui.Kind.NORMAL) { openFileInfo(r) }, ui.matchWrap())
+            if (isWav(r)) more.addView(ui.iconButton(LineIcon.REPEAT, "Зробити FLAC з обкладинкою", Ui.Kind.NORMAL) { confirmMakeFlac(listOf(r)) }, ui.matchWrap())
             box.addView(more, ui.matchWrap())
         }
 
