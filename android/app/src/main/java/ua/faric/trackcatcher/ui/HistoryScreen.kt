@@ -1008,20 +1008,33 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 s.cancelled -> "Зупинено: зроблено ${s.made} з ${s.total}. WAV лишились на місці."
                 else -> "Готово: " + TimeText.plural(s.made, "FLAC", "FLAC", "FLAC") + " з обкладинками й тегами. WAV лишились на місці."
             }
-            val msg = head +
-                if (s.problems.isEmpty()) "" else "\n\nНе вийшло (${s.problems.size}):\n" + s.problems.joinToString("\n")
+            val msg = head + if (s.problems.isEmpty()) "" else "\n\nНе вийшло (${s.problems.size}):\n" + problemsText(s.problems)
             val head2 = when (s.mode) {
                 FlacBatch.Mode.RENUMBER -> "Номери пісень"
                 FlacBatch.Mode.TITLES -> "Назви пісень"
                 FlacBatch.Mode.FLAC -> "FLAC з обкладинками"
             }
-            val body = host.overlay.dialog(head2, msg, listOf("Закрити" to Ui.Kind.QUIET), {
-                FlacBatch.acknowledge()
-                host.overlay.dismiss()
+            // faric 18.10 15:26: «додай кнопку копіювати текст — тикну й тобі відправлю».
+            val actions = if (s.problems.isEmpty()) listOf("Закрити" to Ui.Kind.QUIET) else listOf("Копіювати" to Ui.Kind.NORMAL, "Закрити" to Ui.Kind.QUIET)
+            val body = host.overlay.dialog(head2, msg, actions, { i ->
+                if (actions[i].first == "Копіювати") {
+                    val cm = host.getSystemService(android.content.ClipboardManager::class.java)
+                    cm?.setPrimaryClip(android.content.ClipData.newPlainText(head2, "$head2\n$msg"))
+                    host.toast("Скопійовано — встав у чат")
+                } else {
+                    FlacBatch.acknowledge()
+                    host.overlay.dismiss()
+                }
             })
             host.overlay.show(KEY_FLAC_DONE, body)
         }
     }
+
+    /** «файл\tпричина» → згруповано за причиною: причина один раз, під нею — файли (faric 18.10 15:26: «дуже багато всього»). */
+    private fun problemsText(problems: List<String>): String =
+        problems.groupBy({ it.substringAfter('\t', "") }, { it.substringBefore('\t') }).entries.joinToString("\n\n") { (why, names) ->
+            (if (why.isBlank()) "" else "$why (${names.size}):\n") + names.joinToString("\n") { "• $it" }
+        }
 
     private fun batchLine(s: FlacBatch.State) = when {
         s.index == 0 -> "Готуюсь…" + if (s.total > 0) " (${s.total})" else ""

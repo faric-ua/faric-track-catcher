@@ -55,7 +55,7 @@ object TitleFix {
                 val saved = store.rename(uri, newName)
                 return saved.uri to saved.name
             } catch (e: Exception) {
-                problems += "$name — ${e.message ?: e.javaClass.simpleName}"
+                problems += "$name\t${ua.faric.trackcatcher.core.ErrorText.human(e)}"
                 return null
             }
         }
