@@ -114,9 +114,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val follower: (InAppPlayer.Track) -> Unit = { t -> follow(t) }
 
     override fun onStart() {
-        unobserve = HistoryDb.observe { reload() }
+        unobserve = HistoryDb.observe { reload(); checkMissing() }
         unobserveBatch = FlacBatch.observe { onBatch(it) }
         InAppPlayer.onTrackChanged = follower
+        checkMissing()
         reload()
         // Поки застосунок був схований, плеєр міг перейти далі (шторка, «дограла»).
         InAppPlayer.current?.let { follow(it) }
@@ -283,8 +284,38 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     // ---------- список ----------
 
+    /**
+     * Записи, чиїх файлів нема на місці (faric 18.10 16:12: «файли я переніс чи видалив — у загальній історії хай будуть,
+     * а там, де працюєш з альбомами й перевіряєш файли, — щоб не відображались»). Перевірка у фоні; історію не змінює —
+     * повернеш файл, і запис знову з'явиться в альбомі.
+     */
+    private fun checkMissing() {
+        if (missingBusy) return
+        missingBusy = true
+        val app = host.applicationContext
+        Thread({
+            val found = runCatching {
+                val store = MediaStoreWriter(app)
+                val withFiles = db.all().filter { it.hasFile }
+                val gone = withFiles.filter { r -> listOfNotNull(r.mp3Uri, r.wavUri).none { store.stillThere(it) } }.map { it.id }.toSet()
+                // Не видно взагалі нічого — швидше вийнята карта пам'яті, ніж перенесені файли: нічого не ховаємо.
+                if (gone.size == withFiles.size && withFiles.size > 3) emptySet() else gone
+            }.getOrDefault(missing)
+            host.runOnUiThread {
+                missingBusy = false
+                if (found != missing) {
+                    missing = found
+                    if (!host.isFinishing && !host.isDestroyed) reload()
+                }
+            }
+        }, "history-missing").start()
+    }
+
     private fun reload() {
-        val found = db.list(filter, query)
+        val all = db.list(filter, query)
+        // В альбомах і виконавцях — лише записи з файлами на місці; у «Сесіях» — усе (загальна історія).
+        val hidden = if (group == Group.SESSIONS) 0 else all.count { it.id in missing }
+        val found = if (hidden == 0) all else all.filter { it.id !in missing }
         // У групах — альбом (виконавець) разом; найсвіжіший угорі, усередині — новіші згори, як завжди.
         rows = if (group == Group.SESSIONS) found else Playlist.groupInOrder(found) { groupKeyOf(it) }.flatMap { it.second }
         renderGroupChips()
@@ -308,8 +339,11 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 addView(ui.iconButton(LineIcon.DISC, "Усі в FLAC з обкладинками (${allWavs.size})", Ui.Kind.PRIMARY) { confirmMakeFlac(allWavs.sortedBy { it.createdAt }) }, ui.matchWrap())
                 addView(ui.muted("Або по частинах: кнопка в шапці сесії чи альбому, або довге натискання на плитку — вибрати кілька.", 12.5f))
             }, ui.matchWrap())
+            if (hidden > 0) list.addView(ui.card(6).apply {
+                addView(ui.muted("Сховано ${TimeText.plural(hidden, "запис", "записи", "записів")}: файлів нема на місці (перенесли чи видалили). Усі записи — у «Групувати: Сесії».", 13.5f))
+            }, ui.matchWrap())
             if (group == Group.ALBUMS && picked.isEmpty() && query.isBlank()) {
-                val taggable = db.list(null, "", limit = Int.MAX_VALUE).filter { Renumber.files(it).isNotEmpty() }
+                val taggable = db.list(null, "", limit = Int.MAX_VALUE).filter { Renumber.files(it).isNotEmpty() && it.id !in missing }
                 if (taggable.isNotEmpty()) list.addView(ui.card(8).apply {
                     addView(ui.label("Номери пісень", LineIcon.LIST))
                     addView(ui.muted("TRACK 10 — 10, BONUS 03 — останній TRACK + 3. Після кожного запису Track Catcher перевіряє сам; для старих альбомів — тут.", 13.5f))
@@ -507,6 +541,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             ellipsize = TextUtils.TruncateAt.END
         })
         texts.addView(ui.numbers(ui.muted(metaLine(r), 13f)))
+        if (r.id in missing) texts.addView(ui.text("файла нема на місці — перенесли чи видалили", 12.5f, Palette.warning))
         if (r.status != RecStatus.COMPLETE && r.reason.isNotBlank()) {
             texts.addView(ui.text(r.reason, 12.5f, ui.statusColor(r.status)).apply { maxLines = 3 })
         }
@@ -1094,6 +1129,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         private const val KEY_FLAC_CONFIRM = "makeflac:confirm"
         private const val KEY_FLAC_RUN = "makeflac:run"
         private const val KEY_FLAC_DONE = "makeflac:done"
+
+        /** Записи, чиїх файлів нема на місці (перевіряється у фоні, на весь процес — переживає поворот). */
+        @Volatile private var missing: Set<Long> = emptySet()
+        @Volatile private var missingBusy = false
 
         /** Audio Converter (`faric-ua/faric-audio-converter`): звичайна збірка і збірка для перевірки (.dev). */
         private val CONVERTER_PACKAGES = listOf("ua.faric.audioconverter", "ua.faric.audioconverter.dev")
