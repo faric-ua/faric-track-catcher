@@ -43,6 +43,7 @@ class FlacBatchService : Service() {
             when (mode) {
                 FlacBatch.Mode.RENUMBER.name -> renumber(ids, auto)
                 FlacBatch.Mode.TITLES.name -> titles(ids, tail)
+                FlacBatch.Mode.RETITLE.name -> retitle(ids, intent.getStringArrayExtra(EXTRA_TITLES)?.map { it ?: "" }.orEmpty())
                 else -> run(ids)
             }
         }, "wav-to-flac").also { it.start() }
@@ -192,6 +193,32 @@ class FlacBatchService : Service() {
         stopSelf()
     }
 
+    /** T77: назви з нових імен файлів — тег TITLE і історія (ім'я файлу вже нове). */
+    private fun retitle(ids: LongArray, titles: List<String>) {
+        val app = applicationContext
+        val db = HistoryDb.get(app)
+        val problems = ArrayList<String>()
+        var fixed = 0
+        var cancelled = false
+        for ((i, id) in ids.withIndex()) {
+            if (FlacBatch.cancel) { cancelled = true; break }
+            val r = db.get(id) ?: continue
+            val title = titles.getOrNull(i) ?: continue
+            FlacBatch.update { it.copy(index = i + 1, label = title, percent = (i * 100) / ids.size) }
+            notify("Назви з імен файлів: ${i + 1} з ${ids.size}", title, (i * 100) / ids.size)
+            val bad = runCatching { TitleFix.fixTo(app, r, title, "взято з імені файлу") }.getOrElse { listOf("${r.title}\t${ua.faric.trackcatcher.core.ErrorText.human(it)}") }
+            if (bad.isEmpty()) { fixed++; FlacBatch.update { it.copy(made = fixed) } } else { problems += bad; FlacBatch.update { it.copy(problems = problems.toList()) } }
+        }
+        FlacBatch.update { it.copy(running = false, finished = true, made = fixed, problems = problems.toList(), cancelled = cancelled, index = ids.size) }
+        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
+        getSystemService(NotificationManager::class.java).notify(
+            NOTIF_ID,
+            notification("Назви з імен файлів: $fixed з ${ids.size}", if (problems.isEmpty()) "Звук не змінювався — лише назви" else "Не вийшло: ${problems.size} — подробиці в застосунку", -1, ongoing = false),
+        )
+        worker = null
+        stopSelf()
+    }
+
     private fun enter(n: Notification) {
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else startForeground(NOTIF_ID, n)
     }
@@ -234,6 +261,7 @@ class FlacBatchService : Service() {
         const val EXTRA_MODE = "mode"
         const val EXTRA_AUTO = "auto"
         const val EXTRA_TAIL = "tail"
+        const val EXTRA_TITLES = "titles"
         private const val ACTION_STOP = "ua.faric.trackcatcher.flac.STOP"
         private const val NOTIF_ID = 3
     }

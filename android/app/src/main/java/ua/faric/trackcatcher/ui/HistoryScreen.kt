@@ -20,6 +20,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import ua.faric.trackcatcher.capture.FlacBatch
 import ua.faric.trackcatcher.capture.Renumber
+import ua.faric.trackcatcher.capture.RelinkScan
 import ua.faric.trackcatcher.capture.TitleFix
 import ua.faric.trackcatcher.capture.MediaStoreWriter
 import ua.faric.trackcatcher.core.FileTags
@@ -155,7 +156,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 when (FlacBatch.pendingMode) {
                     FlacBatch.Mode.RENUMBER -> confirmRenumber(rows)
                     FlacBatch.Mode.TITLES -> confirmTitles(rows, FlacBatch.pendingTail)
-                    FlacBatch.Mode.FLAC -> confirmMakeFlac(rows)
+                    FlacBatch.Mode.FLAC, FlacBatch.Mode.RETITLE -> confirmMakeFlac(rows)
                 }
                 return true
             }
@@ -163,6 +164,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 val s = FlacBatch.state
                 if (!s.running && !s.finished) return false
                 showBatch(s)
+                return true
+            }
+            KEY_RELINK_DONE, KEY_RELINK_RUN -> {
+                showRelink(RelinkScan.last ?: return false)
                 return true
             }
             KEY_NO_CONVERTER -> {
@@ -341,6 +346,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             }, ui.matchWrap())
             if (hidden > 0) list.addView(ui.card(6).apply {
                 addView(ui.muted("Сховано ${TimeText.plural(hidden, "запис", "записи", "записів")}: файлів нема на місці (перенесли чи видалили). Усі записи — у «Групувати: Сесії».", 13.5f))
+                // T77: перейменував файли сам — знайти їх у тих самих папках і зв'язати з історією.
+                addView(ui.iconButton(LineIcon.FOLDER, "Знайти перейменовані", Ui.Kind.NORMAL) { findRenamed() }, ui.matchWrap())
             }, ui.matchWrap())
             if (group == Group.ALBUMS && picked.isEmpty() && query.isBlank()) {
                 val taggable = db.list(null, "", limit = Int.MAX_VALUE).filter { Renumber.files(it).isNotEmpty() && it.id !in missing }
@@ -1011,6 +1018,83 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         host.overlay.show(KEY_FLAC_CONFIRM, body)
     }
 
+    /** T77: шукати перейменовані файли (у фоні), потім — вікно з тим, що знайдено. */
+    private fun findRenamed() {
+        if (FlacBatch.state.running) {
+            showBatch(FlacBatch.state)
+            return
+        }
+        val ids = missing.toList()
+        host.overlay.show(KEY_RELINK_RUN, ui.column(12).apply {
+            addView(ui.title("Шукаю перейменовані файли", 19f))
+            addView(ui.muted("Дивлюсь у папки, де лежали файли, яких нема на місці: нові файли тієї самої довжини (і з тією самою назвою в тегах). Файли не чіпаю.", 14f).apply { minLines = 3 })
+        }, dismissOnOutside = false)
+        val app = host.applicationContext
+        Thread({
+            val result = runCatching { RelinkScan.scan(app, ids) }
+            host.runOnUiThread {
+                if (host.isFinishing || host.isDestroyed) return@runOnUiThread
+                result.fold({ showRelink(it) }, { e ->
+                    host.overlay.dismiss()
+                    host.toast("Не вдалося: ${ua.faric.trackcatcher.core.ErrorText.human(e)}")
+                })
+            }
+        }, "relink-scan").start()
+    }
+
+    private fun showRelink(r: RelinkScan.Result) {
+        val msg = buildString {
+            if (r.matches.isEmpty()) {
+                append("Не знайшов жодного: серед нових файлів у тих папках нема таких самих за довжиною. Мабуть, файли перенесли в іншу папку чи видалили.")
+            } else {
+                append("Знайдено: ${r.matches.size} з ${r.lost}.\n")
+                r.matches.take(6).forEach { append("\n• ${it.lost.name}\n   → ${it.found.name}") }
+                if (r.matches.size > 6) append("\n… і ще ${r.matches.size - 6}")
+                val notFound = r.lost - r.matches.size
+                if (notFound > 0) append("\n\nНе знайдено: $notFound — їх перенесли кудись інде чи видалили.")
+                if (r.titles.isNotEmpty()) append("\n\nУ ${TimeText.plural(r.titles.size, "записі", "записах", "записах")} ім'я каже іншу назву, ніж історія — можна взяти назву з імені (тег «Назва» у файлі й історія; звук не міняється).")
+            }
+            if (r.strangers > 0) append("\n\nЩе нових файлів у цих папках: ${r.strangers} — їх нема в історії, не чіпаю.")
+            append("\n\n«Зв'язати» лише записує в історію нові імена — файли не змінюються.")
+        }
+        val actions = buildList {
+            if (r.matches.isNotEmpty()) {
+                add("Зв'язати" to Ui.Kind.PRIMARY)
+                if (r.titles.isNotEmpty()) add("Зв'язати й назви з імен (${r.titles.size})" to Ui.Kind.NORMAL)
+            }
+            add((if (r.matches.isEmpty()) "Закрити" else "Скасувати") to Ui.Kind.QUIET)
+        }
+        val body = host.overlay.dialog("Перейменовані файли", msg, actions, { i ->
+            val label = actions[i].first
+            when {
+                label == "Зв'язати" || label.startsWith("Зв'язати й") -> {
+                    val app = host.applicationContext
+                    val withTitles = label.startsWith("Зв'язати й")
+                    RelinkScan.last = null
+                    host.overlay.dismiss()
+                    Thread({
+                        val done = runCatching { RelinkScan.apply(app, r) }.getOrDefault(emptyList())
+                        host.runOnUiThread {
+                            host.toast("Зв'язано: ${TimeText.plural(done.size, "запис", "записи", "записів")}")
+                            if (withTitles) {
+                                val t = r.titles.filterKeys { it in done }
+                                if (t.isNotEmpty()) {
+                                    FlacBatch.startRetitle(host, t.keys.toLongArray(), t.values.toTypedArray())
+                                    showBatch(FlacBatch.state)
+                                }
+                            }
+                        }
+                    }, "relink-apply").start()
+                }
+                else -> {
+                    RelinkScan.last = null
+                    host.overlay.dismiss()
+                }
+            }
+        })
+        host.overlay.show(KEY_RELINK_DONE, body)
+    }
+
     private var batchText: android.widget.TextView? = null
 
     /** Поступ або підсумок перетворення — з [FlacBatch.state], тож переживає поворот (faric 17.10 22:25). */
@@ -1022,6 +1106,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 addView(ui.title(when (s.mode) {
                     FlacBatch.Mode.RENUMBER -> "Перевіряю номери пісень"
                     FlacBatch.Mode.TITLES -> "Прибираю зайве з назв"
+                    FlacBatch.Mode.RETITLE -> "Беру назви з імен файлів"
                     FlacBatch.Mode.FLAC -> "Роблю FLAC з обкладинками"
                 }, 19f))
                 addView(text)
@@ -1037,6 +1122,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             val head = when {
                 s.mode == FlacBatch.Mode.RENUMBER && s.cancelled -> "Зупинено: перевірено ${s.index} з ${s.total}, виправлено ${s.made}."
                 s.mode == FlacBatch.Mode.TITLES && s.cancelled -> "Зупинено: назв виправлено ${s.made}."
+                s.mode == FlacBatch.Mode.RETITLE -> "Назви з імен файлів: ${s.made} з ${s.total} (тег «Назва» у FLAC / MP3 і історія; звук той самий)."
                 s.mode == FlacBatch.Mode.TITLES -> "Назви виправлено: ${s.made} з ${s.total} (у тегах, іменах файлів і в історії; звук той самий)."
                 s.mode == FlacBatch.Mode.RENUMBER -> "Перевірено файлів: ${s.total}. " +
                     (if (s.made == 0) "Усі номери правильні." else "Виправлено: ${s.made} (лише теги, звук той самий).")
@@ -1047,7 +1133,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             val msg = head + skippedText + if (s.problems.isEmpty()) "" else "\n\nНе вийшло (${s.problems.size}):\n" + problemsText(s.problems)
             val head2 = when (s.mode) {
                 FlacBatch.Mode.RENUMBER -> "Номери пісень"
-                FlacBatch.Mode.TITLES -> "Назви пісень"
+                FlacBatch.Mode.TITLES, FlacBatch.Mode.RETITLE -> "Назви пісень"
                 FlacBatch.Mode.FLAC -> "FLAC з обкладинками"
             }
             // faric 18.10 15:26: «додай кнопку копіювати текст — тикну й тобі відправлю».
@@ -1074,7 +1160,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     private fun batchLine(s: FlacBatch.State) = when {
         s.index == 0 -> "Готуюсь…" + if (s.total > 0) " (${s.total})" else ""
-        s.mode == FlacBatch.Mode.RENUMBER || s.mode == FlacBatch.Mode.TITLES -> "${s.index} з ${s.total}: ${s.label} · виправлено ${s.made}"
+        s.mode == FlacBatch.Mode.RENUMBER || s.mode == FlacBatch.Mode.TITLES || s.mode == FlacBatch.Mode.RETITLE -> "${s.index} з ${s.total}: ${s.label} · виправлено ${s.made}"
         else -> "${s.index} з ${s.total}: ${s.label} · ${s.percent} %"
     }
 
@@ -1129,6 +1215,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         private const val KEY_FLAC_CONFIRM = "makeflac:confirm"
         private const val KEY_FLAC_RUN = "makeflac:run"
         private const val KEY_FLAC_DONE = "makeflac:done"
+        private const val KEY_RELINK_RUN = "relink:run"
+        private const val KEY_RELINK_DONE = "relink:done"
 
         /** Записи, чиїх файлів нема на місці (перевіряється у фоні, на весь процес — переживає поворот). */
         @Volatile private var missing: Set<Long> = emptySet()
