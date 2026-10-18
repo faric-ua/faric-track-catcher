@@ -35,8 +35,8 @@ android {
         // Запис звуку інших застосунків (AudioPlaybackCapture) є лише з Android 10.
         minSdk = 29
         targetSdk = 36
-        versionCode = 38
-        versionName = "0.1.37"
+        versionCode = 39
+        versionName = "0.1.38"
     }
 
     signingConfigs {

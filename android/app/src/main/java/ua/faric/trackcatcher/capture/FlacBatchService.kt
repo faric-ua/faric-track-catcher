@@ -78,7 +78,7 @@ class FlacBatchService : Service() {
                 made++
                 FlacBatch.update { it.copy(made = made) }
             } catch (e: Exception) {
-                problems += "$label — ${e.message ?: e.javaClass.simpleName}"
+                problems += "$label\t${ua.faric.trackcatcher.core.ErrorText.human(e)}"
                 FlacBatch.update { it.copy(problems = problems.toList()) }
             }
         }
@@ -121,7 +121,7 @@ class FlacBatchService : Service() {
                     FlacBatch.update { it.copy(made = fixed) }
                 }
             } catch (e: Exception) {
-                problems += "${file.second} — ${e.message ?: e.javaClass.simpleName}"
+                problems += "${file.second}\t${ua.faric.trackcatcher.core.ErrorText.human(e)}"
                 FlacBatch.update { it.copy(problems = problems.toList()) }
             }
         }
@@ -153,7 +153,7 @@ class FlacBatchService : Service() {
             FlacBatch.update { it.copy(index = i + 1, label = label, percent = (i * 100) / ids.size) }
             notify("Прибираю зайве з назв: ${i + 1} з ${ids.size}", label, (i * 100) / ids.size)
             if (TitleFix.newTitle(r, tail) == null) continue
-            val bad = runCatching { TitleFix.fix(app, r, tail) }.getOrElse { listOf("${r.title} — ${it.message ?: it.javaClass.simpleName}") }
+            val bad = runCatching { TitleFix.fix(app, r, tail) }.getOrElse { listOf("${r.title}\t${ua.faric.trackcatcher.core.ErrorText.human(it)}") }
             if (bad.isEmpty()) {
                 fixed++
                 FlacBatch.update { it.copy(made = fixed) }
