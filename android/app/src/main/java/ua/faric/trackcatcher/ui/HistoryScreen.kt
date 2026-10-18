@@ -20,12 +20,14 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import ua.faric.trackcatcher.capture.FlacBatch
 import ua.faric.trackcatcher.capture.Renumber
+import ua.faric.trackcatcher.capture.TitleFix
 import ua.faric.trackcatcher.capture.MediaStoreWriter
 import ua.faric.trackcatcher.core.FileTags
 import ua.faric.trackcatcher.core.Lossless
 import ua.faric.trackcatcher.core.Playlist
 import ua.faric.trackcatcher.core.RecStatus
 import ua.faric.trackcatcher.core.TimeText
+import ua.faric.trackcatcher.core.TitleTail
 import ua.faric.trackcatcher.data.HistoryDb
 import ua.faric.trackcatcher.data.RecordingRow
 import ua.faric.trackcatcher.data.SessionRow
@@ -149,7 +151,11 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             KEY_FLAC_CONFIRM -> {
                 val rows = FlacBatch.pendingConfirm?.toList().orEmpty().mapNotNull { db.get(it) }
                 if (rows.isEmpty()) return false
-                if (FlacBatch.pendingMode == FlacBatch.Mode.RENUMBER) confirmRenumber(rows) else confirmMakeFlac(rows)
+                when (FlacBatch.pendingMode) {
+                    FlacBatch.Mode.RENUMBER -> confirmRenumber(rows)
+                    FlacBatch.Mode.TITLES -> confirmTitles(rows, FlacBatch.pendingTail)
+                    FlacBatch.Mode.FLAC -> confirmMakeFlac(rows)
+                }
                 return true
             }
             KEY_FLAC_RUN, KEY_FLAC_DONE -> {
@@ -389,6 +395,12 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             // T70: номери пісень альбому — перевірити й виправити в тегах.
             val taggable = withFiles.filter { Renumber.files(it).isNotEmpty() }
             if (group == Group.ALBUMS && taggable.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.LIST, "Перевірити номери", Ui.Kind.NORMAL) { confirmRenumber(taggable) })
+            // T71: у назвах повторюється чужий хвіст (Suno дописує назву пісні, з якої почалась черга) — прибрати.
+            val tail = TitleTail.detect(members.map { it.title })
+            val tailed = tail?.let { t -> members.filter { TitleTail.strip(it.title, t) != null } }.orEmpty()
+            if (tail != null && tailed.isNotEmpty()) {
+                actions.addView(ui.iconButton(LineIcon.CUT, "Прибрати зайве з назв (${tailed.size})", Ui.Kind.NORMAL) { confirmTitles(members, tail) })
+            }
             box.addView(actions, ui.matchWrap())
         }
         return box
@@ -886,6 +898,83 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         host.overlay.show(KEY_FLAC_CONFIRM, body)
     }
 
+    /**
+     * T71: «Прибрати зайве з назв?» — знайдений хвіст у полі (можна поправити), скільки пісень і приклад «було → стане».
+     * [rows] — усі записи групи; виправляються ті, у чиїй назві в кінці стоїть цей текст.
+     */
+    private fun confirmTitles(rows: List<RecordingRow>, tail: String) {
+        if (RecorderHub.state.phase != RecorderHub.Phase.IDLE) {
+            host.toast("Спершу зупини запис")
+            return
+        }
+        if (FlacBatch.state.running) {
+            showBatch(FlacBatch.state)
+            return
+        }
+        FlacBatch.pendingConfirm = rows.map { it.id }.toLongArray()
+        FlacBatch.pendingMode = FlacBatch.Mode.TITLES
+        FlacBatch.pendingTail = tail
+        val preview = ui.text("", 14.5f, Palette.text).apply { minLines = 5 } // приклад змінюється — вікно не стрибає
+        fun affected(t: String) = rows.filter { TitleTail.strip(it.title, t) != null }
+        fun refresh(t: String) {
+            val hit = affected(t)
+            preview.text = if (hit.isEmpty()) "Цього тексту нема в кінці жодної назви — перевір, що він збігається до знака." else {
+                val ex = hit.first()
+                "Пісень: ${hit.size} з ${rows.size}.\n\nБуло: ${ex.title}\nСтане: ${TitleTail.strip(ex.title, t)}"
+            }
+        }
+        val field = EditText(host).apply {
+            setTextColor(Palette.text)
+            textSize = 15f
+            background = ui.rounded(Palette.surfaceAlt, Palette.border, radiusDp = 12)
+            setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(10))
+            minHeight = ui.dp(Ui.MIN_TOUCH_DP)
+            imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI
+            id = View.generateViewId()
+            setText(tail)
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun afterTextChanged(e: android.text.Editable?) {
+                    FlacBatch.pendingTail = e?.toString().orEmpty()
+                    refresh(FlacBatch.pendingTail)
+                }
+            })
+        }
+        refresh(tail)
+        val extra = ui.column(10).apply {
+            addView(ui.muted("Зайвий текст у кінці назви (можна поправити):", 13.5f))
+            addView(field, ui.matchWrap())
+            addView(preview)
+        }
+        val body = host.overlay.dialog(
+            title = "Прибрати зайве з назв?",
+            message = "Suno в шторці дописує до назви назву іншої пісні — так вона потрапила в записи. " +
+                "Track Catcher обріже цей текст у назві всередині файлів (FLAC, MP3), в імені файлу й в історії. " +
+                "Звук не змінюється; перед заміною — копія, щось не так — файл лишається, як був. " +
+                "Нові записи з цим хвостом очищатимуться самі.",
+            actions = listOf("Прибрати" to Ui.Kind.PRIMARY, "Скасувати" to Ui.Kind.QUIET),
+            onAction = { i ->
+                if (i == 0) {
+                    val t = FlacBatch.pendingTail
+                    val hit = affected(t)
+                    if (hit.isEmpty()) {
+                        host.toast("Цього тексту нема в кінці жодної назви")
+                    } else {
+                        FlacBatch.pendingConfirm = null
+                        FlacBatch.startTitles(host, hit.map { it.id }.toLongArray(), t)
+                        showBatch(FlacBatch.state)
+                    }
+                } else {
+                    FlacBatch.pendingConfirm = null
+                    host.overlay.dismiss()
+                }
+            },
+            extra = extra,
+        )
+        host.overlay.show(KEY_FLAC_CONFIRM, body)
+    }
+
     private var batchText: android.widget.TextView? = null
 
     /** Поступ або підсумок перетворення — з [FlacBatch.state], тож переживає поворот (faric 17.10 22:25). */
@@ -894,7 +983,11 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             val text = ui.numbers(ui.muted(batchLine(s), 14.5f)).apply { minLines = 3 } // назва пісні в 1–3 рядки — вікно не стрибає
             batchText = text
             val box = ui.column(12).apply {
-                addView(ui.title(if (s.mode == FlacBatch.Mode.RENUMBER) "Перевіряю номери пісень" else "Роблю FLAC з обкладинками", 19f))
+                addView(ui.title(when (s.mode) {
+                    FlacBatch.Mode.RENUMBER -> "Перевіряю номери пісень"
+                    FlacBatch.Mode.TITLES -> "Прибираю зайве з назв"
+                    FlacBatch.Mode.FLAC -> "Роблю FLAC з обкладинками"
+                }, 19f))
                 addView(text)
                 addView(ui.muted("Можна повертати екран і згортати застосунок — поступ і «Зупинити» є в шторці. Перервалось? Ту саму кнопку ще раз: зроблені пропускаються.", 13f))
                 val row = FlowLayout(host, ui.dp(8), ui.dp(8), alignEnd = true)
@@ -907,6 +1000,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             batchText = null
             val head = when {
                 s.mode == FlacBatch.Mode.RENUMBER && s.cancelled -> "Зупинено: перевірено ${s.index} з ${s.total}, виправлено ${s.made}."
+                s.mode == FlacBatch.Mode.TITLES && s.cancelled -> "Зупинено: назв виправлено ${s.made}."
+                s.mode == FlacBatch.Mode.TITLES -> "Назви виправлено: ${s.made} з ${s.total} (у тегах, іменах файлів і в історії; звук той самий)."
                 s.mode == FlacBatch.Mode.RENUMBER -> "Перевірено файлів: ${s.total}. " +
                     (if (s.made == 0) "Усі номери правильні." else "Виправлено: ${s.made} (лише теги, звук той самий).")
                 s.cancelled -> "Зупинено: зроблено ${s.made} з ${s.total}. WAV лишились на місці."
@@ -914,7 +1009,12 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             }
             val msg = head +
                 if (s.problems.isEmpty()) "" else "\n\nНе вийшло (${s.problems.size}):\n" + s.problems.joinToString("\n")
-            val body = host.overlay.dialog(if (s.mode == FlacBatch.Mode.RENUMBER) "Номери пісень" else "FLAC з обкладинками", msg, listOf("Закрити" to Ui.Kind.QUIET), {
+            val head2 = when (s.mode) {
+                FlacBatch.Mode.RENUMBER -> "Номери пісень"
+                FlacBatch.Mode.TITLES -> "Назви пісень"
+                FlacBatch.Mode.FLAC -> "FLAC з обкладинками"
+            }
+            val body = host.overlay.dialog(head2, msg, listOf("Закрити" to Ui.Kind.QUIET), {
                 FlacBatch.acknowledge()
                 host.overlay.dismiss()
             })
@@ -924,7 +1024,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     private fun batchLine(s: FlacBatch.State) = when {
         s.index == 0 -> "Готуюсь…" + if (s.total > 0) " (${s.total})" else ""
-        s.mode == FlacBatch.Mode.RENUMBER -> "${s.index} з ${s.total}: ${s.label} · виправлено ${s.made}"
+        s.mode == FlacBatch.Mode.RENUMBER || s.mode == FlacBatch.Mode.TITLES -> "${s.index} з ${s.total}: ${s.label} · виправлено ${s.made}"
         else -> "${s.index} з ${s.total}: ${s.label} · ${s.percent} %"
     }
 

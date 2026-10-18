@@ -36,9 +36,16 @@ class FlacBatchService : Service() {
             if (worker == null) stopSelf()
             return START_NOT_STICKY
         }
-        val renumber = intent.getStringExtra(EXTRA_MODE) == FlacBatch.Mode.RENUMBER.name
+        val mode = intent.getStringExtra(EXTRA_MODE)
         val auto = intent.getBooleanExtra(EXTRA_AUTO, false)
-        worker = Thread({ if (renumber) renumber(ids, auto) else run(ids) }, "wav-to-flac").also { it.start() }
+        val tail = intent.getStringExtra(EXTRA_TAIL).orEmpty()
+        worker = Thread({
+            when (mode) {
+                FlacBatch.Mode.RENUMBER.name -> renumber(ids, auto)
+                FlacBatch.Mode.TITLES.name -> titles(ids, tail)
+                else -> run(ids)
+            }
+        }, "wav-to-flac").also { it.start() }
         return START_NOT_STICKY
     }
 
@@ -131,6 +138,41 @@ class FlacBatchService : Service() {
         stopSelf()
     }
 
+    /** T71: прибрати хвіст з назв — теги, імена файлів, історія. */
+    private fun titles(ids: LongArray, tail: String) {
+        val app = applicationContext
+        val db = HistoryDb.get(app)
+        TitleFix.learn(app, tail) // нові записи з цим хвостом очищаються самі
+        val problems = ArrayList<String>()
+        var fixed = 0
+        var cancelled = false
+        for ((i, id) in ids.withIndex()) {
+            if (FlacBatch.cancel) { cancelled = true; break }
+            val r = db.get(id) ?: continue
+            val label = TitleFix.newTitle(r, tail) ?: r.title
+            FlacBatch.update { it.copy(index = i + 1, label = label, percent = (i * 100) / ids.size) }
+            notify("Прибираю зайве з назв: ${i + 1} з ${ids.size}", label, (i * 100) / ids.size)
+            if (TitleFix.newTitle(r, tail) == null) continue
+            val bad = runCatching { TitleFix.fix(app, r, tail) }.getOrElse { listOf("${r.title} — ${it.message ?: it.javaClass.simpleName}") }
+            if (bad.isEmpty()) {
+                fixed++
+                FlacBatch.update { it.copy(made = fixed) }
+            } else {
+                problems += bad
+                FlacBatch.update { it.copy(problems = problems.toList()) }
+            }
+        }
+        FlacBatch.update { it.copy(running = false, finished = true, made = fixed, problems = problems.toList(), cancelled = cancelled, index = ids.size) }
+        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
+        val title = if (cancelled) "Зупинено: назв виправлено $fixed" else "Назви виправлено: $fixed з ${ids.size}"
+        getSystemService(NotificationManager::class.java).notify(
+            NOTIF_ID,
+            notification(title, if (problems.isEmpty()) "Звук не змінювався — лише назви" else "Не вийшло: ${problems.size} — подробиці в застосунку", -1, ongoing = false),
+        )
+        worker = null
+        stopSelf()
+    }
+
     private fun enter(n: Notification) {
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else startForeground(NOTIF_ID, n)
     }
@@ -172,6 +214,7 @@ class FlacBatchService : Service() {
         const val EXTRA_IDS = "ids"
         const val EXTRA_MODE = "mode"
         const val EXTRA_AUTO = "auto"
+        const val EXTRA_TAIL = "tail"
         private const val ACTION_STOP = "ua.faric.trackcatcher.flac.STOP"
         private const val NOTIF_ID = 3
     }

@@ -118,6 +118,28 @@ class MediaStoreWriter(context: Context) : AudioStore {
         0L
     }
 
+    /**
+     * Перейменувати файл (T71) у тій самій папці. Ім'я зайняте іншим файлом — « (2)», « (3)»…
+     * Повертає новий uri (у своїй папці він може змінитися) і справжнє ім'я.
+     */
+    fun rename(uri: String, newName: String): Saved {
+        val u = Uri.parse(uri)
+        if (isDocument(u)) {
+            val nu = DocumentsContract.renameDocument(resolver, u, newName) ?: throw IOException("Android не дав перейменувати")
+            val name = resolver.query(nu, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
+                ?.use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: newName
+            return Saved(nu.toString(), name, sizeOf(nu.toString()))
+        }
+        val dir = relativePath(uri)
+        val ext = newName.substringAfterLast('.', "")
+        val target = if (dir != null && ext.isNotEmpty()) FileNames.unique(newName.removeSuffix(".$ext"), ext) { exists(it, dir) } else newName
+        val values = ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME, target) }
+        if (resolver.update(u, values, null, null) <= 0) throw IOException("Android не дав перейменувати")
+        val name = resolver.query(u, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)
+            ?.use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: target
+        return Saved(uri, name, sizeOf(uri))
+    }
+
     fun isDocumentUri(uri: String): Boolean = runCatching { isDocument(Uri.parse(uri)) }.getOrDefault(false)
 
     private fun isDocument(u: Uri) = DocumentsContract.isDocumentUri(app, u)

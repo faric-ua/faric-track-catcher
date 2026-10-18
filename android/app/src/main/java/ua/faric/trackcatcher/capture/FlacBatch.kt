@@ -23,8 +23,8 @@ import ua.faric.trackcatcher.data.Settings
  * (повідомлення в шторці, можна згорнути й повертати), екран лише показує [state].
  */
 object FlacBatch {
-    /** Що робить служба: WAV → FLAC (T69) чи перевірка номерів (T70). */
-    enum class Mode { FLAC, RENUMBER }
+    /** Що робить служба: WAV → FLAC (T69), перевірка номерів (T70) чи зайве з назв (T71). */
+    enum class Mode { FLAC, RENUMBER, TITLES }
 
     data class State(
         val mode: Mode = Mode.FLAC,
@@ -52,6 +52,9 @@ object FlacBatch {
 
     /** Яке саме вікно «Зробити?» відкрите. */
     @Volatile var pendingMode: Mode = Mode.FLAC
+
+    /** T71: текст хвоста у відкритому вікні «Прибрати зайве з назв?» (переживає поворот, разом з правками). */
+    @Volatile var pendingTail: String = ""
 
     @Volatile internal var cancel = false
 
@@ -90,6 +93,18 @@ object FlacBatch {
         )
     }
 
+    /** T71: прибрати хвіст [tail] з назв цих записів (теги, імена файлів, історія). */
+    fun startTitles(context: Context, ids: LongArray, tail: String) {
+        if (state.running || ids.isEmpty() || tail.isBlank()) return
+        cancel = false
+        update { State(mode = Mode.TITLES, running = true, total = ids.size) }
+        context.startForegroundService(
+            Intent(context, FlacBatchService::class.java)
+                .putExtra(FlacBatchService.EXTRA_IDS, ids)
+                .putExtra(FlacBatchService.EXTRA_MODE, Mode.TITLES.name)
+                .putExtra(FlacBatchService.EXTRA_TAIL, tail),
+        )
+    }
 
     fun stop() {
         cancel = true

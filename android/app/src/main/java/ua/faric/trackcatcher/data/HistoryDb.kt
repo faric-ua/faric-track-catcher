@@ -166,6 +166,19 @@ class HistoryDb private constructor(context: Context) :
         changed()
     }
 
+    /** T71: нова назва пісні (і, якщо файли перейменовано, нові імена й uri) + примітка. */
+    fun updateTitle(id: Long, title: String, mp3: Pair<String, String>?, wav: Pair<String, String>?, note: String) {
+        val r = get(id) ?: return
+        val values = ContentValues().apply {
+            put("title", title)
+            mp3?.let { (uri, name) -> put("mp3_uri", uri); put("mp3_name", name) }
+            wav?.let { (uri, name) -> put("wav_uri", uri); put("wav_name", name) }
+            put("reason", listOf(r.reason, note).filter { it.isNotBlank() }.joinToString("; "))
+        }
+        writableDatabase.update("recordings", values, "id=?", arrayOf(id.toString()))
+        changed()
+    }
+
     /** Усі записи (для копії історії, T64). */
     fun all(): List<RecordingRow> = list(null, "", limit = Int.MAX_VALUE)
 
