@@ -59,4 +59,26 @@ class RetagTest {
         assertEquals("7", read(after)[FileTags.Field.TRACK])
         assertEquals(digest(Retag.Kind.MP3, audio), digest(Retag.Kind.MP3, after))
     }
+
+    /** faric 18.10 15:02: після зміни назви TITLE опинився в кінці списку — тепер стає на своє місце. */
+    @Test fun rewrittenTagKeepsItsPlace() {
+        val frames = 4_800L
+        val pcm = ByteArray((frames * 4).toInt())
+        val out = ByteArrayOutputStream()
+        FlacEncoder(out, frames, MessageDigest.getInstance("MD5").digest(pcm), FlacEncoder.tagsFor(meta), jpeg).apply { encode(pcm, 0, pcm.size); finish() }
+        val flac = rewrite(Retag.Kind.FLAC, out.toByteArray(), mapOf("TITLE" to "Нова", "TRACKNUMBER" to "13"))
+        val keys = read(flac).raw.map { it.key }
+        assertEquals(listOf("TITLE", "ARTIST", "ALBUM", "ALBUMARTIST", "TRACKNUMBER", "DATE", "ENCODER", "PICTURE"), keys)
+        assertEquals(true, Retag.inOrder(keys))
+        assertEquals(false, Retag.inOrder(listOf("ARTIST", "ALBUM", "TRACKNUMBER", "ENCODER", "TITLE")))
+        // Вже переставлений файл: порожній набір лише впорядковує.
+        val fixed = rewrite(Retag.Kind.FLAC, flac, emptyMap())
+        assertEquals(keys, read(fixed).raw.map { it.key })
+
+        val audio = byteArrayOf(0xFF.toByte(), 0xFB.toByte(), 0xE4.toByte(), 0x00) + ByteArray(500)
+        val mp3 = rewrite(Retag.Kind.MP3, Id3v2.build(meta, 300_000, jpeg) + audio, mapOf("TITLE" to "Нова"))
+        val ids = read(mp3).raw.map { it.key }
+        assertEquals("TIT2", ids.first())
+        assertEquals(true, Retag.inOrder(ids))
+    }
 }

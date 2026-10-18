@@ -32,6 +32,22 @@ object Retag {
         Kind.MP3 -> mp3(input, out, set)
     }
 
+    /**
+     * Звичний порядок тегів — як їх пише сам Track Catcher: назва, виконавець, альбом, виконавець альбому, номер, рік;
+     * решта — після них, у своєму порядку (faric 18.10 15:02: «TITLE заїхав кудись униз — після оновлення
+     * помінялась черговість»). Переписаний тег стає на своє місце, а не в кінець.
+     */
+    private val ORDER = listOf(
+        setOf("TITLE", "TIT2"), setOf("ARTIST", "TPE1"), setOf("ALBUM", "TALB"), setOf("ALBUMARTIST", "TPE2"),
+        setOf("TRACKNUMBER", "TRCK"), setOf("DATE", "TYER", "TDRC"),
+    )
+
+    /** Місце тегу [key] (назва поля Vorbis чи кадру ID3) у звичному порядку; інші — після. */
+    fun rank(key: String): Int = ORDER.indexOfFirst { key.uppercase() in it }.let { if (it < 0) ORDER.size else it }
+
+    /** Чи теги стоять у звичному порядку (ключі — як у [FileTags.Raw]). */
+    fun inOrder(keys: List<String>): Boolean = keys.map { rank(it) }.zipWithNext().all { (a, b) -> a <= b }
+
     /** MD5 і довжина звуку — усього, що після тегів (FLAC — після блоків метаданих, MP3 — після ID3). */
     fun audioDigest(kind: Kind, input: InputStream): Pair<Long, String> {
         when (kind) {
@@ -70,7 +86,7 @@ object Retag {
         val keys = set.keys.map { it.uppercase() }.toSet()
         val kept = items.filter { it.substringBefore('=').uppercase() !in keys }
         val fresh = set.filterValues { it.isNotBlank() }.map { (k, v) -> "${k.uppercase()}=$v" }
-        val vorbis = buildVorbis(vendor, kept + fresh)
+        val vorbis = buildVorbis(vendor, (kept + fresh).sortedBy { rank(it.substringBefore('=')) }) // сортування стабільне
         if (vi >= 0) blocks[vi] = 4 to vorbis else blocks.add(1, 4 to vorbis)
         out.write("fLaC".toByteArray(Charsets.US_ASCII))
         blocks.forEachIndexed { i, (type, body) ->
@@ -118,18 +134,18 @@ object Retag {
         val wanted = set.mapNotNull { (k, v) -> ID3_OF[k.uppercase()]?.let { it to v } }.toMap()
         // Кадри старого тегу: ті, що міняємо, — геть (і TDRC, якщо пишемо рік), решта — як були.
         val drop = wanted.keys + if ("TYER" in wanted) setOf("TDRC") else emptySet()
-        val frames = ByteArrayOutputStream()
+        val frames = ArrayList<Pair<String, ByteArray>>()
         var p = 0
         while (p + 10 <= body.size) {
             val id = String(body, p, 4, Charsets.ISO_8859_1)
             if (!id.all { it in 'A'..'Z' || it in '0'..'9' }) break
             val len = if (ver >= 4) syncsafe(body, p + 4) else be32(body, p + 4)
             if (len <= 0 || p + 10 + len > body.size) break
-            if (id !in drop) frames.write(body, p, 10 + len)
+            if (id !in drop) frames += id to body.copyOfRange(p, p + 10 + len)
             p += 10 + len
         }
-        for ((id, text) in wanted) if (text.isNotBlank()) frames.write(textFrame(id, text, ver))
-        val f = frames.toByteArray()
+        for ((id, text) in wanted) if (text.isNotBlank()) frames += id to textFrame(id, text, ver)
+        val f = ByteArrayOutputStream().apply { frames.sortedBy { rank(it.first) }.forEach { write(it.second) } }.toByteArray()
         out.write("ID3".toByteArray(Charsets.ISO_8859_1)); out.write(ver); out.write(0); out.write(0)
         out.write(Id3v2.syncsafe(f.size))
         out.write(f)

@@ -53,7 +53,12 @@ object Renumber {
     fun fixFile(app: Context, r: RecordingRow, uri: String, name: String, number: Int): Boolean {
         val current = readTags(app, uri, name)
         val set = wanted(r, number, current)
-        if (set.isEmpty()) return false
+        // Номер правильний, але теги не в звичному порядку (після 0.1.36 назва опинилась у кінці) — лише впорядкувати.
+        if (set.isEmpty()) {
+            if (Retag.inOrder(current.raw.map { it.key })) return false
+            safeRetag(app, uri, name, emptyMap()) { true }
+            return true
+        }
         safeRetag(app, uri, name, set) { it[FileTags.Field.TRACK]?.substringBefore('/')?.trim()?.toIntOrNull() == number }
         return true
     }
