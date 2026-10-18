@@ -891,7 +891,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     /** Поступ або підсумок перетворення — з [FlacBatch.state], тож переживає поворот (faric 17.10 22:25). */
     private fun showBatch(s: FlacBatch.State) {
         if (s.running) {
-            val text = ui.numbers(ui.muted(batchLine(s), 14.5f))
+            val text = ui.numbers(ui.muted(batchLine(s), 14.5f)).apply { minLines = 3 } // назва пісні в 1–3 рядки — вікно не стрибає
             batchText = text
             val box = ui.column(12).apply {
                 addView(ui.title(if (s.mode == FlacBatch.Mode.RENUMBER) "Перевіряю номери пісень" else "Роблю FLAC з обкладинками", 19f))
