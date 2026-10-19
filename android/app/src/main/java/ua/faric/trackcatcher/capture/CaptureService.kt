@@ -229,7 +229,10 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         customAlbum = values.customAlbum
         val db = HistoryDb.get(this)
         sessionId = db.startSession(System.currentTimeMillis(), values.label)
-        queue = FinisherQueue(this) { main.post { onQueueIdle() } }
+        queue = FinisherQueue(this) { main.post { onQueueIdle() } }.apply {
+            // T85: на слабкому телефоні — під час запису нічого не стискати, лише після «Стоп».
+            hold = DeviceRam.deferEncoding(this@CaptureService, values.encodeTiming)
+        }
         // Тут НЕ можна зупиняти службу, якщо шматків немає: v0.1.0–0.1.3 тут закривали службу — вона
         // закривалась одразу після старту, звуку не було, а екран показував «Записую» (M30s, 14.10).
         recoverOrphans(stopWhenNothing = false)
@@ -327,7 +330,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
                 lastDb = db
                 if (db > DEAD_DB) lastLoudAt = now
                 // Рівні — до того, як віддати шматок у трубу (далі ним володіє потік диска).
-                val showUi = now - lastUi >= 100
+                // «Нічний екран» (T85): рівні не видно — оновлювати раз на секунду, а не 10 разів.
+                val showUi = now - lastUi >= (if (RecorderHub.quietUi) 1_000 else 100)
                 val l = if (showUi) Pcm.channelPeak(buf, n, 0) else 0f
                 val r = if (showUi) Pcm.channelPeak(buf, n, 1) else 0f
                 val paused = playerPaused
@@ -573,6 +577,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         // Потік диска дописує те, що ще в трубі (зазвичай миттєво).
         runCatching { writerThread?.join(15_000) }
         cleanupCapture()
+        // T85: запис зупинено — тепер можна стискати все, що чекало.
+        queue?.release()
         HistoryDb.get(this).endSession(sessionId, System.currentTimeMillis())
         RecorderHub.update { it.copy(phase = RecorderHub.Phase.FINISHING, levelL = 0f, levelR = 0f, warning = null, diag = null) }
         // Після зупинки звук уже не пишеться — лишається лише збереження.
@@ -675,6 +681,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
             append(TimeText.plural(s.tracks.coerceAtLeast(1), "пісня", "пісні", "пісень"))
             append(" · збережено ").append(s.saved)
             if (s.queued > 0) append(" · у черзі ").append(s.queued)
+            if (running && queue?.hold == true && s.queued > 0) append(" · стисну після «Стоп»") // T85
         }
         val key = "$title|$text"
         if (key == lastNotified) return

@@ -70,6 +70,7 @@ class NightScreen(private val host: MainActivity, private val onExit: () -> Unit
             hide(WindowInsetsCompat.Type.systemBars())
         }
         opened = true
+        RecorderHub.quietUi = true
         handler.removeCallbacks(tick)
         handler.post(tick)
     }
@@ -81,6 +82,7 @@ class NightScreen(private val host: MainActivity, private val onExit: () -> Unit
 
     fun close() {
         handler.removeCallbacks(tick)
+        RecorderHub.quietUi = false
         if (!opened) return
         opened = false
         val w = host.window

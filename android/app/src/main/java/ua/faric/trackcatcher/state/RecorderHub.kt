@@ -8,6 +8,9 @@ import ua.faric.trackcatcher.core.TrackMeta
 
 /** Стан запису для екранів. Живе окремо від Activity — поворот екрана нічого не перериває. */
 object RecorderHub {
+    /** Відкрито «Нічний екран» (T85): рівні звуку не малюються — запис бере менше процесора. */
+    @Volatile var quietUi: Boolean = false
+
     enum class Phase { IDLE, RECORDING, FINISHING }
 
     data class Result(val name: String, val status: RecStatus, val reason: String)
