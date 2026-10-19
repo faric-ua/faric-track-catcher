@@ -24,7 +24,7 @@ import ua.faric.trackcatcher.data.Settings
  */
 object FlacBatch {
     /** Що робить служба: WAV → FLAC (T69), перевірка номерів (T70) чи зайве з назв (T71). */
-    enum class Mode { FLAC, RENUMBER, TITLES, RETITLE }
+    enum class Mode { FLAC, RENUMBER, TITLES, RETITLE, EDIT }
 
     data class State(
         val mode: Mode = Mode.FLAC,
@@ -118,6 +118,19 @@ object FlacBatch {
                 .putExtra(FlacBatchService.EXTRA_IDS, ids)
                 .putExtra(FlacBatchService.EXTRA_MODE, Mode.RETITLE.name)
                 .putExtra(FlacBatchService.EXTRA_TITLES, titles),
+        )
+    }
+
+    /** T78: теги й імена файлів за [spec] для цих записів. */
+    fun startEdit(context: Context, ids: LongArray, spec: ua.faric.trackcatcher.core.MetaEdit.Spec) {
+        if (state.running || ids.isEmpty() || spec.isEmpty) return
+        cancel = false
+        update { State(mode = Mode.EDIT, running = true, total = ids.size) }
+        context.startForegroundService(
+            Intent(context, FlacBatchService::class.java)
+                .putExtra(FlacBatchService.EXTRA_IDS, ids)
+                .putExtra(FlacBatchService.EXTRA_MODE, Mode.EDIT.name)
+                .putExtra(FlacBatchService.EXTRA_SPEC, HashMap(spec.toMap())),
         )
     }
 
