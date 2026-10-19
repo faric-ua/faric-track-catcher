@@ -11,6 +11,8 @@ import android.widget.LinearLayout
 import ua.faric.trackcatcher.BuildConfig
 import ua.faric.trackcatcher.capture.MediaStoreWriter
 import ua.faric.trackcatcher.capture.TreeWriter
+import ua.faric.trackcatcher.capture.DeviceRam
+import ua.faric.trackcatcher.core.EncodeTiming
 import ua.faric.trackcatcher.core.OutputFormat
 import ua.faric.trackcatcher.core.RepeatPolicy
 import ua.faric.trackcatcher.core.SizeEstimate
@@ -29,6 +31,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val settings = Settings(host)
     private val formatCard = ui.card(12)
     private val qualityCard = ui.card(12)
+    private val encodeCard = ui.card(12)
     private val lengthCard = ui.card(12)
     private val repeatCard = ui.card(12)
     private val soundCard = ui.card(12)
@@ -76,11 +79,11 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             addView(autoSlot, ui.matchWrap())
         }
         val updateCard = UpdateUi(host).card()
-        val all = listOf(formatCard, qualityCard, lengthCard, repeatCard, soundCard, loudCard, edgesCard, folderCard, backupCard, permsSlot, updateCard, aboutCard)
+        val all = listOf(formatCard, encodeCard, qualityCard, lengthCard, repeatCard, soundCard, loudCard, edgesCard, folderCard, backupCard, permsSlot, updateCard, aboutCard)
         view = if (ui.twoPane) {
             val left = ui.column(12)
             val right = ui.column(12)
-            listOf(formatCard, qualityCard, lengthCard, repeatCard, soundCard, loudCard, edgesCard).forEach { left.addView(it, ui.matchWrap()) }
+            listOf(formatCard, encodeCard, qualityCard, lengthCard, repeatCard, soundCard, loudCard, edgesCard).forEach { left.addView(it, ui.matchWrap()) }
             listOf(folderCard, backupCard, permsSlot, updateCard, aboutCard).forEach { right.addView(it, ui.matchWrap()) }
             ui.scroll(ui.row(12).apply {
                 gravity = Gravity.TOP
@@ -145,6 +148,22 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         formatCard.addView(flow(OutputFormat.entries.map { f -> ui.choice(f.label, v.format == f) { settings.format = f; renderChoices() } }, fill = false))
         formatCard.addView(ui.muted(formatHint(v), 13.5f))
         if (locked) formatCard.addView(ui.text("Зміни почнуть діяти з наступного запису.", 12.5f, Palette.warning))
+
+        // T85 (faric 19.10 22:45, 20.10 00:14: «на M30s ривки — робимо заради якості»).
+        encodeCard.removeAllViews()
+        encodeCard.addView(ui.label("Коли стискати у FLAC / MP3", LineIcon.BARS))
+        encodeCard.addView(flow(EncodeTiming.entries.map { t -> ui.choice(t.label, v.encodeTiming == t) { settings.encodeTiming = t; renderChoices() } }))
+        val ram = DeviceRam.total(host)
+        val deferHere = DeviceRam.deferEncoding(host, v.encodeTiming)
+        encodeCard.addView(ui.muted(
+            when (v.encodeTiming) {
+                EncodeTiming.NOW -> "Пісня стискається, поки пишеться наступна. Файли готові одразу, але на слабкому телефоні можливі ривки у звуці."
+                EncodeTiming.AFTER -> "Під час запису телефон лише пише звук — без ривків. У FLAC / MP3 пісні стискаються після «Стоп»; на це треба кілька хвилин."
+                EncodeTiming.AUTO -> "На слабкому телефоні (менше 5 ГБ пам'яті) — після «Стоп», щоб не було ривків; на сильному — одразу."
+            } + " Цей телефон: ${EncodeTiming.ramText(ram)} пам'яті → " + (if (deferHere) "після «Стоп»." else "одразу."),
+            13.5f,
+        ))
+        if (locked) encodeCard.addView(ui.text("Зміни почнуть діяти з наступного запису.", 12.5f, Palette.warning))
 
         qualityCard.removeAllViews()
         qualityCard.addView(ui.label("Якість MP3", LineIcon.BARS))

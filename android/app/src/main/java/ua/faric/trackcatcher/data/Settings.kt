@@ -2,6 +2,7 @@ package ua.faric.trackcatcher.data
 
 import android.content.Context
 import ua.faric.trackcatcher.core.CutShift
+import ua.faric.trackcatcher.core.EncodeTiming
 import ua.faric.trackcatcher.core.OutputFormat
 import ua.faric.trackcatcher.core.RepeatPolicy
 
@@ -36,6 +37,8 @@ class Settings(context: Context) {
         val onlyPlayer: Boolean = true,
         /** Мітка гучності ReplayGain у тегах (T63); звук не змінюється. Типово вимкнено (faric 17.10). */
         val replayGain: Boolean = false,
+        /** Коли стискати у FLAC / MP3 (T85): одразу після пісні чи після «Стоп»; «Сам вирішує» — за пам'яттю телефона. */
+        val encodeTiming: EncodeTiming = EncodeTiming.AUTO,
     ) {
         val label: String
             get() = when (format) {
@@ -122,7 +125,12 @@ class Settings(context: Context) {
         plainNames = plainNames,
         onlyPlayer = onlyPlayer,
         replayGain = replayGain,
+        encodeTiming = encodeTiming,
     )
+
+    var encodeTiming: EncodeTiming
+        get() = EncodeTiming.fromCode(prefs.getString(KEY_ENCODE_TIMING, null))
+        set(v) = prefs.edit().putString(KEY_ENCODE_TIMING, v.code).apply()
 
     /** Як групувати історію (T61): sessions / albums / artists. */
     var historyGroup: String
@@ -193,6 +201,7 @@ class Settings(context: Context) {
         private const val KEY_ONLY_PLAYER = "only_player"
         private const val KEY_HISTORY_GROUP = "history_group"
         private const val KEY_REPLAY_GAIN = "replay_gain"
+        private const val KEY_ENCODE_TIMING = "encode_timing"
 
         private val PORTABLE = mapOf(
             KEY_FORMAT to Kind.STRING, KEY_BITRATE to Kind.INT, KEY_MIN_LENGTH to Kind.INT, KEY_REPEAT to Kind.STRING,
