@@ -72,6 +72,9 @@ object DriveUpdate {
         "https://drive.usercontent.google.com/download?id=$fileId&export=download&confirm=t"
 
     /** Посилання для людей (пишеться у файл версії). */
+    /** Код, з яким варто спробувати ще раз: тимчасовий збій Google (5xx) чи «забагато запитів» (429). */
+    fun retryable(code: Int): Boolean = code == 429 || code in 500..599
+
     fun viewUrl(fileId: String): String = "https://drive.google.com/file/d/$fileId/view"
 
     /** Закритий чи видалений файл Диск віддає HTML-сторінкою входу/помилки, а не файлом. */
