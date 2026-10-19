@@ -24,7 +24,7 @@ import ua.faric.trackcatcher.data.Settings
  */
 object FlacBatch {
     /** Що робить служба: WAV → FLAC (T69), перевірка номерів (T70) чи зайве з назв (T71). */
-    enum class Mode { FLAC, RENUMBER, TITLES, RETITLE, EDIT }
+    enum class Mode { FLAC, RENUMBER, TITLES, RETITLE, EDIT, TRIM }
 
     data class State(
         val mode: Mode = Mode.FLAC,
@@ -131,6 +131,19 @@ object FlacBatch {
                 .putExtra(FlacBatchService.EXTRA_IDS, ids)
                 .putExtra(FlacBatchService.EXTRA_MODE, Mode.EDIT.name)
                 .putExtra(FlacBatchService.EXTRA_SPEC, HashMap(spec.toMap())),
+        )
+    }
+
+    /** T79: обрізати / наростання / затухання. */
+    fun startTrim(context: Context, ids: LongArray, plan: ua.faric.trackcatcher.core.TrimFade.Plan) {
+        if (state.running || ids.isEmpty() || plan.isEmpty) return
+        cancel = false
+        update { State(mode = Mode.TRIM, running = true, total = ids.size) }
+        context.startForegroundService(
+            Intent(context, FlacBatchService::class.java)
+                .putExtra(FlacBatchService.EXTRA_IDS, ids)
+                .putExtra(FlacBatchService.EXTRA_MODE, Mode.TRIM.name)
+                .putExtra(FlacBatchService.EXTRA_SPEC, HashMap(plan.toMap())),
         )
     }
 

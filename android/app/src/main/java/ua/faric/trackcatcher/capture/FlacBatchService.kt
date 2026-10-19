@@ -44,6 +44,7 @@ class FlacBatchService : Service() {
                 FlacBatch.Mode.RENUMBER.name -> renumber(ids, auto)
                 FlacBatch.Mode.TITLES.name -> titles(ids, tail)
                 FlacBatch.Mode.EDIT.name -> editMeta(ids, specOf(intent))
+                FlacBatch.Mode.TRIM.name -> trim(ids, planOf(intent))
                 FlacBatch.Mode.RETITLE.name -> retitle(ids, intent.getStringArrayExtra(EXTRA_TITLES)?.map { it ?: "" }.orEmpty())
                 else -> run(ids)
             }
@@ -223,6 +224,38 @@ class FlacBatchService : Service() {
     @Suppress("DEPRECATION", "UNCHECKED_CAST")
     private fun specOf(intent: Intent): ua.faric.trackcatcher.core.MetaEdit.Spec =
         ua.faric.trackcatcher.core.MetaEdit.Spec.fromMap((intent.getSerializableExtra(EXTRA_SPEC) as? HashMap<String, String>).orEmpty())
+
+    @Suppress("DEPRECATION", "UNCHECKED_CAST")
+    private fun planOf(intent: Intent): ua.faric.trackcatcher.core.TrimFade.Plan =
+        ua.faric.trackcatcher.core.TrimFade.Plan.fromMap((intent.getSerializableExtra(EXTRA_SPEC) as? HashMap<String, String>).orEmpty())
+
+    /** T79: обрізати / наростання / затухання. */
+    private fun trim(ids: LongArray, plan: ua.faric.trackcatcher.core.TrimFade.Plan) {
+        val app = applicationContext
+        val db = HistoryDb.get(app)
+        val problems = ArrayList<String>()
+        var fixed = 0
+        var skipped = 0
+        var cancelled = false
+        for ((i, id) in ids.withIndex()) {
+            if (FlacBatch.cancel) { cancelled = true; break }
+            val r = db.get(id) ?: continue
+            val label = r.title.ifBlank { r.displayName }
+            FlacBatch.update { it.copy(index = i + 1, label = label, percent = (i * 100) / ids.size) }
+            notify("Обрізаю: ${i + 1} з ${ids.size}", label, (i * 100) / ids.size)
+            if (Renumber.present(app, listOf(r)).isNullOrEmpty()) { skipped++; FlacBatch.update { it.copy(skipped = skipped) }; continue }
+            val bad = runCatching { TrimApply.apply(app, r, plan) }.getOrElse { listOf("${r.title}\t${ua.faric.trackcatcher.core.ErrorText.human(it)}") }
+            if (bad.isEmpty()) { fixed++; FlacBatch.update { it.copy(made = fixed) } } else { problems += bad; FlacBatch.update { it.copy(problems = problems.toList()) } }
+        }
+        FlacBatch.update { it.copy(running = false, finished = true, made = fixed, problems = problems.toList(), cancelled = cancelled, index = ids.size, skipped = skipped) }
+        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
+        getSystemService(NotificationManager::class.java).notify(
+            NOTIF_ID,
+            notification("Обрізано: $fixed з ${ids.size}", if (problems.isEmpty()) TrimApply.describe(plan) else "Не вийшло: ${problems.size} — подробиці в застосунку", -1, ongoing = false),
+        )
+        worker = null
+        stopSelf()
+    }
 
     /** T78: теги й імена файлів. */
     private fun editMeta(ids: LongArray, spec: ua.faric.trackcatcher.core.MetaEdit.Spec) {

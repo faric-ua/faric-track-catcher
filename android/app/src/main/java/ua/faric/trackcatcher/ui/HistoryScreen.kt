@@ -23,6 +23,8 @@ import ua.faric.trackcatcher.capture.Renumber
 import ua.faric.trackcatcher.capture.RelinkScan
 import ua.faric.trackcatcher.capture.MetaApply
 import ua.faric.trackcatcher.core.MetaEdit
+import ua.faric.trackcatcher.core.TrimFade
+import ua.faric.trackcatcher.capture.TrimApply
 import ua.faric.trackcatcher.capture.TitleFix
 import ua.faric.trackcatcher.capture.MediaStoreWriter
 import ua.faric.trackcatcher.core.FileTags
@@ -158,7 +160,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 when (FlacBatch.pendingMode) {
                     FlacBatch.Mode.RENUMBER -> confirmRenumber(rows)
                     FlacBatch.Mode.TITLES -> confirmTitles(rows, FlacBatch.pendingTail)
-                    FlacBatch.Mode.FLAC, FlacBatch.Mode.RETITLE, FlacBatch.Mode.EDIT -> confirmMakeFlac(rows)
+                    FlacBatch.Mode.FLAC, FlacBatch.Mode.RETITLE, FlacBatch.Mode.EDIT, FlacBatch.Mode.TRIM -> confirmMakeFlac(rows)
                 }
                 return true
             }
@@ -169,6 +171,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 return true
             }
             KEY_EDIT -> return showEditor()
+            KEY_TRIM -> return showTrim()
             KEY_RELINK_DONE, KEY_RELINK_RUN -> {
                 showRelink(RelinkScan.last ?: return false)
                 return true
@@ -240,6 +243,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         if (pickedEditable.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.SLIDERS, "Змінити теги (${pickedEditable.size})", Ui.Kind.NORMAL) {
             clearPicked()
             openEditor(pickedEditable.sortedBy { it.createdAt })
+        })
+        if (pickedEditable.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.EDGES, "Обрізати / затухання (${pickedEditable.size})", Ui.Kind.NORMAL) {
+            clearPicked()
+            openTrim(pickedEditable.sortedBy { it.createdAt })
         })
         actions.addView(ui.button("Видалити (${picked.size})", Ui.Kind.DANGER) { confirmDeleteMany() })
         if (rows.any { it.id !in picked }) actions.addView(ui.button("Вибрати всі видимі", Ui.Kind.NORMAL) {
@@ -446,6 +453,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             if (group == Group.ALBUMS && taggable.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.LIST, "Перевірити номери", Ui.Kind.NORMAL) { confirmRenumber(taggable) })
             // T78: теги й імена всіх пісень групи.
             actions.addView(ui.iconButton(LineIcon.SLIDERS, "Змінити теги (${withFiles.size})", Ui.Kind.NORMAL) { openEditor(withFiles) })
+            actions.addView(ui.iconButton(LineIcon.EDGES, "Обрізати / затухання (${withFiles.size})", Ui.Kind.NORMAL) { openTrim(withFiles) })
             // T71: у назвах повторюється чужий хвіст (Suno дописує назву пісні, з якої почалась черга) — прибрати.
             val tail = TitleTail.detect(members.map { it.title })
             val tailed = tail?.let { t -> members.filter { TitleTail.strip(it.title, t) != null } }.orEmpty()
@@ -525,6 +533,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             if (wavs.isNotEmpty()) row.addView(ui.iconButton(LineIcon.DISC, "Сесію в FLAC з обкладинками (${wavs.size})", Ui.Kind.NORMAL) { confirmMakeFlac(wavs) })
             // T78 (faric 19.10 19:46: «сесію нажав — змінити метадані сесії»).
             if (editable.isNotEmpty()) row.addView(ui.iconButton(LineIcon.SLIDERS, "Змінити теги сесії (${editable.size})", Ui.Kind.NORMAL) { openEditor(editable) })
+            if (editable.isNotEmpty()) row.addView(ui.iconButton(LineIcon.EDGES, "Обрізати / затухання (${editable.size})", Ui.Kind.NORMAL) { openTrim(editable) })
             addView(row, ui.matchWrap())
         }
     }
@@ -665,6 +674,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             val more = ui.column(8)
             more.addView(ui.iconButton(LineIcon.FILE, "Про файл", Ui.Kind.NORMAL) { openFileInfo(r) }, ui.matchWrap())
             if (r.id !in missing) more.addView(ui.iconButton(LineIcon.SLIDERS, "Змінити теги й ім'я", Ui.Kind.NORMAL) { openEditor(listOf(r)) }, ui.matchWrap())
+            if (r.id !in missing) more.addView(ui.iconButton(LineIcon.EDGES, "Обрізати / затухання", Ui.Kind.NORMAL) { openTrim(listOf(r)) }, ui.matchWrap())
             if (isWav(r)) more.addView(ui.iconButton(LineIcon.REPEAT, "Зробити FLAC з обкладинкою", Ui.Kind.NORMAL) { confirmMakeFlac(listOf(r)) }, ui.matchWrap())
             box.addView(more, ui.matchWrap())
         }
@@ -1197,6 +1207,159 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         return true
     }
 
+    // ---------- T79: обрізати / наростання / затухання ----------
+
+    private fun openTrim(rows: List<RecordingRow>) {
+        if (RecorderHub.state.phase != RecorderHub.Phase.IDLE) {
+            host.toast("Спершу зупини запис")
+            return
+        }
+        if (FlacBatch.state.running) {
+            showBatch(FlacBatch.state)
+            return
+        }
+        val list = rows.filter { it.hasFile && it.id !in missing }
+        if (list.isEmpty()) {
+            host.toast("Нема файлів на місці")
+            return
+        }
+        Trim.ids = list.map { it.id }.toLongArray()
+        Trim.values.clear()
+        Trim.fadeIn = 0
+        Trim.fadeOut = 0
+        Trim.save = TrimFade.Save.REPLACE_KEEP
+        showTrim()
+    }
+
+    /** «4,5» → 4500 мс; порожньо чи нісенітниця — 0. */
+    private fun secToMs(s: String?): Long = s?.trim()?.replace(',', '.')?.toDoubleOrNull()?.takeIf { it > 0 }?.let { (it * 1000).toLong() } ?: 0L
+
+    private fun trimPlan() = TrimFade.Plan(secToMs(Trim.values["start"]), secToMs(Trim.values["end"]), Trim.fadeIn, Trim.fadeOut, Trim.save)
+
+    private fun showTrim(): Boolean {
+        val rows = Trim.ids?.toList()?.mapNotNull { db.get(it) }.orEmpty()
+        if (rows.isEmpty()) return false
+        val one = rows.singleOrNull()
+        val preview = ui.text("", 14f, Palette.text).apply { minLines = 3 }
+        val saveNote = ui.muted("", 12.5f).apply { minLines = 2 }
+        fun refresh() {
+            val p = trimPlan()
+            preview.text = when {
+                p.isEmpty -> "Вкажи, скільки обрізати, або вибери наростання / затухання."
+                one != null -> {
+                    val left = one.lengthMs - p.cutStartMs - p.cutEndMs
+                    if (left < TrimFade.MIN_LEFT_MS) "Забагато: лишиться менше секунди." else "Було ${TimeText.clock(one.lengthMs)} → стане ${TimeText.clock(left)}.\n" + TrimApply.describe(p).replaceFirstChar { it.uppercase() } + "."
+                }
+                else -> "Для кожного з ${rows.size}: " + TrimApply.describe(p) + "."
+            }
+            saveNote.text = when (Trim.save) {
+                TrimFade.Save.REPLACE_KEEP -> "Файл на місці стане новим, а старий — копією в папці «Оригінали» (у «Track Catcher»). Захочеш повернути — він там."
+                TrimFade.Save.NEW_FILE -> "Старий файл лишається, поруч з'явиться «… (обрізано)»; історія покаже новий."
+                TrimFade.Save.REPLACE -> "Файл стане новим, копії не буде — повернути не можна."
+            }
+        }
+        val fields = HashMap<String, EditText>()
+        fun field(key: String, label: String): View = ui.column(4).apply {
+            addView(ui.muted(label, 13f))
+            addView(EditText(host).apply {
+                setTextColor(Palette.text)
+                setHintTextColor(Palette.faint)
+                textSize = 15f
+                hint = "0"
+                inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+                background = ui.rounded(Palette.surfaceAlt, Palette.border, radiusDp = 12)
+                setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(10))
+                minHeight = ui.dp(Ui.MIN_TOUCH_DP)
+                imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                id = View.generateViewId()
+                setText(Trim.values[key].orEmpty())
+                addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                    override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                    override fun afterTextChanged(e: Editable?) {
+                        Trim.values[key] = e?.toString().orEmpty()
+                        refresh()
+                    }
+                })
+                fields[key] = this
+            }, ui.matchWrap())
+        }
+        fun chips(options: List<Pair<String, Long>>, current: () -> Long, set: (Long) -> Unit): View {
+            val box = FlowLayout(host, ui.dp(8), ui.dp(8))
+            val views = HashMap<Long, android.widget.TextView>()
+            options.forEach { (label, ms) ->
+                views[ms] = ui.choice(label, current() == ms) {
+                    set(ms)
+                    views.forEach { (k, v) -> ui.styleChoice(v, k == ms) }
+                    refresh()
+                }.also { box.addView(it) }
+            }
+            return box
+        }
+        val fades = listOf("нема" to 0L, "0,5 с" to 500L, "1 с" to 1000L, "2 с" to 2000L, "3 с" to 3000L)
+        val extra = ui.column(12).apply {
+            addView(field("start", "Обрізати початок, секунд (напр. 4,5)"))
+            addView(field("end", "Обрізати кінець, секунд"))
+            // Один запис і він зараз грає — межу можна взяти з плеєра.
+            val playing = one != null && InAppPlayer.uri != null && (InAppPlayer.uri == one.mp3Uri || InAppPlayer.uri == one.wavUri)
+            if (playing && one != null) {
+                val pos = InAppPlayer.positionMs
+                val row = FlowLayout(host, ui.dp(8), ui.dp(8))
+                row.addView(ui.button("Початок — звідси (${TimeText.clock(pos)})", Ui.Kind.NORMAL) {
+                    fields["start"]?.setText(TrimApply.sec(InAppPlayer.positionMs).removeSuffix(" с"))
+                })
+                row.addView(ui.button("Кінець — звідси", Ui.Kind.NORMAL) {
+                    fields["end"]?.setText(TrimApply.sec((one.lengthMs - InAppPlayer.positionMs).coerceAtLeast(0)).removeSuffix(" с"))
+                })
+                addView(row, ui.matchWrap())
+            } else if (one != null) {
+                addView(ui.muted("Підказка: увімкни пісню в плеєрі нижче, зупини там, де треба різати, і відкрий це вікно знову — з'являться кнопки «Початок — звідси» / «Кінець — звідси».", 12.5f))
+            }
+            addView(ui.label("Наростання на початку"))
+            addView(chips(fades, { Trim.fadeIn }) { Trim.fadeIn = it }, ui.matchWrap())
+            addView(ui.label("Затухання в кінці"))
+            addView(chips(fades, { Trim.fadeOut }) { Trim.fadeOut = it }, ui.matchWrap())
+            addView(ui.label("Як зберегти"))
+            val saveBox = FlowLayout(host, ui.dp(8), ui.dp(8))
+            val saveViews = HashMap<TrimFade.Save, android.widget.TextView>()
+            TrimFade.Save.entries.forEach { st ->
+                saveViews[st] = ui.choice(st.label, Trim.save == st) {
+                    Trim.save = st
+                    saveViews.forEach { (k, v) -> ui.styleChoice(v, k == st) }
+                    refresh()
+                }.also { saveBox.addView(it) }
+            }
+            addView(saveBox, ui.matchWrap())
+            addView(saveNote)
+            addView(ui.muted("FLAC і WAV — без втрат якості; MP3 кодується заново (на слух те саме). Теги й обкладинка лишаються.", 12.5f))
+            addView(preview)
+        }
+        refresh()
+        val title = if (one != null) "Обрізати / затухання" else "Обрізати / затухання — ${TimeText.plural(rows.size, "запис", "записи", "записів")}"
+        val body = host.overlay.dialog(title, "", listOf("Обрізати" to Ui.Kind.PRIMARY, "Скасувати" to Ui.Kind.QUIET), { i ->
+            if (i == 0) {
+                val plan = trimPlan()
+                if (plan.isEmpty) {
+                    host.toast("Нічого не вибрано")
+                    return@dialog
+                }
+                if (one != null && one.lengthMs - plan.cutStartMs - plan.cutEndMs < TrimFade.MIN_LEFT_MS) {
+                    host.toast("Забагато — лишиться менше секунди")
+                    return@dialog
+                }
+                val ids = Trim.ids ?: return@dialog
+                Trim.ids = null
+                FlacBatch.startTrim(host, ids, plan)
+                showBatch(FlacBatch.state)
+            } else {
+                Trim.ids = null
+                host.overlay.dismiss()
+            }
+        }, extra = extra)
+        host.overlay.show(KEY_TRIM, body, dismissOnOutside = false)
+        return true
+    }
+
     /** T77: шукати перейменовані файли (у фоні), потім — вікно з тим, що знайдено. */
     private fun findRenamed() {
         if (FlacBatch.state.running) {
@@ -1287,6 +1450,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                     FlacBatch.Mode.TITLES -> "Прибираю зайве з назв"
                     FlacBatch.Mode.RETITLE -> "Беру назви з імен файлів"
                     FlacBatch.Mode.EDIT -> "Змінюю теги й імена"
+                    FlacBatch.Mode.TRIM -> "Обрізаю"
                     FlacBatch.Mode.FLAC -> "Роблю FLAC з обкладинками"
                 }, 19f))
                 addView(text)
@@ -1302,6 +1466,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             val head = when {
                 s.mode == FlacBatch.Mode.RENUMBER && s.cancelled -> "Зупинено: перевірено ${s.index} з ${s.total}, виправлено ${s.made}."
                 s.mode == FlacBatch.Mode.TITLES && s.cancelled -> "Зупинено: назв виправлено ${s.made}."
+                s.mode == FlacBatch.Mode.TRIM && s.cancelled -> "Зупинено: обрізано ${s.made}."
+                s.mode == FlacBatch.Mode.TRIM -> "Обрізано: ${s.made} з ${s.total}. Теги й обкладинка лишились; що зроблено — у подробицях запису."
                 s.mode == FlacBatch.Mode.EDIT && s.cancelled -> "Зупинено: змінено ${s.made}."
                 s.mode == FlacBatch.Mode.EDIT -> "Змінено: ${s.made} з ${s.total} (теги FLAC / MP3, імена файлів, історія; звук той самий)."
                 s.mode == FlacBatch.Mode.RETITLE -> "Назви з імен файлів: ${s.made} з ${s.total} (тег «Назва» у FLAC / MP3 і історія; звук той самий)."
@@ -1317,6 +1483,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 FlacBatch.Mode.RENUMBER -> "Номери пісень"
                 FlacBatch.Mode.TITLES, FlacBatch.Mode.RETITLE -> "Назви пісень"
                 FlacBatch.Mode.EDIT -> "Теги й імена"
+                FlacBatch.Mode.TRIM -> "Обрізати / затухання"
                 FlacBatch.Mode.FLAC -> "FLAC з обкладинками"
             }
             // faric 18.10 15:26: «додай кнопку копіювати текст — тикну й тобі відправлю».
@@ -1343,7 +1510,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     private fun batchLine(s: FlacBatch.State) = when {
         s.index == 0 -> "Готуюсь…" + if (s.total > 0) " (${s.total})" else ""
-        s.mode == FlacBatch.Mode.RENUMBER || s.mode == FlacBatch.Mode.TITLES || s.mode == FlacBatch.Mode.RETITLE || s.mode == FlacBatch.Mode.EDIT -> "${s.index} з ${s.total}: ${s.label} · виправлено ${s.made}"
+        s.mode == FlacBatch.Mode.RENUMBER || s.mode == FlacBatch.Mode.TITLES || s.mode == FlacBatch.Mode.RETITLE || s.mode == FlacBatch.Mode.EDIT || s.mode == FlacBatch.Mode.TRIM -> "${s.index} з ${s.total}: ${s.label} · виправлено ${s.made}"
         else -> "${s.index} з ${s.total}: ${s.label} · ${s.percent} %"
     }
 
@@ -1400,6 +1567,16 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         private const val KEY_FLAC_DONE = "makeflac:done"
         private const val KEY_RELINK_RUN = "relink:run"
         private const val KEY_EDIT = "metaedit"
+        private const val KEY_TRIM = "trim"
+
+        /** Відкрите вікно «Обрізати / затухання» (T79) — переживає поворот. */
+        private object Trim {
+            var ids: LongArray? = null
+            val values = HashMap<String, String>()
+            var fadeIn = 0L
+            var fadeOut = 0L
+            var save = TrimFade.Save.REPLACE_KEEP
+        }
 
         /** Відкритий редактор тегів (T78) — переживає поворот. */
         private object Editor {

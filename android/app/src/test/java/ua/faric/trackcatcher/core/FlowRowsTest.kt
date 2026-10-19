@@ -30,4 +30,13 @@ class FlowRowsTest {
     @Test fun endOffsetNeverNegative() {
         assertEquals(0, flowEndOffset(listOf(400), maxW = 300, gap = 8))
     }
+
+    /** faric 19.10 20:09: дві плитки — порівну на рядок; одна — на весь рядок; не влазять у рівну частку — вільне порівну. */
+    @Test fun fillStretchesRows() {
+        assertEquals(listOf(496), flowFill(listOf(200), 496, 8))
+        assertEquals(listOf(244, 244), flowFill(listOf(200, 120), 496, 8))
+        assertEquals(listOf(334, 154), flowFill(listOf(300, 120), 496, 8)) // 496 − 8 − 420 = 68 вільних → по 34
+        assertEquals(496 - 8, flowFill(listOf(300, 120), 496, 8).sum())
+        assertEquals(listOf(300, 400), flowFill(listOf(300, 400), 100, 8)) // місця нема — як було
+    }
 }
