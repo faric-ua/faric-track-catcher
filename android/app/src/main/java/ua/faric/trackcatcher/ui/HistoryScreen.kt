@@ -21,6 +21,8 @@ import android.widget.LinearLayout
 import ua.faric.trackcatcher.capture.FlacBatch
 import ua.faric.trackcatcher.capture.Renumber
 import ua.faric.trackcatcher.capture.RelinkScan
+import ua.faric.trackcatcher.capture.MetaApply
+import ua.faric.trackcatcher.core.MetaEdit
 import ua.faric.trackcatcher.capture.TitleFix
 import ua.faric.trackcatcher.capture.MediaStoreWriter
 import ua.faric.trackcatcher.core.FileTags
@@ -156,7 +158,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 when (FlacBatch.pendingMode) {
                     FlacBatch.Mode.RENUMBER -> confirmRenumber(rows)
                     FlacBatch.Mode.TITLES -> confirmTitles(rows, FlacBatch.pendingTail)
-                    FlacBatch.Mode.FLAC, FlacBatch.Mode.RETITLE -> confirmMakeFlac(rows)
+                    FlacBatch.Mode.FLAC, FlacBatch.Mode.RETITLE, FlacBatch.Mode.EDIT -> confirmMakeFlac(rows)
                 }
                 return true
             }
@@ -166,6 +168,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 showBatch(s)
                 return true
             }
+            KEY_EDIT -> return showEditor()
             KEY_RELINK_DONE, KEY_RELINK_RUN -> {
                 showRelink(RelinkScan.last ?: return false)
                 return true
@@ -232,6 +235,11 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         if (pickedWavs.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.DISC, "У FLAC з обкладинками (${pickedWavs.size})", Ui.Kind.PRIMARY) {
             clearPicked()
             confirmMakeFlac(pickedWavs.sortedBy { it.createdAt })
+        })
+        val pickedEditable = picked.mapNotNull { all[it] }.filter { it.hasFile && it.id !in missing }
+        if (pickedEditable.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.SLIDERS, "Змінити теги (${pickedEditable.size})", Ui.Kind.NORMAL) {
+            clearPicked()
+            openEditor(pickedEditable.sortedBy { it.createdAt })
         })
         actions.addView(ui.button("Видалити (${picked.size})", Ui.Kind.DANGER) { confirmDeleteMany() })
         if (rows.any { it.id !in picked }) actions.addView(ui.button("Вибрати всі видимі", Ui.Kind.NORMAL) {
@@ -436,6 +444,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             // T70: номери пісень альбому — перевірити й виправити в тегах.
             val taggable = withFiles.filter { Renumber.files(it).isNotEmpty() }
             if (group == Group.ALBUMS && taggable.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.LIST, "Перевірити номери", Ui.Kind.NORMAL) { confirmRenumber(taggable) })
+            // T78: теги й імена всіх пісень групи.
+            actions.addView(ui.iconButton(LineIcon.SLIDERS, "Змінити теги (${withFiles.size})", Ui.Kind.NORMAL) { openEditor(withFiles) })
             // T71: у назвах повторюється чужий хвіст (Suno дописує назву пісні, з якої почалась черга) — прибрати.
             val tail = TitleTail.detect(members.map { it.title })
             val tailed = tail?.let { t -> members.filter { TitleTail.strip(it.title, t) != null } }.orEmpty()
@@ -507,10 +517,15 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         val label = ui.numbers(ui.label(text)).apply { setPadding(ui.dp(4), ui.dp(8), ui.dp(4), 0) }
         // T69 (faric 17.10 21:45: «по одній — бажання нема»): уся сесія одним натиском.
         val wavs = members.filter { isWav(it) }
-        if (wavs.isEmpty() || picked.isNotEmpty()) return label
+        val editable = members.filter { it.hasFile && it.id !in missing }
+        if ((wavs.isEmpty() && editable.isEmpty()) || picked.isNotEmpty()) return label
         return ui.column(6).apply {
             addView(label)
-            addView(ui.iconButton(LineIcon.DISC, "Сесію в FLAC з обкладинками (${wavs.size})", Ui.Kind.NORMAL) { confirmMakeFlac(wavs) })
+            val row = FlowLayout(host, ui.dp(8), ui.dp(8))
+            if (wavs.isNotEmpty()) row.addView(ui.iconButton(LineIcon.DISC, "Сесію в FLAC з обкладинками (${wavs.size})", Ui.Kind.NORMAL) { confirmMakeFlac(wavs) })
+            // T78 (faric 19.10 19:46: «сесію нажав — змінити метадані сесії»).
+            if (editable.isNotEmpty()) row.addView(ui.iconButton(LineIcon.SLIDERS, "Змінити теги сесії (${editable.size})", Ui.Kind.NORMAL) { openEditor(editable) })
+            addView(row, ui.matchWrap())
         }
     }
 
@@ -649,6 +664,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             // На всю ширину (faric 18.10 15:19: «кнопку "Про файл" розтягни на всю ширину»).
             val more = ui.column(8)
             more.addView(ui.iconButton(LineIcon.FILE, "Про файл", Ui.Kind.NORMAL) { openFileInfo(r) }, ui.matchWrap())
+            if (r.id !in missing) more.addView(ui.iconButton(LineIcon.SLIDERS, "Змінити теги й ім'я", Ui.Kind.NORMAL) { openEditor(listOf(r)) }, ui.matchWrap())
             if (isWav(r)) more.addView(ui.iconButton(LineIcon.REPEAT, "Зробити FLAC з обкладинкою", Ui.Kind.NORMAL) { confirmMakeFlac(listOf(r)) }, ui.matchWrap())
             box.addView(more, ui.matchWrap())
         }
@@ -1018,6 +1034,169 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         host.overlay.show(KEY_FLAC_CONFIRM, body)
     }
 
+    // ---------- T78: редактор тегів і імен файлів ----------
+
+    private fun openEditor(rows: List<RecordingRow>) {
+        if (RecorderHub.state.phase != RecorderHub.Phase.IDLE) {
+            host.toast("Спершу зупини запис")
+            return
+        }
+        if (FlacBatch.state.running) {
+            showBatch(FlacBatch.state)
+            return
+        }
+        val list = rows.filter { it.hasFile && it.id !in missing }
+        if (list.isEmpty()) {
+            host.toast("Нема файлів на місці")
+            return
+        }
+        Editor.ids = list.map { it.id }.toLongArray()
+        Editor.values.clear()
+        Editor.name = MetaEdit.NameStyle.KEEP
+        Editor.single = null
+        if (list.size > 1) {
+            showEditor()
+            return
+        }
+        // Один запис — поля заповнені тим, що зараз (теги читаються з файлу).
+        val app = host.applicationContext
+        val r = list[0]
+        Thread({
+            val song = runCatching { MetaApply.current(app, r) }.getOrDefault(MetaEdit.Song(r.artist, r.title, r.album))
+            host.runOnUiThread {
+                if (host.isFinishing || host.isDestroyed) return@runOnUiThread
+                Editor.single = song
+                Editor.values.putAll(mapOf("artist" to song.artist, "title" to song.title, "album" to song.album, "albumArtist" to song.albumArtist, "year" to song.year, "track" to song.track))
+                showEditor()
+            }
+        }, "meta-read").start()
+    }
+
+    /** Що змінити — з полів редактора. Порожнє поле (чи те саме, що було) — не чіпати. */
+    private fun editorSpec(): MetaEdit.Spec {
+        val one = Editor.single
+        fun v(key: String, was: String?): String? = Editor.values[key]?.trim()?.takeIf { it.isNotEmpty() && it != was?.trim() }
+        return MetaEdit.Spec(
+            artist = v("artist", one?.artist), title = if (one != null) v("title", one.title) else null, album = v("album", one?.album),
+            albumArtist = v("albumArtist", one?.albumArtist), year = v("year", one?.year), track = if (one != null) v("track", one.track) else null,
+            find = Editor.values["find"].orEmpty(), replace = Editor.values["replace"].orEmpty(), name = Editor.name,
+        )
+    }
+
+    private fun showEditor(): Boolean {
+        val rows = Editor.ids?.toList()?.mapNotNull { db.get(it) }.orEmpty()
+        if (rows.isEmpty()) return false
+        val one = Editor.single
+        val plain = ua.faric.trackcatcher.data.Settings(host).snapshot().plainNames
+        val preview = ui.text("", 14f, Palette.text).apply { minLines = 6 } // приклад змінюється — вікно не стрибає
+        fun refresh() {
+            val spec = editorSpec()
+            val r = rows.first()
+            val was = one ?: MetaEdit.Song(r.artist, r.title, r.album)
+            val now = MetaEdit.apply(was, spec)
+            val file = r.wavName ?: r.mp3Name ?: ""
+            val newFile = MetaEdit.newName(file, now, spec.name, plain)
+            val changes = rows.count { x ->
+                val w = MetaEdit.Song(x.artist, x.title, x.album)
+                val n = MetaEdit.apply(w, spec)
+                n != w || listOfNotNull(x.wavName, x.mp3Name).any { MetaEdit.newName(it, n, spec.name, plain) != null } ||
+                    spec.albumArtist != null || spec.year != null || spec.track != null
+            }
+            preview.text = if (spec.isEmpty) "Нічого не змінено — заповни поле, заміну чи вибери, як назвати файл." else buildString {
+                append(if (rows.size == 1) "Зміниться:" else "Зміниться записів: $changes з ${rows.size}. Приклад — перший:")
+                if (now.title != was.title) append("\n• Назва: ${was.title}\n   → ${now.title}")
+                if (now.artist != was.artist) append("\n• Виконавець: ${was.artist} → ${now.artist}")
+                if (now.album != was.album) append("\n• Альбом: ${was.album} → ${now.album}")
+                spec.albumArtist?.let { append("\n• Виконавець альбому → $it") }
+                spec.year?.let { append("\n• Рік → $it") }
+                spec.track?.let { append("\n• Номер → $it") }
+                if (newFile != null) append("\n• Файл: $file\n   → $newFile")
+            }
+        }
+        fun field(key: String, label: String, hint: String): View = ui.column(4).apply {
+            addView(ui.muted(label, 13f))
+            addView(EditText(host).apply {
+                setTextColor(Palette.text)
+                setHintTextColor(Palette.faint)
+                textSize = 15f
+                this.hint = hint
+                background = ui.rounded(Palette.surfaceAlt, Palette.border, radiusDp = 12)
+                setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(10))
+                minHeight = ui.dp(Ui.MIN_TOUCH_DP)
+                imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                id = View.generateViewId()
+                setText(Editor.values[key].orEmpty())
+                addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                    override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                    override fun afterTextChanged(e: Editable?) {
+                        Editor.values[key] = e?.toString().orEmpty()
+                        refresh()
+                    }
+                })
+            }, ui.matchWrap())
+        }
+        fun common(values: List<String>): String = values.map { it.trim() }.distinct().let { d ->
+            when {
+                d.size == 1 && d[0].isNotEmpty() -> "не міняти (зараз: ${d[0]})"
+                d.size > 1 -> "не міняти (різні)"
+                else -> "не міняти"
+            }
+        }
+        val extra = ui.column(12).apply {
+            if (one != null) {
+                addView(field("title", "Назва", "назва пісні"))
+                addView(field("artist", "Виконавець", "виконавець"))
+                addView(field("album", "Альбом", "без альбому"))
+                addView(field("albumArtist", "Виконавець альбому", "нема"))
+                addView(field("year", "Рік", "нема"))
+                addView(field("track", "Номер пісні", "нема"))
+            } else {
+                addView(ui.muted("Порожнє поле — не змінювати; заповнене — поставити всім.", 13f))
+                addView(field("artist", "Виконавець", common(rows.map { it.artist })))
+                addView(field("album", "Альбом", common(rows.map { it.album })))
+                addView(field("albumArtist", "Виконавець альбому", "не міняти"))
+                addView(field("year", "Рік", "не міняти"))
+                addView(ui.label("Замінити в назвах"))
+                addView(field("find", "Що знайти (точно, з великими й малими літерами)", "напр. TRACK "))
+                addView(field("replace", "На що замінити (порожньо — просто прибрати)", "нічого"))
+            }
+            addView(ui.label("Ім'я файлу"))
+            val chips = FlowLayout(host, ui.dp(8), ui.dp(8))
+            val views = HashMap<MetaEdit.NameStyle, android.widget.TextView>()
+            MetaEdit.NameStyle.entries.forEach { st ->
+                views[st] = ui.choice(st.label, Editor.name == st) {
+                    Editor.name = st
+                    views.forEach { (k, v) -> ui.styleChoice(v, k == st) }
+                    refresh()
+                }.also { chips.addView(it) }
+            }
+            addView(chips, ui.matchWrap())
+            addView(ui.muted("Файли лишаються у своїх папках; звук не змінюється. Теги — у FLAC і MP3 (у WAV лише ім'я файлу й історія). Перед заміною — копія; щось не так — файл лишається, як був.", 12.5f))
+            addView(preview)
+        }
+        refresh()
+        val title = if (rows.size == 1) "Теги й ім'я файлу" else "Теги й імена — ${TimeText.plural(rows.size, "запис", "записи", "записів")}"
+        val body = host.overlay.dialog(title, "", listOf("Застосувати" to Ui.Kind.PRIMARY, "Скасувати" to Ui.Kind.QUIET), { i ->
+            if (i == 0) {
+                val spec = editorSpec()
+                if (spec.isEmpty) {
+                    host.toast("Нічого не змінено")
+                    return@dialog
+                }
+                val ids = Editor.ids ?: return@dialog
+                Editor.ids = null
+                FlacBatch.startEdit(host, ids, spec)
+                showBatch(FlacBatch.state)
+            } else {
+                Editor.ids = null
+                host.overlay.dismiss()
+            }
+        }, extra = extra)
+        host.overlay.show(KEY_EDIT, body, dismissOnOutside = false)
+        return true
+    }
+
     /** T77: шукати перейменовані файли (у фоні), потім — вікно з тим, що знайдено. */
     private fun findRenamed() {
         if (FlacBatch.state.running) {
@@ -1107,6 +1286,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                     FlacBatch.Mode.RENUMBER -> "Перевіряю номери пісень"
                     FlacBatch.Mode.TITLES -> "Прибираю зайве з назв"
                     FlacBatch.Mode.RETITLE -> "Беру назви з імен файлів"
+                    FlacBatch.Mode.EDIT -> "Змінюю теги й імена"
                     FlacBatch.Mode.FLAC -> "Роблю FLAC з обкладинками"
                 }, 19f))
                 addView(text)
@@ -1122,6 +1302,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             val head = when {
                 s.mode == FlacBatch.Mode.RENUMBER && s.cancelled -> "Зупинено: перевірено ${s.index} з ${s.total}, виправлено ${s.made}."
                 s.mode == FlacBatch.Mode.TITLES && s.cancelled -> "Зупинено: назв виправлено ${s.made}."
+                s.mode == FlacBatch.Mode.EDIT && s.cancelled -> "Зупинено: змінено ${s.made}."
+                s.mode == FlacBatch.Mode.EDIT -> "Змінено: ${s.made} з ${s.total} (теги FLAC / MP3, імена файлів, історія; звук той самий)."
                 s.mode == FlacBatch.Mode.RETITLE -> "Назви з імен файлів: ${s.made} з ${s.total} (тег «Назва» у FLAC / MP3 і історія; звук той самий)."
                 s.mode == FlacBatch.Mode.TITLES -> "Назви виправлено: ${s.made} з ${s.total} (у тегах, іменах файлів і в історії; звук той самий)."
                 s.mode == FlacBatch.Mode.RENUMBER -> "Перевірено файлів: ${s.total}. " +
@@ -1134,6 +1316,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             val head2 = when (s.mode) {
                 FlacBatch.Mode.RENUMBER -> "Номери пісень"
                 FlacBatch.Mode.TITLES, FlacBatch.Mode.RETITLE -> "Назви пісень"
+                FlacBatch.Mode.EDIT -> "Теги й імена"
                 FlacBatch.Mode.FLAC -> "FLAC з обкладинками"
             }
             // faric 18.10 15:26: «додай кнопку копіювати текст — тикну й тобі відправлю».
@@ -1160,7 +1343,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     private fun batchLine(s: FlacBatch.State) = when {
         s.index == 0 -> "Готуюсь…" + if (s.total > 0) " (${s.total})" else ""
-        s.mode == FlacBatch.Mode.RENUMBER || s.mode == FlacBatch.Mode.TITLES || s.mode == FlacBatch.Mode.RETITLE -> "${s.index} з ${s.total}: ${s.label} · виправлено ${s.made}"
+        s.mode == FlacBatch.Mode.RENUMBER || s.mode == FlacBatch.Mode.TITLES || s.mode == FlacBatch.Mode.RETITLE || s.mode == FlacBatch.Mode.EDIT -> "${s.index} з ${s.total}: ${s.label} · виправлено ${s.made}"
         else -> "${s.index} з ${s.total}: ${s.label} · ${s.percent} %"
     }
 
@@ -1216,6 +1399,15 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         private const val KEY_FLAC_RUN = "makeflac:run"
         private const val KEY_FLAC_DONE = "makeflac:done"
         private const val KEY_RELINK_RUN = "relink:run"
+        private const val KEY_EDIT = "metaedit"
+
+        /** Відкритий редактор тегів (T78) — переживає поворот. */
+        private object Editor {
+            var ids: LongArray? = null
+            var single: MetaEdit.Song? = null
+            val values = HashMap<String, String>()
+            var name = MetaEdit.NameStyle.KEEP
+        }
         private const val KEY_RELINK_DONE = "relink:done"
 
         /** Записи, чиїх файлів нема на місці (перевіряється у фоні, на весь процес — переживає поворот). */

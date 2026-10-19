@@ -43,6 +43,7 @@ class FlacBatchService : Service() {
             when (mode) {
                 FlacBatch.Mode.RENUMBER.name -> renumber(ids, auto)
                 FlacBatch.Mode.TITLES.name -> titles(ids, tail)
+                FlacBatch.Mode.EDIT.name -> editMeta(ids, specOf(intent))
                 FlacBatch.Mode.RETITLE.name -> retitle(ids, intent.getStringArrayExtra(EXTRA_TITLES)?.map { it ?: "" }.orEmpty())
                 else -> run(ids)
             }
@@ -219,6 +220,39 @@ class FlacBatchService : Service() {
         stopSelf()
     }
 
+    @Suppress("DEPRECATION", "UNCHECKED_CAST")
+    private fun specOf(intent: Intent): ua.faric.trackcatcher.core.MetaEdit.Spec =
+        ua.faric.trackcatcher.core.MetaEdit.Spec.fromMap((intent.getSerializableExtra(EXTRA_SPEC) as? HashMap<String, String>).orEmpty())
+
+    /** T78: теги й імена файлів. */
+    private fun editMeta(ids: LongArray, spec: ua.faric.trackcatcher.core.MetaEdit.Spec) {
+        val app = applicationContext
+        val db = HistoryDb.get(app)
+        val plain = Settings(app).snapshot().plainNames
+        val problems = ArrayList<String>()
+        var fixed = 0
+        var skipped = 0
+        var cancelled = false
+        for ((i, id) in ids.withIndex()) {
+            if (FlacBatch.cancel) { cancelled = true; break }
+            val r = db.get(id) ?: continue
+            val label = r.title.ifBlank { r.displayName }
+            FlacBatch.update { it.copy(index = i + 1, label = label, percent = (i * 100) / ids.size) }
+            notify("Змінюю теги: ${i + 1} з ${ids.size}", label, (i * 100) / ids.size)
+            if (Renumber.present(app, listOf(r)).isNullOrEmpty()) { skipped++; FlacBatch.update { it.copy(skipped = skipped) }; continue }
+            val bad = runCatching { MetaApply.apply(app, r, spec, plain) }.getOrElse { listOf("${r.title}\t${ua.faric.trackcatcher.core.ErrorText.human(it)}") }
+            if (bad.isEmpty()) { fixed++; FlacBatch.update { it.copy(made = fixed) } } else { problems += bad; FlacBatch.update { it.copy(problems = problems.toList()) } }
+        }
+        FlacBatch.update { it.copy(running = false, finished = true, made = fixed, problems = problems.toList(), cancelled = cancelled, index = ids.size, skipped = skipped) }
+        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
+        getSystemService(NotificationManager::class.java).notify(
+            NOTIF_ID,
+            notification("Теги змінено: $fixed з ${ids.size}", if (problems.isEmpty()) "Звук не змінювався — лише теги й імена" else "Не вийшло: ${problems.size} — подробиці в застосунку", -1, ongoing = false),
+        )
+        worker = null
+        stopSelf()
+    }
+
     private fun enter(n: Notification) {
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else startForeground(NOTIF_ID, n)
     }
@@ -262,6 +296,7 @@ class FlacBatchService : Service() {
         const val EXTRA_AUTO = "auto"
         const val EXTRA_TAIL = "tail"
         const val EXTRA_TITLES = "titles"
+        const val EXTRA_SPEC = "spec"
         private const val ACTION_STOP = "ua.faric.trackcatcher.flac.STOP"
         private const val NOTIF_ID = 3
     }
