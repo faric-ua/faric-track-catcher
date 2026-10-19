@@ -194,6 +194,12 @@ class HistoryDb private constructor(context: Context) :
         changed()
     }
 
+    /** T79: нова тривалість запису після обрізання. */
+    fun updateLength(id: Long, lengthMs: Long) {
+        writableDatabase.update("recordings", ContentValues().apply { put("length_ms", lengthMs) }, "id=?", arrayOf(id.toString()))
+        changed()
+    }
+
     /** Усі записи (для копії історії, T64). */
     fun all(): List<RecordingRow> = list(null, "", limit = Int.MAX_VALUE)
 

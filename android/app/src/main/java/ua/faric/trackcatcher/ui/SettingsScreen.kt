@@ -141,13 +141,14 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
         formatCard.removeAllViews()
         formatCard.addView(ui.label("Формат файлів", LineIcon.FILE))
-        formatCard.addView(flow(OutputFormat.entries.map { f -> ui.choice(f.label, v.format == f) { settings.format = f; renderChoices() } }))
+        // Вибір формату — як був, без розтягування (faric 19.10 20:09: «де MP3, FLAC — тип файлу — не міняй»).
+        formatCard.addView(flow(OutputFormat.entries.map { f -> ui.choice(f.label, v.format == f) { settings.format = f; renderChoices() } }, fill = false))
         formatCard.addView(ui.muted(formatHint(v), 13.5f))
         if (locked) formatCard.addView(ui.text("Зміни почнуть діяти з наступного запису.", 12.5f, Palette.warning))
 
         qualityCard.removeAllViews()
         qualityCard.addView(ui.label("Якість MP3", LineIcon.BARS))
-        val q = flow(Mp3Encoder.BITRATES.map { kbps -> ui.choice("$kbps кбіт/с", v.mp3Bitrate == kbps) { settings.mp3Bitrate = kbps; renderChoices() } })
+        val q = flow(Mp3Encoder.BITRATES.map { kbps -> ui.choice("$kbps кбіт/с", v.mp3Bitrate == kbps) { settings.mp3Bitrate = kbps; renderChoices() } }, fill = false)
         qualityCard.addView(q)
         qualityCard.addView(ui.muted("320 — на слух майже як оригінал. 192 — добре й удвічі менше місця.", 13.5f))
         ui.setEnabled(q, v.format.mp3)
@@ -325,7 +326,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         return if (rest == 0) "$whole с" else "$whole," + (rest / 10).toString().padStart(2, '0').trimEnd('0') + " с"
     }
 
-    private fun flow(children: List<View>): FlowLayout = FlowLayout(host, ui.dp(8), ui.dp(8)).apply {
+    private fun flow(children: List<View>, fill: Boolean = true): FlowLayout = FlowLayout(host, ui.dp(8), ui.dp(8), fill = fill).apply {
         children.forEach { addView(it) }
     }
 

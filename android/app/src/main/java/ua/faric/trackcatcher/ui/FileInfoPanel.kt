@@ -32,7 +32,7 @@ class FileInfoPanel(private val host: MainActivity) {
 
     companion object {
         /** Версія спільної панелі (faric 17.10 23:39: «як у Track Catcher "Про файл" — зроби й у конвертері»). */
-        const val PANEL_VERSION = 4
+        const val PANEL_VERSION = 5
 
         /** Значення до стількох знаків стає в пів рядка (по два в ряд). */
         private const val SHORT = 18
@@ -82,7 +82,7 @@ class FileInfoPanel(private val host: MainActivity) {
         top.addView(words, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         card.addView(top, ui.matchWrap())
 
-        val chips = FlowLayout(host, ui.dp(6), ui.dp(6))
+        val chips = FlowLayout(host, ui.dp(6), ui.dp(6), fill = false)
         chips.addView(chip(info.format, Palette.accent, Palette.accentFill))
         if (info.bitrateKbps > 0) chips.addView(chip((if (info.format == "MP3") "" else "≈ ") + "${info.bitrateKbps} кбіт/с"))
         if (info.durationMs > 0) chips.addView(chip(TimeText.clock(info.durationMs)))
@@ -187,7 +187,7 @@ class FileInfoPanel(private val host: MainActivity) {
         // Що плеєр показав би, якби було, — одним рядком (а не «— нема» по рядку на кожне).
         val missing = FileTags.Field.entries.filter { it != FileTags.Field.ENCODER && info[it] == null }
         if (missing.isNotEmpty()) {
-            val flow = FlowLayout(host, ui.dp(6), ui.dp(6))
+            val flow = FlowLayout(host, ui.dp(6), ui.dp(6), fill = false)
             flow.addView(ui.text("Не заповнено:", 12.5f, Palette.faint))
             missing.forEach { f ->
                 flow.addView(ui.text(f.label, 12.5f, Palette.muted).apply {
@@ -264,7 +264,7 @@ class FileInfoPanel(private val host: MainActivity) {
         card.addView(ui.label("Файл", LineIcon.FOLDER))
         card.addView(ui.text(fileName, 15f, Palette.text))
         folder?.takeIf { it.isNotBlank() }?.let { path ->
-            val crumbs = FlowLayout(host, ui.dp(4), ui.dp(6))
+            val crumbs = FlowLayout(host, ui.dp(4), ui.dp(6), fill = false)
             val parts = path.split(" › ")
             parts.forEachIndexed { i, p ->
                 if (i > 0) crumbs.addView(ui.text("›", 13f, Palette.faint))
