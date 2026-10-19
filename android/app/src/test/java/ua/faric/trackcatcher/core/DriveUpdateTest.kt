@@ -167,4 +167,13 @@ class DriveUpdateTest {
             assertTrue("«${e.message}» має містити «$part»", e.message!!.contains(part))
         }
     }
+
+    /** faric 20.10 00:59: «Google Диск відповів кодом 500» — такі коди пробуємо ще раз. */
+    @Test fun temporaryGoogleErrorsAreRetried() {
+        assertEquals(true, DriveUpdate.retryable(500))
+        assertEquals(true, DriveUpdate.retryable(503))
+        assertEquals(true, DriveUpdate.retryable(429))
+        assertEquals(false, DriveUpdate.retryable(404))
+        assertEquals(false, DriveUpdate.retryable(200))
+    }
 }

@@ -15,6 +15,8 @@ import java.net.URL
 object DriveHttp {
     class Result(val size: Long, val sha256: String)
 
+    private val RETRY_DELAYS_MS = longArrayOf(2_000, 5_000)
+
     const val NOT_PUBLIC = "Диск не віддав файл: він не відкритий для всіх, хто має посилання, видалений, " +
         "або посилання не те. Автору: у Google Диску → файл → «Надати доступ» → «Усі, хто має посилання»."
 
@@ -32,15 +34,26 @@ object DriveHttp {
         expectApk: Boolean,
         progress: ((done: Long, total: Long) -> Unit)?,
     ): Result {
-        val c = URL(DriveUpdate.downloadUrl(fileId)).openConnection() as HttpURLConnection
-        c.instanceFollowRedirects = true
-        c.connectTimeout = 20_000
-        c.readTimeout = 60_000
-        c.setRequestProperty("User-Agent", "TrackCatcher-Updater/1")
-        c.setRequestProperty("Cache-Control", "no-cache")
+        // Диск буває відповідає 500 / 503 на мить (faric 20.10 00:59 — саме тоді, коли автор заливав нову версію):
+        // пробуємо ще двічі, через 2 і 5 с, — до того, як щось записано.
+        var attempt = 0
+        var c: HttpURLConnection
+        var code: Int
+        while (true) {
+            c = URL(DriveUpdate.downloadUrl(fileId)).openConnection() as HttpURLConnection
+            c.instanceFollowRedirects = true
+            c.connectTimeout = 20_000
+            c.readTimeout = 60_000
+            c.setRequestProperty("User-Agent", "TrackCatcher-Updater/1")
+            c.setRequestProperty("Cache-Control", "no-cache")
+            code = runCatching { c.responseCode }.getOrElse { e -> c.disconnect(); throw e }
+            if (!DriveUpdate.retryable(code) || attempt >= RETRY_DELAYS_MS.size) break
+            c.disconnect()
+            Thread.sleep(RETRY_DELAYS_MS[attempt++])
+        }
         try {
-            val code = c.responseCode
             if (code == 401 || code == 403 || code == 404) throw IOException(NOT_PUBLIC)
+            if (DriveUpdate.retryable(code)) throw IOException("Google Диск зараз не відповідає (код $code; спробував ${attempt + 1} рази). Спробуй за хвилину — це на боці Google.")
             if (code !in 200..299) throw IOException("Google Диск відповів кодом $code. Спробуй пізніше.")
             val total = c.contentLengthLong
             if (total > maxBytes) {
