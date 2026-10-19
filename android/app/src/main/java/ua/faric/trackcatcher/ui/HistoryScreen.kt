@@ -81,7 +81,14 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val detailPane: LinearLayout? = if (ui.twoPane) ui.column(12) else null
     private var detailScroll: android.widget.ScrollView? = null
     private var unobserve: (() -> Unit)? = null
-    private val thumbs = LruCache<String, Bitmap>(60)
+    // Обкладинки плиток — за розміром у пам'яті (16 МБ ≈ 190 плиток), а не 60 штук: інакше на довгій історії
+    // кожна перебудова списку декодувала картинки заново.
+    private val thumbs = object : LruCache<String, Bitmap>(16 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    }
+
+    /** Плитки списку за id запису — щоб вибір міняв лише рамку, без перебудови. */
+    private val rowViews = HashMap<Long, View>()
     private var rows: List<RecordingRow> = emptyList()
 
     init {
@@ -208,10 +215,30 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     // ---------- вибір і видалення кількох (T38) ----------
 
+    /**
+     * Вибрати / зняти плитку (faric 20.10 01:41: «коли вибираю плитки, додаток підвисає на пару секунд»): раніше
+     * перебудовувався весь список (191 плитка, обкладинки заново) на кожен дотик. Тепер — лише рамка цієї плитки й
+     * панель «Вибрано»; увесь список — тільки коли вибір почався чи скінчився (міняються кнопки в шапках).
+     */
     private fun togglePick(r: RecordingRow) {
+        val wasPicking = picked.isNotEmpty()
         if (!picked.remove(r.id)) picked += r.id
-        reload()
+        val box = rowViews[r.id]
+        if (wasPicking != picked.isNotEmpty() || box == null) {
+            reload()
+        } else {
+            styleRow(box, r, r.id in picked)
+            renderPickBar()
+        }
         host.refreshBack()
+    }
+
+    private fun styleRow(box: View, r: RecordingRow, selected: Boolean) {
+        box.background = ui.pressable(
+            if (selected) ui.rounded(Palette.selectedFill, Palette.success, radiusDp = 14, strokeDp = 2)
+            else ui.rounded(Palette.surface, Palette.border, radiusDp = 14),
+        )
+        box.contentDescription = r.displayName + ", " + r.status.label + if (selected) Ui.SELECTED_SUFFIX else ""
     }
 
     private fun clearPicked() {
@@ -342,6 +369,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         renderChips(db.counts())
         renderPickBar()
         list.removeAllViews()
+        rowViews.clear()
         if (rows.isEmpty()) {
             list.addView(ui.card(8).apply {
                 addView(ui.title(if (query.isBlank() && filter == null) "Поки порожньо" else "Нічого не знайдено", 17f))
@@ -544,16 +572,11 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         val box = ui.row(12).apply {
             gravity = Gravity.TOP
             setPadding(ui.dp(12), ui.dp(12), ui.dp(12), ui.dp(12))
-            background = ui.pressable(
-                if (selected) ui.rounded(Palette.selectedFill, Palette.success, radiusDp = 14, strokeDp = 2)
-                else ui.rounded(Palette.surface, Palette.border, radiusDp = 14),
-            )
             isClickable = true
             isFocusable = true
-            contentDescription = r.displayName + ", " + r.status.label + if (selected) Ui.SELECTED_SUFFIX else ""
             setOnClickListener {
                 when {
-                    picking -> togglePick(r)
+                    picked.isNotEmpty() -> togglePick(r) // перевіряємо зараз, а не коли плитку будували
                     detailPane == null -> showDetailDialog(r)
                     else -> select(r)
                 }
@@ -564,6 +587,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 true
             }
         }
+        styleRow(box, r, selected)
+        rowViews[r.id] = box
         box.addView(thumb(r, 48), LinearLayout.LayoutParams(ui.dp(48), ui.dp(48)))
         val texts = ui.column(3)
         texts.addView(ui.text(r.displayName, 15.5f, medium = true).apply {
