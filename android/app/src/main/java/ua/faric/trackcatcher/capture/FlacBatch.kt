@@ -24,7 +24,7 @@ import ua.faric.trackcatcher.data.Settings
  */
 object FlacBatch {
     /** Що робить служба: WAV → FLAC (T69), перевірка номерів (T70) чи зайве з назв (T71). */
-    enum class Mode { FLAC, RENUMBER, TITLES, RETITLE, EDIT, TRIM }
+    enum class Mode { FLAC, RENUMBER, TITLES, RETITLE, EDIT, TRIM, HOLES }
 
     data class State(
         val mode: Mode = Mode.FLAC,
@@ -39,6 +39,8 @@ object FlacBatch {
         val problems: List<String> = emptyList(),
         /** Пропущено: файла нема на місці (перенесли чи видалили) — не рахувались. */
         val skipped: Int = 0,
+        /** T88: пісні з тріскам — «Назва — 1:55 · 2:06» (що перезаписати). */
+        val report: List<String> = emptyList(),
         val finished: Boolean = false,
         val cancelled: Boolean = false,
     ) {
@@ -144,6 +146,18 @@ object FlacBatch {
                 .putExtra(FlacBatchService.EXTRA_IDS, ids)
                 .putExtra(FlacBatchService.EXTRA_MODE, Mode.TRIM.name)
                 .putExtra(FlacBatchService.EXTRA_SPEC, HashMap(plan.toMap())),
+        )
+    }
+
+    /** T88: перевірити ці записи на тріски (лише читання файлів). */
+    fun startHoles(context: Context, ids: LongArray) {
+        if (state.running || ids.isEmpty()) return
+        cancel = false
+        update { State(mode = Mode.HOLES, running = true, total = ids.size) }
+        context.startForegroundService(
+            Intent(context, FlacBatchService::class.java)
+                .putExtra(FlacBatchService.EXTRA_IDS, ids)
+                .putExtra(FlacBatchService.EXTRA_MODE, Mode.HOLES.name),
         )
     }
 

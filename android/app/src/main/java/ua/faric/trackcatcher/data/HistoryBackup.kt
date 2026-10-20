@@ -73,7 +73,7 @@ object HistoryBackup {
         "artwork" to r.artworkPath,
         "mp3Uri" to r.mp3Uri, "mp3Name" to r.mp3Name, "mp3Size" to r.mp3Size, "mp3Bitrate" to r.mp3Bitrate,
         "losslessUri" to r.wavUri, "losslessName" to r.wavName, "losslessSize" to r.wavSize,
-        "cutBySilence" to r.cutBySilence, "clips" to r.clips,
+        "cutBySilence" to r.cutBySilence, "clips" to r.clips, "holes" to r.holes,
     )
 
     private fun fromMap(m: Map<*, *>) = RecordingRow(
@@ -85,6 +85,7 @@ object HistoryBackup {
         mp3Uri = m["mp3Uri"] as? String, mp3Name = m["mp3Name"] as? String, mp3Size = long(m["mp3Size"]), mp3Bitrate = long(m["mp3Bitrate"]).toInt(),
         wavUri = m["losslessUri"] as? String, wavName = m["losslessName"] as? String, wavSize = long(m["losslessSize"]),
         cutBySilence = m["cutBySilence"] == true, clips = (m["clips"] as? Long)?.toInt() ?: -1,
+        holes = m["holes"] as? String,
     )
 
     private fun long(v: Any?): Long = (v as? Long) ?: (v as? Double)?.toLong() ?: 0L

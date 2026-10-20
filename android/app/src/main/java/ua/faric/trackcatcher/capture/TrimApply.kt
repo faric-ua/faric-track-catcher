@@ -31,7 +31,7 @@ import ua.faric.trackcatcher.encode.Mp3Encoder
 object TrimApply {
     private const val ORIGINALS = "Оригінали"
 
-    private class Decoded(val file: File, val rate: Int, val frames: Long)
+    internal class Decoded(val file: File, val rate: Int, val frames: Long)
 
     /** Застосувати до всіх файлів запису. Повертає «файл\tпричина» того, що не вийшло. */
     fun apply(app: Context, r: RecordingRow, plan: TrimFade.Plan): List<String> {
@@ -59,6 +59,7 @@ object TrimApply {
             val db = HistoryDb.get(app)
             db.updateMeta(r.id, r.artist, r.title, r.album, mp3, wav, "${TimeText.dateTime(System.currentTimeMillis())}: " + notes.joinToString("; "))
             db.updateLength(r.id, (r.lengthMs - plan.cutStartMs.coerceAtLeast(0) - plan.cutEndMs.coerceAtLeast(0)).coerceAtLeast(0))
+            if (r.holes != null) db.updateHoles(r.id, null) // місця тріск зсунулись — перевірити наново
         }
         return problems
     }
@@ -153,7 +154,7 @@ object TrimApply {
     }
 
     /** Розкодувати в 16-бітне стерео PCM. */
-    private fun decode(app: Context, file: File, ext: String, out: File): Decoded {
+    internal fun decode(app: Context, file: File, ext: String, out: File): Decoded {
         if (ext == "wav") {
             val info = file.inputStream().buffered(64 * 1024).use { FileTags.read(it, file.length(), file.name) }
             if (info.bits != 16 || info.channels != 2) throw IOException("WAV не 16 біт стерео — такий обрізати не вмію")

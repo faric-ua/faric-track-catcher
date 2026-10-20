@@ -34,6 +34,8 @@ data class RecordingRow(
     val cutBySilence: Boolean,
     /** Скільки місць, де звук упирався в стелю (піки обрізано). -1 — не рахувалось (записи до v0.1.11). */
     val clips: Int = -1,
+    /** T88: «тріски» — дірки тиші посеред музики (`Holes.encode`); null — не перевірялось, "" — нема. */
+    val holes: String? = null,
 ) {
     val displayName: String
         get() = when {
@@ -54,7 +56,7 @@ data class SessionRow(
 
 /** Історія записів — SQLite на телефоні. Нічого не видаляється мовчки. */
 class HistoryDb private constructor(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, "history.db", null, 2) {
+    SQLiteOpenHelper(context.applicationContext, "history.db", null, 3) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -81,7 +83,8 @@ class HistoryDb private constructor(context: Context) :
                 mp3_uri TEXT, mp3_name TEXT, mp3_size INTEGER NOT NULL DEFAULT 0, mp3_bitrate INTEGER NOT NULL DEFAULT 0,
                 wav_uri TEXT, wav_name TEXT, wav_size INTEGER NOT NULL DEFAULT 0,
                 cut_by_silence INTEGER NOT NULL DEFAULT 0,
-                clips INTEGER NOT NULL DEFAULT -1)""",
+                clips INTEGER NOT NULL DEFAULT -1,
+                holes TEXT)""",
         )
         db.execSQL("CREATE INDEX recordings_created ON recordings(created_at)")
     }
@@ -89,6 +92,8 @@ class HistoryDb private constructor(context: Context) :
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // v2 (0.1.11): лічильник перевантажень. Старі записи лишаються, у них -1 — «не рахувалось».
         if (oldVersion < 2) db.execSQL("ALTER TABLE recordings ADD COLUMN clips INTEGER NOT NULL DEFAULT -1")
+        // v3 (0.1.47, T88): «тріски». Старі записи — null, «не перевірялось».
+        if (oldVersion < 3) db.execSQL("ALTER TABLE recordings ADD COLUMN holes TEXT")
     }
 
     fun startSession(startedAt: Long, formatLabel: String): Long =
@@ -124,6 +129,7 @@ class HistoryDb private constructor(context: Context) :
             put("wav_size", r.wavSize)
             put("cut_by_silence", if (r.cutBySilence) 1 else 0)
             put("clips", r.clips)
+            put("holes", r.holes)
         })
         changed()
         return id
@@ -197,6 +203,12 @@ class HistoryDb private constructor(context: Context) :
     /** T79: нова тривалість запису після обрізання. */
     fun updateLength(id: Long, lengthMs: Long) {
         writableDatabase.update("recordings", ContentValues().apply { put("length_ms", lengthMs) }, "id=?", arrayOf(id.toString()))
+        changed()
+    }
+
+    /** T88: результат перевірки на тріски; null — «не перевірялось» (звук змінився, напр. обрізали). */
+    fun updateHoles(id: Long, holes: String?) {
+        writableDatabase.update("recordings", ContentValues().apply { put("holes", holes) }, "id=?", arrayOf(id.toString()))
         changed()
     }
 
@@ -297,6 +309,7 @@ class HistoryDb private constructor(context: Context) :
             wavUri = sn("wav_uri"), wavName = sn("wav_name"), wavSize = l("wav_size"),
             cutBySilence = l("cut_by_silence") != 0L,
             clips = c.getColumnIndex("clips").let { i -> if (i >= 0) c.getInt(i) else -1 },
+            holes = c.getColumnIndex("holes").let { i -> if (i >= 0) c.getString(i) else null },
         )
     }
 
