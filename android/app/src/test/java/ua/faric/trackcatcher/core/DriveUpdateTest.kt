@@ -176,4 +176,15 @@ class DriveUpdateTest {
         assertEquals(false, DriveUpdate.retryable(404))
         assertEquals(false, DriveUpdate.retryable(200))
     }
+
+    @Test
+    fun publishedOnlyWhenOnlineManifestIsExactlyOurs() {
+        val sha = "b".repeat(64)
+        val online = DriveUpdate.Manifest("ua.faric.trackcatcher", 48, "0.1.47", sha, 6_948_040, "X".repeat(33), 0)
+        assertEquals(true, DriveUpdate.manifestIsOurs(online, 48, sha.uppercase(), 6_948_040))
+        assertEquals(false, DriveUpdate.manifestIsOurs(online.copy(versionCode = 47), 48, sha, 6_948_040)) // на Диску ще стара
+        assertEquals(false, DriveUpdate.manifestIsOurs(online, 48, "c".repeat(64), 6_948_040)) // та сама версія, інший APK
+        assertEquals(false, DriveUpdate.manifestIsOurs(online, 48, sha, 1))
+        assertEquals(false, DriveUpdate.manifestIsOurs(null, 48, sha, 6_948_040))
+    }
 }
