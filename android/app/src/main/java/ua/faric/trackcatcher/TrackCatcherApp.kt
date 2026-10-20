@@ -7,6 +7,8 @@ import android.app.NotificationManager
 class TrackCatcherApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        ua.faric.trackcatcher.core.AppInfo.versionName = BuildConfig.VERSION_NAME
+        ua.faric.trackcatcher.core.AppInfo.versionCode = BuildConfig.VERSION_CODE
         val nm = getSystemService(NotificationManager::class.java)
         val channel = NotificationChannel(CHANNEL_RECORDING, "Запис", NotificationManager.IMPORTANCE_LOW).apply {
             description = "Повідомлення під час запису: що пишеться і кнопка «Стоп»"

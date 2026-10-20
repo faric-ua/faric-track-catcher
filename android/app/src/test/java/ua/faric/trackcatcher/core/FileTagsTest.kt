@@ -73,4 +73,18 @@ class FileTagsTest {
     fun unknownFormat() {
         read("hello world, not audio".toByteArray(), "x.txt")
     }
+
+    @Test
+    fun encoderCarriesVersion() {
+        assertEquals("Track Catcher 0.1.49 (build 50)", AppInfo.encoderFor("0.1.49", 50))
+        assertEquals("Track Catcher", AppInfo.encoderFor("", 0))
+        AppInfo.versionName = "0.1.49"; AppInfo.versionCode = 50
+        try {
+            val frame = byteArrayOf(0xFF.toByte(), 0xFB.toByte(), 0xE4.toByte(), 0x00) + ByteArray(960)
+            val i = read(Id3v2.build(TrackMeta("A", "T", "Al"), 1000, null) + frame)
+            assertEquals("Track Catcher 0.1.49 (build 50)", i[FileTags.Field.ENCODER])
+        } finally {
+            AppInfo.versionName = ""; AppInfo.versionCode = 0
+        }
+    }
 }

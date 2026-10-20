@@ -18,7 +18,7 @@ object Id3v2 {
         if (meta.trackNo > 0) frames.write(latinFrame("TRCK", meta.trackNo.toString()))
         if (meta.year > 0) frames.write(latinFrame("TYER", meta.year.toString()))
         if (lengthMs > 0) frames.write(latinFrame("TLEN", lengthMs.toString()))
-        frames.write(latinFrame("TSSE", "Track Catcher"))
+        frames.write(latinFrame("TSSE", AppInfo.encoder))
         for ((name, value) in extra) frames.write(userFrame(name, value))
         if (artworkJpeg != null && artworkJpeg.isNotEmpty()) frames.write(apicFrame(artworkJpeg))
         val body = frames.toByteArray()
