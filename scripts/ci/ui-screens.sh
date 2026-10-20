@@ -132,8 +132,8 @@ adb shell input keyevent KEYCODE_BACK
 # Місце після того, як Android закрив застосунок у фоні: «Історія» → додому → процес убито → відкрити значком.
 start --es tab HISTORY
 sleep 2
-adb shell input swipe 540 1700 540 900 300
-sleep 1
+adb shell input swipe 540 1900 540 700 600
+shot r04a-place-before-home 2
 adb shell input keyevent KEYCODE_HOME
 sleep 2
 adb shell am kill "$PKG"

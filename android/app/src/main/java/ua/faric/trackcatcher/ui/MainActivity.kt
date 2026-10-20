@@ -379,8 +379,8 @@ class MainActivity : Activity() {
         val apply = Runnable {
             scrollViews(screen?.view).forEachIndexed { i, s -> ys.getOrNull(i)?.takeIf { it > 0 }?.let { s.scrollTo(0, it) } }
         }
-        content.post(apply)
-        content.postDelayed(apply, 300) // список історії міг дорости (файли перевірено, картинки)
+        // Кілька разів: до першого розкладу прокрутка впирається в нуль, а список історії ще доростає (файли, картинки).
+        for (delay in longArrayOf(0, 150, 400, 900)) content.postDelayed(apply, delay)
     }
 
     private fun scrollViews(v: View?): List<android.widget.ScrollView> {
