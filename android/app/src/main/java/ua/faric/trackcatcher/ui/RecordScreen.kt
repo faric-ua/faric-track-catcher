@@ -86,9 +86,15 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     init {
         errorBox.addView(errorText)
-        errorBox.addView(ui.button("Зрозуміло", Ui.Kind.QUIET) { RecorderHub.update { it.copy(error = null) } }, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ))
+        // Копіювати — щоб надіслати причину в чат (faric 20.10 17:10).
+        errorBox.addView(FlowLayout(host, ui.dp(8), ui.dp(8)).apply {
+            addView(ui.button("Копіювати", Ui.Kind.NORMAL) {
+                val cm = host.getSystemService(android.content.ClipboardManager::class.java)
+                cm?.setPrimaryClip(android.content.ClipData.newPlainText("Track Catcher", "${ua.faric.trackcatcher.core.AppInfo.encoder}\n${errorText.text}"))
+                host.toast("Скопійовано — встав у чат")
+            })
+            addView(ui.button("Зрозуміло", Ui.Kind.QUIET) { RecorderHub.update { it.copy(error = null) } })
+        }, ui.matchWrap())
         recentCard.addView(ui.label("Ця сесія", LineIcon.LIST))
         recentCard.addView(recentList)
 

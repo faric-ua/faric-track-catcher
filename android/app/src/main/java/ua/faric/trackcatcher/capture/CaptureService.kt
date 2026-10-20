@@ -254,6 +254,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
             return
         }
         running = true
+        ua.faric.trackcatcher.state.LastExit.recordingStarted(this)
         startedAtMs = System.currentTimeMillis()
         framesRead = 0L
         tracksOpened = 0
@@ -570,6 +571,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
             return
         }
         running = false
+        ua.faric.trackcatcher.state.LastExit.recordingEnded(this)
         stopping = true
         main.removeCallbacks(watchdog)
         runCatching { record?.stop() }
@@ -628,6 +630,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
                 )
             }
             running = false
+            ua.faric.trackcatcher.state.LastExit.recordingEnded(this) // служба встигла сказати сама
             runCatching { record?.stop() }
             runCatching { captureThread?.join(2_000) }
             runCatching { writerThread?.join(3_000) }
