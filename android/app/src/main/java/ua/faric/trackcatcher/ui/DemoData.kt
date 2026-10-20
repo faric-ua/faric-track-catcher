@@ -63,7 +63,38 @@ object DemoData {
                 ),
             )
         }
+        realFile(context, session, start + 28 * 60_000L)
         db.endSession(session, start + 30 * 60_000L)
+    }
+
+    /**
+     * Запис зі справжнім файлом (WAV 3 с, тон 440 Гц) — щоб на емуляторі відкривалось «Про файл» і можна було
+     * перевірити поворот (faric 21.10 01:17: «"Про файл" після перевороту пропадає»). Це останній запис (id 7).
+     */
+    private fun realFile(context: Context, session: Long, created: Long) {
+        val frames = 3 * ua.faric.trackcatcher.core.Pcm.SAMPLE_RATE
+        val pcm = java.nio.ByteBuffer.allocate(frames * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        for (i in 0 until frames) {
+            val v = (Math.sin(2 * Math.PI * 440 * i / ua.faric.trackcatcher.core.Pcm.SAMPLE_RATE) * 8000).toInt().toShort()
+            pcm.putShort(v); pcm.putShort(v)
+        }
+        val meta = TrackMeta("Демо-гурт", "Справжній файл", "Касета")
+        val saved = runCatching {
+            ua.faric.trackcatcher.capture.MediaStoreWriter(context).write("Демо-гурт — Справжній файл.wav", "audio/x-wav", ua.faric.trackcatcher.capture.MediaStoreWriter.RELATIVE_DIR) { out ->
+                out.write(ua.faric.trackcatcher.core.WavHeader.build(frames * 4L, info = ua.faric.trackcatcher.core.WavHeader.infoFor(meta)))
+                out.write(pcm.array())
+            }
+        }.getOrNull() ?: return
+        HistoryDb.get(context).insert(
+            RecordingRow(
+                sessionId = session, createdAt = created, artist = meta.artist, title = meta.title, album = meta.album,
+                durationMs = 3_000, lengthMs = 3_000, status = RecStatus.COMPLETE, reason = "",
+                sourcePackage = "com.google.android.youtube", artworkPath = null,
+                mp3Uri = null, mp3Name = null, mp3Size = 0, mp3Bitrate = 0,
+                wavUri = saved.uri, wavName = saved.name, wavSize = saved.size,
+                cutBySilence = true,
+            ),
+        )
     }
 
     private fun recording(context: Context) {

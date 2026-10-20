@@ -33,6 +33,12 @@ object RelinkScan {
     /** Останній результат — щоб вікно пережило поворот. */
     @Volatile var last: Result? = null
 
+    /** Пошук іде (вікно «Шукаю…» має пережити поворот — faric 21.10 01:17: «передивись усі вікна»). */
+    @Volatile var running = false
+
+    /** Помилка останнього пошуку (словами). */
+    @Volatile var lastError: String? = null
+
     private const val MAX_FILES = 400
     private val AUDIO = setOf("flac", "mp3", "wav")
 

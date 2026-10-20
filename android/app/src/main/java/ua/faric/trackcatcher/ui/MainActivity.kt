@@ -93,13 +93,20 @@ class MainActivity : Activity() {
                 screen?.onNowPlaying()
             }
         })
-        savedInstanceState?.let { s ->
+        // Поворот — стан від Android; холодний старт (Android закрив застосунок у фоні, faric 21.10 01:17:
+        // «щоб повертатися на те місце, звідки пішов») — збережене на диску місце, якщо застосунок відкрили значком.
+        val saved = savedInstanceState ?: PlaceStore.load(this).takeIf { opensPlainly(intent) }
+        saved?.let { s ->
             tab = s.getString(KEY_TAB)?.let { name -> Tab.entries.firstOrNull { it.name == name } } ?: Tab.RECORD
             s.getBundle(KEY_SCREENS)?.let { screenStates.putAll(it) }
         }
         buildChrome()
         showTab(tab)
-        savedInstanceState?.getString(KEY_DIALOG)?.let { key -> restoreDialog(key) }
+        saved?.getIntArray(KEY_SCREEN_Y)?.let { ys -> restoreScreenScroll(ys) }
+        saved?.getString(KEY_DIALOG)?.let { key ->
+            overlay.restoreScrollLater(key, saved.getInt(KEY_DIALOG_Y, 0))
+            restoreDialog(key)
+        }
         if (savedInstanceState == null) applyIntent(intent)
     }
 
@@ -236,9 +243,13 @@ class MainActivity : Activity() {
         val box = if (vertical) ui.column(6).apply { gravity = Gravity.CENTER_HORIZONTAL } else ui.row(8)
         val dot = View(this).apply { background = ui.rounded(Palette.rec, radiusDp = 6) }
         box.addView(dot, LinearLayout.LayoutParams(ui.dp(10), ui.dp(10)))
-        box.addView(ui.text(if (vertical) "Track\nCatcher" else "Track Catcher", if (vertical) 15f else 17f, Palette.text, medium = true).apply {
+        // T94 (faric 20.10 19:16): версія вгорі — під назвою, як в Audio Converter.
+        val names = ui.column(1).apply { if (vertical) gravity = Gravity.CENTER_HORIZONTAL }
+        names.addView(ui.text(if (vertical) "Track\nCatcher" else "Track Catcher", if (vertical) 15f else 17f, Palette.text, medium = true).apply {
             if (vertical) gravity = Gravity.CENTER
         })
+        names.addView(ui.numbers(ui.muted(if (vertical) versionLine().replace(" · код", "\nкод") else versionLine(), 11f)).apply { if (vertical) gravity = Gravity.CENTER })
+        box.addView(names)
         box.setPadding(0, 0, 0, if (vertical) ui.dp(10) else 0)
         return box
     }
@@ -326,6 +337,11 @@ class MainActivity : Activity() {
         handler.removeCallbacks(tick)
         unobserveHub?.invoke()
         unobserveHub = null
+        // Пішли в інший застосунок — запам'ятати місце на диску: Android може закрити нас у фоні (M30s).
+        if (!isChangingConfigurations) runCatching {
+            screen?.let { s -> screenStates.putBundle(tab.name, Bundle().also { s.save(it) }) }
+            PlaceStore.save(this, Bundle().also { fillPlace(it) })
+        }
         screen?.onStop()
         tracker.stop()
         Updater.detach(this)
@@ -341,10 +357,47 @@ class MainActivity : Activity() {
             s.save(b)
             screenStates.putBundle(tab.name, b)
         }
-        outState.putString(KEY_TAB, tab.name)
-        outState.putBundle(KEY_SCREENS, screenStates)
-        overlay.key?.let { outState.putString(KEY_DIALOG, it) }
+        fillPlace(outState)
     }
+
+    /** Де користувач зараз: вкладка, стан екранів, прокрутка, відкрите вікно (і його прокрутка). */
+    private fun fillPlace(out: Bundle) {
+        out.putString(KEY_TAB, tab.name)
+        out.putBundle(KEY_SCREENS, screenStates)
+        out.putIntArray(KEY_SCREEN_Y, screenScroll())
+        overlay.key?.takeIf { it != NightScreen.KEY }?.let {
+            out.putString(KEY_DIALOG, it)
+            out.putInt(KEY_DIALOG_Y, overlay.scrollY)
+        }
+    }
+
+    /** Прокрутка всіх прокручуваних частин вкладки (список, подробиці, колонки) — по порядку. */
+    private fun screenScroll(): IntArray = scrollViews(screen?.view).map { it.scrollY }.toIntArray()
+
+    private fun restoreScreenScroll(ys: IntArray) {
+        if (ys.none { it > 0 }) return
+        val apply = Runnable {
+            scrollViews(screen?.view).forEachIndexed { i, s -> ys.getOrNull(i)?.takeIf { it > 0 }?.let { s.scrollTo(0, it) } }
+        }
+        // Кілька разів: до першого розкладу прокрутка впирається в нуль, а список історії ще доростає (файли, картинки).
+        for (delay in longArrayOf(0, 150, 400, 900)) content.postDelayed(apply, delay)
+    }
+
+    private fun scrollViews(v: View?): List<android.widget.ScrollView> {
+        val out = ArrayList<android.widget.ScrollView>()
+        fun walk(x: View?) {
+            when (x) {
+                is android.widget.ScrollView -> { out += x; walk(x.getChildAt(0)) }
+                is ViewGroup -> for (i in 0 until x.childCount) walk(x.getChildAt(i))
+            }
+        }
+        walk(v)
+        return out
+    }
+
+    /** Відкрили значком (не з шторки й не з плитки «Запис») — можна повернути на збережене місце. */
+    private fun opensPlainly(i: Intent?): Boolean =
+        i == null || (i.getStringExtra(EXTRA_TAB) == null && !i.getBooleanExtra(EXTRA_START, false) && i.extras?.keySet()?.none { it.startsWith("demo") } != false)
 
     // ---------- «Назад» ----------
 
@@ -647,6 +700,11 @@ class MainActivity : Activity() {
         private const val KEY_TAB = "tab"
         private const val KEY_SCREENS = "screens"
         private const val KEY_DIALOG = "dialog"
+        private const val KEY_DIALOG_Y = "dialog_y"
+        private const val KEY_SCREEN_Y = "screen_y"
+
+        /** «0.1.52 · збірка 53 · код 1a2b3c4» — як в Audio Converter (T94); те саме Claude пише в кінці відповіді. */
+        fun versionLine(): String = "${BuildConfig.VERSION_NAME} · збірка ${BuildConfig.VERSION_CODE} · код ${BuildConfig.GIT_COMMIT}"
         private const val REQ_PERMS = 10
         private const val REQ_PERMS_THEN_START = 11
         private const val REQ_PROJECTION = 20

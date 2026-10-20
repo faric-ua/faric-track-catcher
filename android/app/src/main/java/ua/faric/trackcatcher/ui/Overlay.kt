@@ -32,11 +32,25 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
 
     val isShowing: Boolean get() = layer != null
 
+    /** Наскільки прокручено вміст вікна (зберегти при повороті). */
+    val scrollY: Int get() = scroll?.scrollY ?: 0
+
+    /** Прокрутка, яку треба повернути вікну [pendingKey], коли воно з'явиться (поворот, повернення в застосунок). */
+    private var pendingKey: String? = null
+    private var pendingY = 0
+
+    fun restoreScrollLater(key: String, y: Int) {
+        if (y <= 0) return
+        pendingKey = key
+        pendingY = y
+    }
+
     /**
      * [keepScroll] — нове вікно замість такого самого (⏮/⏭ у подробицях запису, T51): прокрутити так,
      * щоб низ (плеєр і кнопки) лишився на тому самому місці екрана, а не стрибав угору.
      */
-    fun show(key: String, content: View, dismissOnOutside: Boolean = true, keepScroll: Boolean = false) {
+    /** [placeholder] — тимчасове вікно («Читаю файл…»): ключ той самий, але прокрутку повертаємо вже справжньому. */
+    fun show(key: String, content: View, dismissOnOutside: Boolean = true, keepScroll: Boolean = false, placeholder: Boolean = false) {
         val fromBottom = if (keepScroll) scroll?.let { distanceFromBottom(it) } else null
         dismiss(notify = false)
         this.key = key
@@ -75,6 +89,13 @@ class Overlay(private val host: FrameLayout, private val ui: Ui, private val onC
         }
         placePanel()
         fromBottom?.let { restoreFromBottom(scroll, it) }
+        if (!placeholder && pendingKey == key) {
+            val y = pendingY
+            pendingKey = null
+            // Двічі: вміст може дорости після першого кадру (картинки, переноси).
+            scroll.post { scroll.scrollTo(0, y) }
+            scroll.postDelayed({ if (this.scroll === scroll) scroll.scrollTo(0, y) }, 250)
+        }
         onChange(key)
     }
 

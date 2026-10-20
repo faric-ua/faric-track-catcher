@@ -120,6 +120,27 @@ shot l05-history-font130
 rotate 0
 adb shell settings put system font_scale 1.0
 
+# «Про файл» і поворот (faric 21.10 01:17: «після перевороту вікно пропадає»). Запис 7 — справжній WAV (DemoData).
+start --es tab HISTORY --es dialog fileinfo:7
+shot r01-fileinfo 4
+rotate 1
+shot r02-fileinfo-after-rotation 4
+rotate 0
+shot r03-fileinfo-rotated-back 4
+adb shell input keyevent KEYCODE_BACK
+adb shell input keyevent KEYCODE_BACK
+# Місце після того, як Android закрив застосунок у фоні: «Історія» → додому → процес убито → відкрити значком.
+start --es tab HISTORY
+sleep 2
+adb shell input swipe 540 1900 540 700 600
+shot r04a-place-before-home 2
+adb shell input keyevent KEYCODE_HOME
+sleep 2
+adb shell am kill "$PKG"
+sleep 1
+adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+shot r04-place-after-process-death 5
+
 # Падіння лише нашого застосунку (системні застосунки емулятора теж іноді падають — їх не рахуємо).
 adb logcat -d -b crash > "$OUT/crash-all.txt" || true
 grep -A 30 "Process: $PKG" "$OUT/crash-all.txt" > "$OUT/crash.txt" || true
