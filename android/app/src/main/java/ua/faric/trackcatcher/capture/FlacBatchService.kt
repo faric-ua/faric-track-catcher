@@ -45,6 +45,7 @@ class FlacBatchService : Service() {
                 FlacBatch.Mode.TITLES.name -> titles(ids, tail)
                 FlacBatch.Mode.EDIT.name -> editMeta(ids, specOf(intent))
                 FlacBatch.Mode.TRIM.name -> trim(ids, planOf(intent))
+                FlacBatch.Mode.HOLES.name -> holes(ids)
                 FlacBatch.Mode.RETITLE.name -> retitle(ids, intent.getStringArrayExtra(EXTRA_TITLES)?.map { it ?: "" }.orEmpty())
                 else -> run(ids)
             }
@@ -252,6 +253,44 @@ class FlacBatchService : Service() {
         getSystemService(NotificationManager::class.java).notify(
             NOTIF_ID,
             notification("Обрізано: $fixed з ${ids.size}", if (problems.isEmpty()) TrimApply.describe(plan) else "Не вийшло: ${problems.size} — подробиці в застосунку", -1, ongoing = false),
+        )
+        worker = null
+        stopSelf()
+    }
+
+    /** T88: перевірити на тріски — лише читає файли; підсумок — список «що перезаписати». */
+    private fun holes(ids: LongArray) {
+        val app = applicationContext
+        val db = HistoryDb.get(app)
+        val problems = ArrayList<String>()
+        val report = ArrayList<String>()
+        var checked = 0
+        var skipped = 0
+        var cancelled = false
+        for ((i, id) in ids.withIndex()) {
+            if (FlacBatch.cancel) { cancelled = true; break }
+            val r = db.get(id) ?: continue
+            val label = r.title.ifBlank { r.displayName }
+            FlacBatch.update { it.copy(index = i + 1, label = label, percent = (i * 100) / ids.size) }
+            notify("Шукаю тріски: ${i + 1} з ${ids.size}", label, (i * 100) / ids.size)
+            if (!HoleScan.canCheck(r)) { problems += "$label\t${HoleScan.OnlyMp3().message}"; continue }
+            if (Renumber.present(app, listOf(r)).isNullOrEmpty()) { skipped++; FlacBatch.update { it.copy(skipped = skipped) }; continue }
+            try {
+                val places = HoleScan.check(app, r)
+                checked++
+                if (places.isNotEmpty()) report += HoleScan.line(r, places)
+                FlacBatch.update { it.copy(made = report.size, report = report.toList()) }
+            } catch (e: Exception) {
+                problems += "$label\t${ua.faric.trackcatcher.core.ErrorText.human(e)}"
+            }
+            FlacBatch.update { it.copy(problems = problems.toList()) }
+        }
+        FlacBatch.update { it.copy(running = false, finished = true, made = report.size, report = report.toList(), problems = problems.toList(), cancelled = cancelled, index = checked, skipped = skipped) }
+        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
+        val title = if (report.isEmpty()) "Тріск нема ($checked перевірено)" else "Тріски: ${report.size} з $checked — перезаписати"
+        getSystemService(NotificationManager::class.java).notify(
+            NOTIF_ID,
+            notification(title, "Файли не змінювались — лише перевірка", -1, ongoing = false),
         )
         worker = null
         stopSelf()

@@ -19,6 +19,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import ua.faric.trackcatcher.capture.FlacBatch
+import ua.faric.trackcatcher.capture.HoleScan
 import ua.faric.trackcatcher.capture.Renumber
 import ua.faric.trackcatcher.capture.RelinkScan
 import ua.faric.trackcatcher.capture.MetaApply
@@ -28,6 +29,7 @@ import ua.faric.trackcatcher.capture.TrimApply
 import ua.faric.trackcatcher.capture.TitleFix
 import ua.faric.trackcatcher.capture.MediaStoreWriter
 import ua.faric.trackcatcher.core.FileTags
+import ua.faric.trackcatcher.core.Holes
 import ua.faric.trackcatcher.core.Lossless
 import ua.faric.trackcatcher.core.Playlist
 import ua.faric.trackcatcher.core.RecStatus
@@ -167,7 +169,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 when (FlacBatch.pendingMode) {
                     FlacBatch.Mode.RENUMBER -> confirmRenumber(rows)
                     FlacBatch.Mode.TITLES -> confirmTitles(rows, FlacBatch.pendingTail)
-                    FlacBatch.Mode.FLAC, FlacBatch.Mode.RETITLE, FlacBatch.Mode.EDIT, FlacBatch.Mode.TRIM -> confirmMakeFlac(rows)
+                    FlacBatch.Mode.FLAC, FlacBatch.Mode.RETITLE, FlacBatch.Mode.EDIT, FlacBatch.Mode.TRIM, FlacBatch.Mode.HOLES -> confirmMakeFlac(rows)
                 }
                 return true
             }
@@ -274,6 +276,11 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         if (pickedEditable.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.EDGES, "Обрізати / затухання (${pickedEditable.size})", Ui.Kind.NORMAL) {
             clearPicked()
             openTrim(pickedEditable.sortedBy { it.createdAt })
+        })
+        val pickedCheck = pickedEditable.filter { HoleScan.canCheck(it) }
+        if (pickedCheck.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.BARS, "Перевірити на тріски (${pickedCheck.size})", Ui.Kind.NORMAL) {
+            clearPicked()
+            checkHoles(pickedCheck.sortedBy { it.createdAt })
         })
         actions.addView(ui.button("Видалити (${picked.size})", Ui.Kind.DANGER) { confirmDeleteMany() })
         if (rows.any { it.id !in picked }) actions.addView(ui.button("Вибрати всі видимі", Ui.Kind.NORMAL) {
@@ -482,6 +489,9 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             // T78: теги й імена всіх пісень групи.
             actions.addView(ui.iconButton(LineIcon.SLIDERS, "Змінити теги (${withFiles.size})", Ui.Kind.NORMAL) { openEditor(withFiles) })
             actions.addView(ui.iconButton(LineIcon.EDGES, "Обрізати / затухання (${withFiles.size})", Ui.Kind.NORMAL) { openTrim(withFiles) })
+            // T88: тріски (дірки тиші посеред музики) — лише FLAC / WAV.
+            val checkable = withFiles.filter { HoleScan.canCheck(it) && it.id !in missing }
+            if (checkable.isNotEmpty()) actions.addView(ui.iconButton(LineIcon.BARS, "Перевірити на тріски (${checkable.size})", Ui.Kind.NORMAL) { checkHoles(checkable) })
             // T71: у назвах повторюється чужий хвіст (Suno дописує назву пісні, з якої почалась черга) — прибрати.
             val tail = TitleTail.detect(members.map { it.title })
             val tailed = tail?.let { t -> members.filter { TitleTail.strip(it.title, t) != null } }.orEmpty()
@@ -562,6 +572,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             // T78 (faric 19.10 19:46: «сесію нажав — змінити метадані сесії»).
             if (editable.isNotEmpty()) row.addView(ui.iconButton(LineIcon.SLIDERS, "Змінити теги сесії (${editable.size})", Ui.Kind.NORMAL) { openEditor(editable) })
             if (editable.isNotEmpty()) row.addView(ui.iconButton(LineIcon.EDGES, "Обрізати / затухання (${editable.size})", Ui.Kind.NORMAL) { openTrim(editable) })
+            val checkable = editable.filter { HoleScan.canCheck(it) }
+            if (checkable.isNotEmpty()) row.addView(ui.iconButton(LineIcon.BARS, "Перевірити на тріски (${checkable.size})", Ui.Kind.NORMAL) { checkHoles(checkable) })
             addView(row, ui.matchWrap())
         }
     }
@@ -598,6 +610,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         })
         texts.addView(ui.numbers(ui.muted(metaLine(r), 13f)))
         if (r.id in missing) texts.addView(ui.text("файла нема на місці — перенесли чи видалили", 12.5f, Palette.warning))
+        // T88: тріски — видно одразу в списку, що перезаписати.
+        Holes.decode(r.holes).takeIf { it.isNotEmpty() }?.let {
+            texts.addView(ui.numbers(ui.text("тріски: ${Holes.describe(it)} — перезаписати", 12.5f, Palette.warning)).apply { maxLines = 3 })
+        }
         if (r.status != RecStatus.COMPLETE && r.reason.isNotBlank()) {
             texts.addView(ui.text(r.reason, 12.5f, ui.statusColor(r.status)).apply { maxLines = 3 })
         }
@@ -688,6 +704,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         if (r.clips >= 0 && r.hasFile) {
             facts.addView(ui.fact("Перевантаження", if (r.clips == 0) "немає" else "${r.clips} — пісня надто гучна, піки обрізано (можливий «чирк»)"))
         }
+        if (r.holes != null && r.hasFile) {
+            val places = Holes.decode(r.holes)
+            facts.addView(ui.fact("Тріски", if (places.isEmpty()) "немає" else Holes.describe(places) + " — дірки тиші посеред музики; цю пісню краще перезаписати"))
+        }
         if (r.sourcePackage.isNotBlank()) facts.addView(ui.fact("Плеєр", appLabel(r.sourcePackage)))
         facts.addView(ui.fact("Коли", TimeText.dateTime(r.createdAt)))
         if (r.id > 0) facts.addView(ui.fact("Запис №", r.id.toString())) // T18: свій номер, навіть коли назви однакові
@@ -700,6 +720,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             more.addView(ui.iconButton(LineIcon.FILE, "Про файл", Ui.Kind.NORMAL) { openFileInfo(r) }, ui.matchWrap())
             if (r.id !in missing) more.addView(ui.iconButton(LineIcon.SLIDERS, "Змінити теги й ім'я", Ui.Kind.NORMAL) { openEditor(listOf(r)) }, ui.matchWrap())
             if (r.id !in missing) more.addView(ui.iconButton(LineIcon.EDGES, "Обрізати / затухання", Ui.Kind.NORMAL) { openTrim(listOf(r)) }, ui.matchWrap())
+            if (r.id !in missing && HoleScan.canCheck(r)) more.addView(ui.iconButton(LineIcon.BARS, "Перевірити на тріски", Ui.Kind.NORMAL) { checkHoles(listOf(r)) }, ui.matchWrap())
             if (isWav(r)) more.addView(ui.iconButton(LineIcon.REPEAT, "Зробити FLAC з обкладинкою", Ui.Kind.NORMAL) { confirmMakeFlac(listOf(r)) }, ui.matchWrap())
             box.addView(more, ui.matchWrap())
         }
@@ -1476,6 +1497,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                     FlacBatch.Mode.RETITLE -> "Беру назви з імен файлів"
                     FlacBatch.Mode.EDIT -> "Змінюю теги й імена"
                     FlacBatch.Mode.TRIM -> "Обрізаю"
+                    FlacBatch.Mode.HOLES -> "Шукаю тріски"
                     FlacBatch.Mode.FLAC -> "Роблю FLAC з обкладинками"
                 }, 19f))
                 addView(text)
@@ -1492,6 +1514,9 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 s.mode == FlacBatch.Mode.RENUMBER && s.cancelled -> "Зупинено: перевірено ${s.index} з ${s.total}, виправлено ${s.made}."
                 s.mode == FlacBatch.Mode.TITLES && s.cancelled -> "Зупинено: назв виправлено ${s.made}."
                 s.mode == FlacBatch.Mode.TRIM && s.cancelled -> "Зупинено: обрізано ${s.made}."
+                s.mode == FlacBatch.Mode.HOLES -> (if (s.cancelled) "Зупинено. " else "") + "Перевірено: ${s.index}. " +
+                    (if (s.report.isEmpty()) "Тріск не знайдено." else "Тріски в ${s.report.size} — їх варто перезаписати:\n" + s.report.joinToString("\n") { "• $it" }) +
+                    "\n\nФайли не змінювались — лише перевірка."
                 s.mode == FlacBatch.Mode.TRIM -> "Обрізано: ${s.made} з ${s.total}. Теги й обкладинка лишились; що зроблено — у подробицях запису."
                 s.mode == FlacBatch.Mode.EDIT && s.cancelled -> "Зупинено: змінено ${s.made}."
                 s.mode == FlacBatch.Mode.EDIT -> "Змінено: ${s.made} з ${s.total} (теги FLAC / MP3, імена файлів, історія; звук той самий)."
@@ -1509,10 +1534,11 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 FlacBatch.Mode.TITLES, FlacBatch.Mode.RETITLE -> "Назви пісень"
                 FlacBatch.Mode.EDIT -> "Теги й імена"
                 FlacBatch.Mode.TRIM -> "Обрізати / затухання"
+                FlacBatch.Mode.HOLES -> "Тріски"
                 FlacBatch.Mode.FLAC -> "FLAC з обкладинками"
             }
             // faric 18.10 15:26: «додай кнопку копіювати текст — тикну й тобі відправлю».
-            val actions = if (s.problems.isEmpty()) listOf("Закрити" to Ui.Kind.QUIET) else listOf("Копіювати" to Ui.Kind.NORMAL, "Закрити" to Ui.Kind.QUIET)
+            val actions = if (s.problems.isEmpty() && s.report.isEmpty()) listOf("Закрити" to Ui.Kind.QUIET) else listOf("Копіювати" to Ui.Kind.NORMAL, "Закрити" to Ui.Kind.QUIET)
             val body = host.overlay.dialog(head2, msg, actions, { i ->
                 if (actions[i].first == "Копіювати") {
                     val cm = host.getSystemService(android.content.ClipboardManager::class.java)
@@ -1527,6 +1553,13 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
     }
 
+    /** T88: перевірити на тріски — лише читає файли, тож без вікна «Зробити?». */
+    private fun checkHoles(rows: List<RecordingRow>) {
+        if (FlacBatch.state.running) { host.toast("Зачекай — ще йде попередня робота"); return }
+        FlacBatch.startHoles(host, rows.map { it.id }.toLongArray())
+        showBatch(FlacBatch.state)
+    }
+
     /** «файл\tпричина» → згруповано за причиною: причина один раз, під нею — файли (faric 18.10 15:26: «дуже багато всього»). */
     private fun problemsText(problems: List<String>): String =
         problems.groupBy({ it.substringAfter('\t', "") }, { it.substringBefore('\t') }).entries.joinToString("\n\n") { (why, names) ->
@@ -1536,6 +1569,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private fun batchLine(s: FlacBatch.State) = when {
         s.index == 0 -> "Готуюсь…" + if (s.total > 0) " (${s.total})" else ""
         s.mode == FlacBatch.Mode.RENUMBER || s.mode == FlacBatch.Mode.TITLES || s.mode == FlacBatch.Mode.RETITLE || s.mode == FlacBatch.Mode.EDIT || s.mode == FlacBatch.Mode.TRIM -> "${s.index} з ${s.total}: ${s.label} · виправлено ${s.made}"
+        s.mode == FlacBatch.Mode.HOLES -> "${s.index} з ${s.total}: ${s.label} · з трісками ${s.made}"
         else -> "${s.index} з ${s.total}: ${s.label} · ${s.percent} %"
     }
 

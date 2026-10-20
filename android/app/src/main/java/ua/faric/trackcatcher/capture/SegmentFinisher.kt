@@ -15,6 +15,7 @@ import ua.faric.trackcatcher.core.ClipCounter
 import ua.faric.trackcatcher.core.EdgeFade
 import ua.faric.trackcatcher.core.FlacEncoder
 import ua.faric.trackcatcher.core.FileNames
+import ua.faric.trackcatcher.core.Holes
 import ua.faric.trackcatcher.core.Id3v2
 import ua.faric.trackcatcher.core.LevelAnalysis
 import ua.faric.trackcatcher.core.Loudness
@@ -66,6 +67,8 @@ class SegmentFinisher(context: Context) {
             verdict = Verdict(RecStatus.SKIPPED, listOf("вже є повний запис цієї пісні"))
         }
 
+        // T88: «тріски» — дірки чистої тиші посеред музики (плеєр не встиг віддати звук). Лише те, що піде у файл.
+        val holes = if (verdict.status == RecStatus.COMPLETE || verdict.status == RecStatus.PARTIAL) findHoles(job.pcmFile, stats) else null
         var mp3: MediaStoreWriter.Saved? = null
         var wav: MediaStoreWriter.Saved? = null
         var bitrate = 0
@@ -133,6 +136,7 @@ class SegmentFinisher(context: Context) {
             wavUri = wav?.uri, wavName = wav?.name, wavSize = wav?.size ?: 0L,
             cutBySilence = job.cutBySilence,
             clips = clips.events.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+            holes = holes,
         )
         // Порожній шматок (менше секунди тиші — напр. «Стоп» одразу після «Почати») в історію не пишемо.
         val empty = verdict.status == RecStatus.SKIPPED && lengthMs < 1_000 && stats.audibleMs == 0L
@@ -150,6 +154,23 @@ class SegmentFinisher(context: Context) {
             .filter { it.hasFile && it.createdAt <= job.closedAt }
         return TrackNumber.all(earlier.map { it.title } + job.meta.title).last()
     }
+
+    /** Дірки тиші в тій частині запису, що йде у файл (час — від початку файлу). null — не вдалося перевірити. */
+    private fun findHoles(file: File, stats: AudioStats): String? = runCatching {
+        val h = Holes()
+        RandomAccessFile(file, "r").use { f ->
+            f.seek(stats.startFrame * Pcm.BYTES_PER_FRAME)
+            var left = stats.keptFrames * Pcm.BYTES_PER_FRAME
+            val buf = ByteArray(256 * 1024)
+            while (left > 0) {
+                val n = f.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
+                if (n <= 0) break
+                h.feed(buf, 0, n - n % 4)
+                left -= n
+            }
+        }
+        Holes.encode(Holes.places(h.result()))
+    }.getOrNull()
 
     private fun yearOf(ms: Long): Int = java.util.Calendar.getInstance().apply { timeInMillis = ms }.get(java.util.Calendar.YEAR)
 
