@@ -26,6 +26,16 @@ val tcKeyPassword = signingValue("TC_KEY_PASSWORD", "keyPassword")
 val tcSigningAvailable = tcKeystoreFile?.isFile == true &&
     !tcStorePassword.isNullOrBlank() && !tcKeyAlias.isNullOrBlank() && !tcKeyPassword.isNullOrBlank()
 
+// Коміт коду, з якого зібрано APK (T94, як в Audio Converter): показується під назвою вгорі.
+val tcCommit: String = try {
+    providers.exec {
+        commandLine("git", "rev-parse", "--short=7", "HEAD")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim().ifBlank { "?" }
+} catch (e: Exception) {
+    "?"
+}
+
 android {
     namespace = "ua.faric.trackcatcher"
     compileSdk = 36
@@ -35,8 +45,9 @@ android {
         // Запис звуку інших застосунків (AudioPlaybackCapture) є лише з Android 10.
         minSdk = 29
         targetSdk = 36
-        versionCode = 52
-        versionName = "0.1.51"
+        versionCode = 53
+        versionName = "0.1.52"
+        buildConfigField("String", "GIT_COMMIT", "\"$tcCommit\"")
     }
 
     signingConfigs {

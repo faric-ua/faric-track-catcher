@@ -128,7 +128,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val follower: (InAppPlayer.Track) -> Unit = { t -> follow(t) }
 
     override fun onStart() {
-        unobserve = HistoryDb.observe { reload(); checkMissing() }
+        unobserve = HistoryDb.observe { fileInfoCache = null; reload(); checkMissing() } // теги змінились — «Про файл» читати наново
         unobserveBatch = FlacBatch.observe { onBatch(it) }
         InAppPlayer.onTrackChanged = follower
         checkMissing()
@@ -181,7 +181,11 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             }
             KEY_EDIT -> return showEditor()
             KEY_TRIM -> return showTrim()
-            KEY_RELINK_DONE, KEY_RELINK_RUN -> {
+            KEY_RELINK_RUN -> {
+                if (RelinkScan.running) showRelinkWaiting() else showRelink(RelinkScan.last ?: return false)
+                return true
+            }
+            KEY_RELINK_DONE -> {
                 showRelink(RelinkScan.last ?: return false)
                 return true
             }
@@ -904,27 +908,44 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         val name = (if (uri == r.wavUri) r.wavName else r.mp3Name) ?: ""
         val store = MediaStoreWriter(host)
         val app = host.applicationContext
+        val key = "fileinfo:${r.id}"
+        // Поворот (faric 21.10 01:17: «вікно "Про файл" після перевороту пропадає»): файл на M30s читається кілька
+        // секунд, і весь цей час вікна не було — ще один поворот, і воно губилось зовсім. Тепер: прочитане — з пам'яті
+        // одразу, а поки читається — вікно «Читаю файл…» з тим самим ключем (переживе й наступний поворот).
+        fun showPanel(info: FileTags.FileInfo, size: Long, folder: String?) {
+            val extra = FileInfoPanel.Extra(
+                recorded = recordedFacts(r),
+                historyArtwork = r.artworkPath,
+                clips = r.clips,
+                makeFlac = if (isWav(r) && uri == r.wavUri) ({ confirmMakeFlac(listOf(r)) }) else null,
+            )
+            host.overlay.show(key, FileInfoPanel(host).build(info, name, folder, size, extra) { closeFileInfo(r) })
+        }
+        fileInfoCache?.takeIf { it.uri == uri && System.currentTimeMillis() - it.at < 10 * 60_000L }?.let { c ->
+            showPanel(c.info, c.size, c.folder)
+            return
+        }
+        host.overlay.show(key, ui.column(12).apply {
+            addView(ui.title("Про файл", 19f))
+            addView(ui.muted("Читаю файл…\n$name", 14.5f))
+            addView(ui.button("Закрити", Ui.Kind.QUIET) { closeFileInfo(r) }, ui.matchWrap())
+        }, placeholder = true)
         Thread({
             val result = runCatching {
                 val size = store.sizeOf(uri)
-                app.contentResolver.openInputStream(Uri.parse(uri))?.buffered(64 * 1024)?.use { FileTags.read(it, size, name) to size }
+                val info = app.contentResolver.openInputStream(Uri.parse(uri))?.buffered(64 * 1024)?.use { FileTags.read(it, size, name) }
                     ?: throw java.io.IOException("файл не відкривається — можливо, його прибрали в «Моїх файлах»")
+                FileInfoCache(uri, info, size, store.folderLabel(uri)).also { fileInfoCache = it }
             }
-            val folder = store.folderLabel(uri)
             host.runOnUiThread {
-                if (host.isFinishing || host.isDestroyed) return@runOnUiThread
+                // Новий екран після повороту покаже з пам'яті сам; цей — лише якщо досі чекає саме на це вікно.
+                if (host.isFinishing || host.isDestroyed || host.overlay.key != key) return@runOnUiThread
                 result.fold(
-                    { (info, size) ->
-                        val extra = FileInfoPanel.Extra(
-                            recorded = recordedFacts(r),
-                            historyArtwork = r.artworkPath,
-                            clips = r.clips,
-                            makeFlac = if (isWav(r) && uri == r.wavUri) ({ confirmMakeFlac(listOf(r)) }) else null,
-                        )
-                        val view = FileInfoPanel(host).build(info, name, folder, size, extra) { closeFileInfo(r) }
-                        host.overlay.show("fileinfo:${r.id}", view)
+                    { c -> showPanel(c.info, c.size, c.folder) },
+                    { e ->
+                        host.overlay.dismiss()
+                        host.toast("Не вдалося прочитати файл: ${e.message ?: e.javaClass.simpleName}")
                     },
-                    { e -> host.toast("Не вдалося прочитати файл: ${e.message ?: e.javaClass.simpleName}") },
                 )
             }
         }, "file-info").start()
@@ -1413,21 +1434,35 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             return
         }
         val ids = missing.toList()
+        if (RelinkScan.running) { showRelinkWaiting(); return }
+        RelinkScan.running = true
+        RelinkScan.last = null
+        RelinkScan.lastError = null
+        val app = host.applicationContext
+        Thread({
+            runCatching { RelinkScan.last = RelinkScan.scan(app, ids) }.onFailure { RelinkScan.lastError = ua.faric.trackcatcher.core.ErrorText.human(it) }
+            RelinkScan.running = false
+        }, "relink-scan").start()
+        showRelinkWaiting()
+    }
+
+    /** «Шукаю…» і чекати кінця пошуку — так вікно переживає поворот (пошук іде окремо від екрана). */
+    private fun showRelinkWaiting() {
         host.overlay.show(KEY_RELINK_RUN, ui.column(12).apply {
             addView(ui.title("Шукаю перейменовані файли", 19f))
             addView(ui.muted("Дивлюсь у папки, де лежали файли, яких нема на місці: нові файли тієї самої довжини (і з тією самою назвою в тегах). Файли не чіпаю.", 14f).apply { minLines = 3 })
         }, dismissOnOutside = false)
-        val app = host.applicationContext
-        Thread({
-            val result = runCatching { RelinkScan.scan(app, ids) }
-            host.runOnUiThread {
-                if (host.isFinishing || host.isDestroyed) return@runOnUiThread
-                result.fold({ showRelink(it) }, { e ->
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        handler.post(object : Runnable {
+            override fun run() {
+                if (host.isFinishing || host.isDestroyed || host.overlay.key != KEY_RELINK_RUN) return
+                if (RelinkScan.running) { handler.postDelayed(this, 300); return }
+                RelinkScan.last?.let { showRelink(it) } ?: run {
                     host.overlay.dismiss()
-                    host.toast("Не вдалося: ${ua.faric.trackcatcher.core.ErrorText.human(e)}")
-                })
+                    host.toast("Не вдалося: ${RelinkScan.lastError ?: "невідома помилка"}")
+                }
             }
-        }, "relink-scan").start()
+        })
     }
 
     private fun showRelink(r: RelinkScan.Result) {
@@ -1617,6 +1652,11 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         private const val KEY_FILTER = "filter"
         private const val KEY_QUERY = "query"
         private const val KEY_SELECTED = "selected"
+
+        /** Останній прочитаний «Про файл»: після повороту вікно одразу на місці. */
+        private class FileInfoCache(val uri: String, val info: FileTags.FileInfo, val size: Long, val folder: String?, val at: Long = System.currentTimeMillis())
+
+        @Volatile private var fileInfoCache: FileInfoCache? = null
         private const val KEY_LISTEN_WAV = "listen_wav"
         private const val KEY_GROUP = "group"
         private const val KEY_PICKED = "picked"
