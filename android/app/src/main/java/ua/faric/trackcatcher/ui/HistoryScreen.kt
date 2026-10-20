@@ -706,7 +706,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
         if (r.holes != null && r.hasFile) {
             val places = Holes.decode(r.holes)
-            facts.addView(ui.fact("Тріски", if (places.isEmpty()) "немає" else Holes.describe(places) + " — дірки тиші посеред музики; цю пісню краще перезаписати"))
+            facts.addView(ui.fact("Тріски", if (places.isEmpty()) "немає" else Holes.describe(places) + " — дірки тиші посеред музики. Track Catcher пише звук таким, яким він приходить: дірка була вже в тому, що грав плеєр (інтернет, сервер, плеєр). Цю пісню краще перезаписати"))
         }
         if (r.sourcePackage.isNotBlank()) facts.addView(ui.fact("Плеєр", appLabel(r.sourcePackage)))
         facts.addView(ui.fact("Коли", TimeText.dateTime(r.createdAt)))
@@ -1516,7 +1516,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 s.mode == FlacBatch.Mode.TRIM && s.cancelled -> "Зупинено: обрізано ${s.made}."
                 s.mode == FlacBatch.Mode.HOLES -> (if (s.cancelled) "Зупинено. " else "") + "Перевірено: ${s.index}. " +
                     (if (s.report.isEmpty()) "Тріск не знайдено." else "Тріски в ${s.report.size} — їх варто перезаписати:\n" + s.report.joinToString("\n") { "• $it" }) +
-                    "\n\nФайли не змінювались — лише перевірка."
+                    "\n\nФайли не змінювались — лише перевірка." +
+                    (if (s.report.isEmpty()) "" else "\nTrack Catcher пише звук таким, яким він приходить: дірки були вже в тому, що грав плеєр (інтернет, сервер, сам плеєр).")
                 s.mode == FlacBatch.Mode.TRIM -> "Обрізано: ${s.made} з ${s.total}. Теги й обкладинка лишились; що зроблено — у подробицях запису."
                 s.mode == FlacBatch.Mode.EDIT && s.cancelled -> "Зупинено: змінено ${s.made}."
                 s.mode == FlacBatch.Mode.EDIT -> "Змінено: ${s.made} з ${s.total} (теги FLAC / MP3, імена файлів, історія; звук той самий)."
