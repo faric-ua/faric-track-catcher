@@ -9,6 +9,8 @@ class TrackCatcherApp : Application() {
         super.onCreate()
         ua.faric.trackcatcher.core.AppInfo.versionName = BuildConfig.VERSION_NAME
         ua.faric.trackcatcher.core.AppInfo.versionCode = BuildConfig.VERSION_CODE
+        // Запис обірвався разом із застосунком чи була помилка — пояснити на екрані «Запис» (faric 20.10 17:10).
+        ua.faric.trackcatcher.state.LastExit.install(this)
         val nm = getSystemService(NotificationManager::class.java)
         val channel = NotificationChannel(CHANNEL_RECORDING, "Запис", NotificationManager.IMPORTANCE_LOW).apply {
             description = "Повідомлення під час запису: що пишеться і кнопка «Стоп»"
