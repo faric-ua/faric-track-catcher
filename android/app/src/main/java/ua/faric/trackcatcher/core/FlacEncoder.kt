@@ -190,7 +190,8 @@ class FlacEncoder(
 
     companion object {
         const val BLOCK = 4096
-        const val VENDOR = "Track Catcher"
+        /** Хто записав — з версією ([AppInfo]). */
+        val VENDOR: String get() = AppInfo.encoder
         /** Молодші 32 біти (через зсув, а не шістнадцятковим числом — аудит UI сприймає такі числа за кольори). */
         const val MASK32 = (1L shl 32) - 1
         private const val KIND_CONSTANT = 0

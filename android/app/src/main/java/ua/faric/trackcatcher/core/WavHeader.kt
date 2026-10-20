@@ -30,7 +30,7 @@ object WavHeader {
         if (meta.album.isNotBlank()) add("IPRD" to meta.album.trim())
         if (meta.trackNo > 0) add("ITRK" to meta.trackNo.toString())
         if (meta.year > 0) add("ICRD" to meta.year.toString())
-        add("ISFT" to "Track Catcher")
+        add("ISFT" to AppInfo.encoder)
     }
 
     private fun infoChunk(info: List<Pair<String, String>>): ByteArray {
