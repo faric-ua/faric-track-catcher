@@ -75,6 +75,17 @@ object DriveUpdate {
     /** Код, з яким варто спробувати ще раз: тимчасовий збій Google (5xx) чи «забагато запитів» (429). */
     fun retryable(code: Int): Boolean = code == 429 || code in 500..599
 
+    /**
+     * Після «Опублікувати зараз» (faric 20.10 15:06: «опублікував, а її там нема — не перший раз»): запис через
+     * Google Диск на телефоні лише ставить файл у чергу — вивантажує застосунок Диска у фоні, коли захоче.
+     * Тому перевіряємо, що бачать інші телефони: файл версії з інтернету — саме наш (номер збірки й SHA).
+     */
+    fun manifestIsOurs(m: Manifest?, versionCode: Long, sha256: String, size: Long): Boolean =
+        m != null && m.versionCode == versionCode && m.apkSha256.equals(sha256, ignoreCase = true) && m.apkSize == size
+
+    /** Чекаємо вивантаження: перевірки через 15 с, далі що 30 с, разом до ~6 хв. */
+    val PUBLISH_CHECKS_MS = longArrayOf(15_000, 30_000, 30_000, 30_000, 30_000, 45_000, 60_000, 60_000, 60_000)
+
     fun viewUrl(fileId: String): String = "https://drive.google.com/file/d/$fileId/view"
 
     /** Закритий чи видалений файл Диск віддає HTML-сторінкою входу/помилки, а не файлом. */

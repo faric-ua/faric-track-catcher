@@ -376,10 +376,17 @@ class UpdateUi(private val host: MainActivity) {
                 )
                 Updater.setProgress("Записую файл версії…")
                 writeText(resolver, Uri.parse(jsonUri), manifest.toJson())
-                ok = true
-                "Опубліковано ${BuildConfig.VERSION_NAME} (${DriveUpdate.formatMb(done)}) · " +
-                    SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date()) +
-                    "\nGoogle Диск вивантажує файл у фоні — інші телефони побачать його за кілька хвилин."
+                val time = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date())
+                // Записали — ще не значить вивантажили: Google Диск робить це у фоні. Перевіряємо, як інші телефони.
+                val seen = waitUntilPublished(manifest, prefs.getString(KEY_JSON_ID, "").orEmpty().ifBlank { manifestId().orEmpty() })
+                ok = seen == null
+                if (ok) {
+                    "Опубліковано й перевірено ${BuildConfig.VERSION_NAME} · збірка ${BuildConfig.VERSION_CODE} (${DriveUpdate.formatMb(done)}) · $time\n" +
+                        "Інші телефони вже бачать цю версію: файл версії й APK з інтернету — саме ці."
+                } else {
+                    "НЕ ДІЙШЛО до Диска (записано на телефоні $time, але за 6 хв Google Диск не вивантажив).\n$seen\n\n" +
+                        "Що зробити: відкрий застосунок Google Диск (там видно вивантаження), перевір інтернет, і натисни «Опублікувати зараз» ще раз."
+                }
             } catch (e: SecurityException) {
                 "Доступ до файлу на Диску втрачено — «Почати налаштування заново»."
             } catch (e: Exception) {
@@ -388,8 +395,42 @@ class UpdateUi(private val host: MainActivity) {
             prefs.edit().putString(KEY_LAST_RESULT, outcome).apply()
             Updater.busy = false
             Updater.setProgress(outcome, finished = true)
-            Updater.onMain { it.toast(if (ok) "Опубліковано на Диск" else "Публікація не вдалася — подробиці у «Опублікувати цю версію на Диск»") }
+            Updater.onMain { it.toast(if (ok) "Опубліковано й перевірено на Диску" else "Публікація не дійшла до Диска — подробиці у «Опублікувати цю версію на Диск»") }
         }, "update-publish").start()
+    }
+
+    /**
+     * Чекає, поки опублікована версія стане видна з інтернету (як її бачать інші телефони). null — так, видно;
+     * інакше — що там зараз (для пояснення).
+     */
+    private fun waitUntilPublished(m: DriveUpdate.Manifest, manifestId: String): String? {
+        if (manifestId.isBlank()) return "Нема посилання на файл версії — перевірити нема чим."
+        var last = "На Диску поки стара версія."
+        val started = System.currentTimeMillis()
+        for (delay in DriveUpdate.PUBLISH_CHECKS_MS) {
+            val waited = (System.currentTimeMillis() - started) / 1000
+            Updater.setProgress("Записано. Чекаю, поки Google Диск вивантажить… (${waited / 60}:${"%02d".format(waited % 60)})\nМожна сховати — перевірка йде далі.")
+            Thread.sleep(delay)
+            try {
+                val online = DriveUpdate.Manifest.parse(DriveHttp.readText(manifestId, 64 * 1024))
+                if (!DriveUpdate.manifestIsOurs(online, m.versionCode, m.apkSha256, m.apkSize)) {
+                    last = "Файл версії на Диску: ${online.versionName} · збірка ${online.versionCode}."
+                    continue
+                }
+                Updater.setProgress("Файл версії вже на Диску. Звіряю APK…")
+                val apk = DriveHttp.download(m.apkId, Discard, m.apkSize + 1, expectApk = true, progress = null)
+                if (apk.size == m.apkSize && apk.sha256.equals(m.apkSha256, ignoreCase = true)) return null
+                last = "Файл версії вже новий, а APK на Диску ще старий (${DriveUpdate.formatMb(apk.size)})."
+            } catch (e: Exception) {
+                last = "Перевірка не вдалась: " + (e.message ?: "немає зв'язку")
+            }
+        }
+        return last
+    }
+
+    private object Discard : java.io.OutputStream() {
+        override fun write(b: Int) {}
+        override fun write(b: ByteArray, off: Int, len: Int) {}
     }
 
     // ---------- кожен телефон: перевірити, завантажити, встановити ----------
