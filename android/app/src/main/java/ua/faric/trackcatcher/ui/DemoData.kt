@@ -63,8 +63,11 @@ object DemoData {
                 ),
             )
         }
-        realFile(context, session, start + 28 * 60_000L)
         db.endSession(session, start + 30 * 60_000L)
+        // Друга сесія того самого альбому «Касета» — щоб у «Альбомах» були сесії всередині альбому (T89).
+        val second = db.startSession(start + 32 * 60_000L, "WAV")
+        realFile(context, second, start + 34 * 60_000L)
+        db.endSession(second, start + 36 * 60_000L)
     }
 
     /**
