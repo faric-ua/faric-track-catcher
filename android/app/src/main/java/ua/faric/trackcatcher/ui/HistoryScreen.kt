@@ -93,6 +93,16 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val rowViews = HashMap<Long, View>()
     private var rows: List<RecordingRow> = emptyList()
 
+    /**
+     * T89: які групи користувач перемкнув (відкрив, коли типово закриті, або закрив, коли типово відкриті).
+     * «g:<альбом>» — альбом / виконавець, «s:<сесія>» — сесія, «gs:<альбом>:<сесія>» — сесія всередині альбому.
+     */
+    private val toggled = LinkedHashSet<String>().apply { state?.getStringArray(KEY_TOGGLED)?.forEach { add(it) } }
+    /** Записи, які зараз видно (у відкритих групах) — «Вибрати всі видимі» бере лише їх. */
+    private val shownIds = LinkedHashSet<Long>()
+    private lateinit var listScroll: android.widget.ScrollView
+    private val marquee by lazy { GroupTile.Companion.Marquee(listScroll) }
+
     init {
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -111,7 +121,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
         val listColumn = ui.column().apply {
             addView(top, ui.matchWrap())
-            addView(ui.scroll(list, 16), ui.weight(1f, vertical = true))
+            addView(ui.scroll(list, 16).also { s ->
+                listScroll = s
+                s.setOnScrollChangeListener { _, _, _, _, _ -> marquee.restart() } // T89: назви альбомів — біжучий рядок
+            }, ui.weight(1f, vertical = true))
         }
         view = if (detailPane != null) {
             ui.row().apply {
@@ -138,6 +151,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     }
 
     override fun onStop() {
+        marquee.stop()
         unobserve?.invoke()
         unobserve = null
         unobserveBatch?.invoke()
@@ -152,6 +166,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         out.putBoolean(KEY_LISTEN_WAV, listenWav)
         out.putLongArray(KEY_PICKED, picked.toLongArray())
         out.putString(KEY_GROUP, group.code)
+        out.putStringArray(KEY_TOGGLED, toggled.toTypedArray())
     }
 
     override val wantsBack: Boolean get() = picked.isNotEmpty()
@@ -287,8 +302,8 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             checkHoles(pickedCheck.sortedBy { it.createdAt })
         })
         actions.addView(ui.button("Видалити (${picked.size})", Ui.Kind.DANGER) { confirmDeleteMany() })
-        if (rows.any { it.id !in picked }) actions.addView(ui.button("Вибрати всі видимі", Ui.Kind.NORMAL) {
-            rows.forEach { picked += it.id }
+        if (shownIds.any { it !in picked }) actions.addView(ui.button("Вибрати всі видимі", Ui.Kind.NORMAL) {
+            shownIds.forEach { picked += it } // лише те, що видно: у закритих групах нічого не вибирається
             reload()
         })
         actions.addView(ui.button("Скасувати", Ui.Kind.QUIET) { clearPicked() })
@@ -378,9 +393,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         rows = if (group == Group.SESSIONS) found else Playlist.groupInOrder(found) { groupKeyOf(it) }.flatMap { it.second }
         renderGroupChips()
         renderChips(db.counts())
-        renderPickBar()
         list.removeAllViews()
         rowViews.clear()
+        shownIds.clear()
+        marquee.clear()
         if (rows.isEmpty()) {
             list.addView(ui.card(8).apply {
                 addView(ui.title(if (query.isBlank() && filter == null) "Поки порожньо" else "Нічого не знайдено", 17f))
@@ -411,23 +427,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                     addView(ui.iconButton(LineIcon.LIST, "Перевірити номери в усіх альбомах", Ui.Kind.NORMAL) { confirmRenumber(taggable) }, ui.matchWrap())
                 }, ui.matchWrap())
             }
-            if (group == Group.SESSIONS) {
-                val sessions = db.sessions()
-                var currentSession = -1L
-                for (r in rows) {
-                    if (r.sessionId != currentSession) {
-                        currentSession = r.sessionId
-                        list.addView(sessionHeader(sessions[r.sessionId], rows.filter { it.sessionId == r.sessionId }), ui.matchWrap())
-                    }
-                    list.addView(rowView(r), ui.matchWrap())
-                }
-            } else {
-                for ((_, members) in Playlist.groupInOrder(rows) { groupKeyOf(it) }) {
-                    list.addView(groupHeader(members), ui.matchWrap())
-                    for (r in members) list.addView(rowView(r), ui.matchWrap())
-                }
-            }
+            renderGroups()
         }
+        renderPickBar() // після списку: «Вибрати всі видимі» знає, що видно
+        marquee.restart()
         detailPane?.let { pane ->
             val selected = rows.firstOrNull { it.id == selectedId } ?: db.get(selectedId)
             pane.removeAllViews()
@@ -440,6 +443,112 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 }, ui.matchWrap())
             }
         }
+    }
+
+    // ---------- T89: закриті / відкриті групи ----------
+
+    private fun recordingSessionId(): Long =
+        RecorderHub.state.takeIf { it.phase == RecorderHub.Phase.RECORDING }?.sessionId ?: -1L
+
+    /** Відкрита група? Пошук розкриває все; сесія, що зараз пишеться, — завжди відкрита. */
+    private fun isOpen(key: String, sessionId: Long = -1L): Boolean {
+        if (query.isNotBlank()) return true
+        if (sessionId >= 0 && sessionId == recordingSessionId()) return true
+        return prefs.historyOpen != (key in toggled)
+    }
+
+    private fun toggle(key: String) {
+        if (!toggled.remove(key)) toggled += key
+        reload()
+    }
+
+    /** «Розгорнути всі» / «Згорнути всі» (лише верхній рівень; сесії в альбомах — як були). */
+    private fun setAll(open: Boolean, keys: List<String>) {
+        toggled.removeAll { it in keys }
+        if (open != prefs.historyOpen) toggled += keys
+        reload()
+    }
+
+    /** Позначки на закритій плитці: що там не так (видно, не відкриваючи). */
+    private fun marks(members: List<RecordingRow>): List<Pair<String, Int>> = buildList {
+        val holes = members.count { Holes.decode(it.holes).isNotEmpty() }
+        if (holes > 0) add("тріски: $holes" to Palette.warning)
+        val gone = members.count { it.id in missing }
+        if (gone > 0) add("файлів нема: $gone" to Palette.warning)
+        val failed = members.count { it.status == RecStatus.FAILED }
+        if (failed > 0) add("невдалих: $failed" to Palette.danger)
+    }
+
+    private fun countLine(members: List<RecordingRow>, extra: String = ""): String = buildString {
+        append(TimeText.plural(members.size, "пісня", "пісні", "пісень"))
+        val withFiles = members.filter { it.hasFile }
+        if (withFiles.isNotEmpty()) append(" · ").append(TimeText.clock(withFiles.sumOf { it.lengthMs }))
+        if (extra.isNotBlank()) append(" · ").append(extra)
+    }
+
+    private fun groupArt(members: List<RecordingRow>, sizeDp: Int): View? =
+        members.firstOrNull { it.artworkPath != null }?.let { thumb(it, sizeDp) }
+
+    private fun tile(key: String, title: String, sub: String, members: List<RecordingRow>, open: Boolean, nested: Boolean): View {
+        val t = GroupTile(host, ui, title, sub, marks(members), groupArt(members, if (nested) 40 else 52), open, nested) { toggle(key) }
+        marquee.add(t)
+        return t
+    }
+
+    private fun addRows(members: List<RecordingRow>, indentDp: Int = 0) {
+        for (r in members) {
+            shownIds += r.id
+            list.addView(rowView(r), ui.matchWrap().apply { leftMargin = ui.dp(indentDp) })
+        }
+    }
+
+    private fun renderGroups() {
+        val sessions = db.sessions()
+        if (group == Group.SESSIONS) {
+            val bySession = Playlist.groupInOrder(rows) { it.sessionId.toString() }
+            val keys = bySession.map { "s:${it.first}" }
+            if (bySession.size > 1 && query.isBlank()) list.addView(allRow(keys), ui.matchWrap())
+            for ((sid, members) in bySession) {
+                val s = sessions[sid.toLong()]
+                val key = "s:$sid"
+                val open = isOpen(key, sid.toLong())
+                val fmt = s?.formatLabel.orEmpty()
+                list.addView(tile(key, sessionTitle(s), countLine(members, fmt), members, open, nested = false), ui.matchWrap())
+                if (!open) continue
+                sessionActions(members)?.let { list.addView(it, ui.matchWrap()) }
+                addRows(members)
+            }
+            return
+        }
+        val groups = Playlist.groupInOrder(rows) { groupKeyOf(it) }
+        val keys = groups.map { "g:${it.first}" }
+        if (groups.size > 1 && query.isBlank()) list.addView(allRow(keys), ui.matchWrap())
+        for ((gk, members) in groups) {
+            val key = "g:$gk"
+            val open = isOpen(key)
+            list.addView(tile(key, groupTitle(members.first()), countLine(members), members, open, nested = false), ui.matchWrap())
+            if (!open) continue
+            groupActions(members)?.let { list.addView(it, ui.matchWrap()) }
+            // T89 (faric 21.10 20:14): альбом записано за кілька сесій — усередині сесії теж закритими плитками.
+            val bySession = Playlist.groupInOrder(members) { it.sessionId.toString() }
+            if (bySession.size < 2) {
+                addRows(members)
+                continue
+            }
+            for ((sid, part) in bySession) {
+                val sk = "gs:$gk:$sid"
+                val sOpen = isOpen(sk, sid.toLong())
+                list.addView(tile(sk, "Сесія " + sessionTitle(sessions[sid.toLong()]), countLine(part), part, sOpen, nested = true),
+                    ui.matchWrap().apply { leftMargin = ui.dp(16) })
+                if (sOpen) addRows(part, indentDp = 16)
+            }
+        }
+    }
+
+    /** «Розгорнути всі» · «Згорнути всі». */
+    private fun allRow(keys: List<String>): View = FlowLayout(host, ui.dp(8), ui.dp(8)).apply {
+        addView(ui.button("Розгорнути всі", Ui.Kind.QUIET) { setAll(true, keys) })
+        addView(ui.button("Згорнути всі", Ui.Kind.QUIET) { setAll(false, keys) })
     }
 
     private fun renderGroupChips() {
@@ -466,20 +575,14 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private fun scope(r: RecordingRow): List<RecordingRow> =
         if (group == Group.SESSIONS) rows else groupKeyOf(r).let { k -> rows.filter { groupKeyOf(it) == k } }
 
-    /** Шапка альбому / виконавця: назва, скільки пісень і часу, «Слухати» й «Поділитись» (T61). */
-    private fun groupHeader(members: List<RecordingRow>): View {
-        val first = members.first()
-        val name = groupName(first).ifBlank { if (group == Group.ALBUMS) "Без альбому" else "Невідомий виконавець" }
+    private fun groupTitle(first: RecordingRow): String =
+        groupName(first).ifBlank { if (group == Group.ALBUMS) "Без альбому" else "Невідомий виконавець" }
+
+    /** Дії альбому / виконавця (T61…T88): «Слухати», «Поділитись», теги, тріски… — під відкритою плиткою групи. */
+    private fun groupActions(members: List<RecordingRow>): View? {
+        val name = groupTitle(members.first())
         val withFiles = members.filter { it.hasFile }
         val box = ui.card(8)
-        box.addView(ui.label(name, if (group == Group.ALBUMS) LineIcon.DISC else LineIcon.LIST))
-        box.addView(ui.numbers(ui.muted(buildString {
-            append(TimeText.plural(members.size, "запис", "записи", "записів"))
-            if (withFiles.isNotEmpty()) {
-                append(" · ").append(TimeText.plural(withFiles.size, "файл", "файли", "файлів"))
-                append(" · ").append(TimeText.clock(withFiles.sumOf { it.lengthMs }))
-            }
-        }, 13.5f)))
         if (withFiles.isNotEmpty()) {
             val actions = FlowLayout(host, ui.dp(8), ui.dp(8))
             actions.addView(ui.iconButton(LineIcon.PLAY, "Слухати", Ui.Kind.PRIMARY) { listenGroup(withFiles) })
@@ -504,7 +607,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             }
             box.addView(actions, ui.matchWrap())
         }
-        return box
+        return if (box.childCount == 0) null else box
     }
 
     /** Альбом з першої пісні (найстарішої — як у плеєрі), далі сам по черзі. */
@@ -552,25 +655,19 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         reload()
     }
 
-    private fun sessionHeader(s: SessionRow?, members: List<RecordingRow>): View {
-        val count = members.size
-        val text = if (s == null) {
-            "Сесія"
-        } else {
-            buildString {
-                append(TimeText.dateTime(s.startedAt))
-                if (s.stoppedAt > 0) append("–").append(TimeText.time(s.stoppedAt))
-                append(" · ").append(TimeText.plural(count, "запис", "записи", "записів"))
-                if (s.formatLabel.isNotBlank()) append(" · ").append(s.formatLabel)
-            }
-        }
-        val label = ui.numbers(ui.label(text)).apply { setPadding(ui.dp(4), ui.dp(8), ui.dp(4), 0) }
+    /** «20.10, 14:13–14:40» — коли була сесія. */
+    private fun sessionTitle(s: SessionRow?): String = if (s == null) "Сесія" else buildString {
+        append(TimeText.dateTime(s.startedAt))
+        if (s.stoppedAt > 0) append("–").append(TimeText.time(s.stoppedAt))
+    }
+
+    /** Дії сесії (T69, T78, T79, T88) — під відкритою плиткою сесії. */
+    private fun sessionActions(members: List<RecordingRow>): View? {
         // T69 (faric 17.10 21:45: «по одній — бажання нема»): уся сесія одним натиском.
         val wavs = members.filter { isWav(it) }
         val editable = members.filter { it.hasFile && it.id !in missing }
-        if ((wavs.isEmpty() && editable.isEmpty()) || picked.isNotEmpty()) return label
+        if ((wavs.isEmpty() && editable.isEmpty()) || picked.isNotEmpty()) return null
         return ui.column(6).apply {
-            addView(label)
             val row = FlowLayout(host, ui.dp(8), ui.dp(8))
             if (wavs.isNotEmpty()) row.addView(ui.iconButton(LineIcon.DISC, "Сесію в FLAC з обкладинками (${wavs.size})", Ui.Kind.NORMAL) { confirmMakeFlac(wavs) })
             // T78 (faric 19.10 19:46: «сесію нажав — змінити метадані сесії»).
@@ -1652,6 +1749,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         private const val KEY_FILTER = "filter"
         private const val KEY_QUERY = "query"
         private const val KEY_SELECTED = "selected"
+        private const val KEY_TOGGLED = "toggled"
 
         /** Останній прочитаний «Про файл»: після повороту вікно одразу на місці. */
         private class FileInfoCache(val uri: String, val info: FileTags.FileInfo, val size: Long, val folder: String?, val at: Long = System.currentTimeMillis())

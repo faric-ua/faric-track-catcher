@@ -137,6 +137,11 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_HISTORY_GROUP, "sessions") ?: "sessions"
         set(v) = prefs.edit().putString(KEY_HISTORY_GROUP, v).apply()
 
+    /** T89: групи в «Історії» одразу відкриті (true) чи закриті (false, типово — faric 21.10 20:13). */
+    var historyOpen: Boolean
+        get() = prefs.getBoolean(KEY_HISTORY_OPEN, false)
+        set(v) = prefs.edit().putBoolean(KEY_HISTORY_OPEN, v).apply()
+
     var onlyPlayer: Boolean
         get() = prefs.getBoolean(KEY_ONLY_PLAYER, true)
         set(v) = prefs.edit().putBoolean(KEY_ONLY_PLAYER, v).apply()
@@ -200,13 +205,14 @@ class Settings(context: Context) {
         private const val KEY_CUT_SHIFT_V2 = "cut_shift_v2"
         private const val KEY_ONLY_PLAYER = "only_player"
         private const val KEY_HISTORY_GROUP = "history_group"
+        private const val KEY_HISTORY_OPEN = "history_open"
         private const val KEY_REPLAY_GAIN = "replay_gain"
         private const val KEY_ENCODE_TIMING = "encode_timing"
 
         private val PORTABLE = mapOf(
             KEY_FORMAT to Kind.STRING, KEY_BITRATE to Kind.INT, KEY_MIN_LENGTH to Kind.INT, KEY_REPEAT to Kind.STRING,
             KEY_ALBUM_FOLDERS to Kind.BOOL, KEY_TRIM_EDGES to Kind.BOOL, KEY_FADE_MS to Kind.INT, KEY_CUT_SHIFT_MS to Kind.INT,
-            KEY_PLAIN_NAMES to Kind.BOOL, KEY_ONLY_PLAYER to Kind.BOOL, KEY_HISTORY_GROUP to Kind.STRING, KEY_REPLAY_GAIN to Kind.BOOL,
+            KEY_PLAIN_NAMES to Kind.BOOL, KEY_ONLY_PLAYER to Kind.BOOL, KEY_HISTORY_GROUP to Kind.STRING, KEY_HISTORY_OPEN to Kind.BOOL, KEY_REPLAY_GAIN to Kind.BOOL,
         )
         const val MAX_STOP_AFTER = 999
         const val MAX_STOP_AFTER_MIN = 24 * 60

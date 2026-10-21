@@ -15,6 +15,18 @@ rotate() {
   sleep 4
 }
 start() { adb shell am start -n "$ACT" "$@" >/dev/null; }
+# Торкнутись першого елемента, текст якого починається з "$1" (за знімком розмітки екрана).
+tap_text() {
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+  local b
+  b=$(adb shell cat /sdcard/ui.xml | tr '>' '\n' | grep -m1 "text=\"$1" | sed -n 's/.*bounds="\[\([0-9]*\),\([0-9]*\)\]\[\([0-9]*\),\([0-9]*\)\]".*/\1 \2 \3 \4/p')
+  if [ -n "$b" ]; then
+    set -- $b
+    adb shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 ))
+  else
+    echo "не знайшов на екрані: $1"
+  fi
+}
 
 adb wait-for-device
 adb shell settings put global window_animation_scale 0
@@ -46,6 +58,13 @@ shot p04-history
 # Групи в історії (T61): «Альбоми», потім назад «Сесії» (вибір зберігається).
 adb shell input tap 546 494
 shot p04b-history-albums
+# T89: закриті плитки — розкрити альбом «Касета», потім першу сесію всередині.
+tap_text "Касета"
+shot p04c-album-open
+tap_text "Сесія "
+shot p04d-album-session-open
+tap_text "Касета"
+sleep 1
 adb shell input tap 320 494
 sleep 1
 start --es tab HISTORY --es dialog detail:3

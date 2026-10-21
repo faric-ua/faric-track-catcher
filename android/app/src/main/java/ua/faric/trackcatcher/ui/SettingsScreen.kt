@@ -34,6 +34,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private val encodeCard = ui.card(12)
     private val lengthCard = ui.card(12)
     private val repeatCard = ui.card(12)
+    private val historyCard = ui.card(10)
     private val soundCard = ui.card(12)
     private val loudCard = ui.card(12)
     private val edgesCard = ui.card(12)
@@ -79,12 +80,12 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             addView(autoSlot, ui.matchWrap())
         }
         val updateCard = UpdateUi(host).card()
-        val all = listOf(formatCard, encodeCard, qualityCard, lengthCard, repeatCard, soundCard, loudCard, edgesCard, folderCard, backupCard, permsSlot, updateCard, aboutCard)
+        val all = listOf(formatCard, encodeCard, qualityCard, lengthCard, repeatCard, soundCard, loudCard, edgesCard, historyCard, folderCard, backupCard, permsSlot, updateCard, aboutCard)
         view = if (ui.twoPane) {
             val left = ui.column(12)
             val right = ui.column(12)
             listOf(formatCard, encodeCard, qualityCard, lengthCard, repeatCard, soundCard, loudCard, edgesCard).forEach { left.addView(it, ui.matchWrap()) }
-            listOf(folderCard, backupCard, permsSlot, updateCard, aboutCard).forEach { right.addView(it, ui.matchWrap()) }
+            listOf(historyCard, folderCard, backupCard, permsSlot, updateCard, aboutCard).forEach { right.addView(it, ui.matchWrap()) }
             ui.scroll(ui.row(12).apply {
                 gravity = Gravity.TOP
                 addView(left, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -215,6 +216,18 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         ))
 
         // T43 (faric 14.10 19:48: «приходять повідомлення — звук буль-буль — і додаток їх записує»).
+        // T89 (faric 21.10 20:13): альбоми й сесії в «Історії» — одразу закриті чи відкриті.
+        historyCard.removeAllViews()
+        historyCard.addView(ui.label("Групи в «Історії»", LineIcon.LIST))
+        historyCard.addView(flow(listOf(false to "Закриті", true to "Відкриті").map { (on, text) ->
+            ui.choice(text, settings.historyOpen == on) { settings.historyOpen = on; renderChoices() }
+        }))
+        historyCard.addView(ui.muted(
+            if (settings.historyOpen) "Альбоми, виконавці й сесії одразу показують усі пісні. Торкнись плитки групи — згорнеться."
+            else "Альбоми, виконавці й сесії — закриті плитки: видно назву, скільки пісень і часу. Торкнись — розкриється.",
+            13.5f,
+        ))
+
         soundCard.removeAllViews()
         soundCard.addView(ui.label("Звук для запису", LineIcon.SHIELD))
         soundCard.addView(flow(listOf(true to "Лише плеєр", false to "Усе, що грає").map { (on, text) ->
