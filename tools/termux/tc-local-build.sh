@@ -42,6 +42,12 @@ while kill -0 "$pid" 2>/dev/null; do
 done
 wait "$pid"
 rc=$?
+# Збірка скінчилась (вдало чи ні) — зупинити фоновий Gradle і Kotlin, щоб не тримали пам'ять телефона.
+# Чому: A26 23.10 02:36 — після збірки лишались GradleDaemon (-Xmx2g) і ще 2 процеси java у підкачці
+# (+1,3 ГБ підкачки, система закривала Claude і Track Catcher). faric 23.10 02:40: «так».
+"$gradle" --stop >/dev/null 2>&1 || true
+if command -v pkill >/dev/null 2>&1; then pkill -f KotlinCompileDaemon >/dev/null 2>&1 || true; fi
+echo "Фоновий Gradle зупинено — пам'ять телефона вільна."
 el=$(( $(date +%s) - start ))
 printf '\r%-70s\r' ""
 echo "Час збірки: $((el / 60)) хв $((el % 60)) с"
