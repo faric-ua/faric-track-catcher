@@ -44,7 +44,8 @@ class TrackSplitter(
 ) {
     private val windowFrames = (sampleRate.toLong() * windowMs / 1000).toInt()
     private val shiftFrames = sampleRate.toLong() * shiftMs.coerceIn(-MAX_SHIFT_MS, MAX_SHIFT_MS) / 1000
-    private val ring = ShortRing(windowFrames * 3 + sampleRate, channels)
+    // Від'ємний зсув (розріз раніше за сигнал) — тримати стільки звуку назад (T103: до −30 с).
+    private val ring = ShortRing(windowFrames * 3 + sampleRate + maxOf(0L, -shiftFrames).toInt(), channels)
     private var current: SegmentHandle? = null
     private var currentMeta: TrackMeta? = null
     private var currentStart = 0L
@@ -155,6 +156,7 @@ class TrackSplitter(
     }
 
     companion object {
-        const val MAX_SHIFT_MS = 2_000
+        /** T103 (faric 22.10 22:35: AIMP з інтернету — сигнал на 10 с раніше за звук): до ±30 с. */
+        const val MAX_SHIFT_MS = 30_500
     }
 }

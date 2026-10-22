@@ -246,7 +246,12 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         recoverOrphans(stopWhenNothing = false)
 
         val segmentsDir = segmentsDir(this)
-        val splitter = TrackSplitter(FileSegmentSink(segmentsDir, sessionId) { job -> queue?.submit(job, values) }, shiftMs = CutShift.effective(values.cutShiftMs))
+        // T103: зсув — свій для плеєра, що зараз у шторці (AIMP з інтернету — на 10 с), інакше — для всіх.
+        val shiftPkg = playerPkg ?: runCatching { currentPlayerPackage() }.getOrNull()
+        val splitter = TrackSplitter(
+            FileSegmentSink(segmentsDir, sessionId) { job -> queue?.submit(job, values) },
+            shiftMs = CutShift.effective(Settings(this).cutShiftFor(shiftPkg)),
+        )
 
         val t = NowPlayingTracker(this, this, watchLoops = true)
         tracker = t

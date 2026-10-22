@@ -21,4 +21,14 @@ object CutShift {
     fun migrate(oldUserMs: Int): Int = nearest(oldUserMs - BASE_MS)
 
     fun nearest(ms: Int): Int = CHOICES.minByOrNull { abs(it - ms) } ?: 0
+
+    /**
+     * T103 (faric 22.10 22:35–22:40: AIMP з сайту — «обрізання на 10 с раніше, у новому треку ще 10 с старої пісні»;
+     * «зроби, щоб можна було своє значення: плюс-плюс-плюс — +15 с»): кроки ± і межі ±30 с.
+     */
+    const val MIN_MS = -30_000
+    const val MAX_MS = 30_000
+    val STEPS = listOf(-5_000, -500, 500, 5_000)
+
+    fun step(current: Int, delta: Int): Int = (current + delta).coerceIn(MIN_MS, MAX_MS)
 }
