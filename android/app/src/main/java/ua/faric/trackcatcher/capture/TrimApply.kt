@@ -33,6 +33,31 @@ object TrimApply {
 
     internal class Decoded(val file: File, val rate: Int, val frames: Long)
 
+    /**
+     * T93: поступ усередині однієї пісні (0…1) — для смужки у вікні й у шторці. Ставить той, хто запускає
+     * (служба); [stage] ділить роботу на етапи (розкодувати → обрізати й закодувати → перевірити).
+     */
+    @Volatile var progress: ((Float) -> Unit)? = null
+    private var stageFrom = 0f
+    private var stageTo = 1f
+
+    internal fun stage(from: Float, to: Float) {
+        stageFrom = from
+        stageTo = to
+        report(0f)
+    }
+
+    private var lastReported = -1
+
+    internal fun report(f: Float) {
+        val p = progress ?: return
+        val v = stageFrom + (stageTo - stageFrom) * f.coerceIn(0f, 1f)
+        val pct = (v * 100).toInt()
+        if (pct == lastReported) return
+        lastReported = pct
+        p(v)
+    }
+
     /** Застосувати до всіх файлів запису. Повертає «файл\tпричина» того, що не вийшло. */
     fun apply(app: Context, r: RecordingRow, plan: TrimFade.Plan): List<String> {
         val store = MediaStoreWriter(app)
@@ -72,7 +97,10 @@ object TrimApply {
         val ext = name.substringAfterLast('.', "").lowercase()
         val original = File(dir, "original.$ext")
         resolver.openInputStream(u)?.use { i -> original.outputStream().use { o -> i.copyTo(o, 256 * 1024) } } ?: throw IOException("файл не відкривається")
+        lastReported = -1
+        stage(0f, 0.4f)
         val pcm = decode(app, original, ext, File(dir, "pcm.raw"))
+        stage(0.4f, 0.95f)
         val (first, count) = TrimFade.range(pcm.frames, plan, pcm.rate)
         val fadeIn = plan.fadeInMs * pcm.rate / 1000
         val fadeOut = plan.fadeOutMs * pcm.rate / 1000
@@ -85,7 +113,9 @@ object TrimApply {
                 }
                 "flac" -> {
                     val md5 = MessageDigest.getInstance("MD5")
+                    stage(0.4f, 0.5f)
                     shaped(pcm, first, count, fadeIn, fadeOut) { b, n -> md5.update(b, 0, n) }
+                    stage(0.5f, 0.95f)
                     val sum = md5.digest()
                     val bare = File(dir, "bare.flac")
                     bare.outputStream().buffered(256 * 1024).use { o ->
@@ -106,6 +136,7 @@ object TrimApply {
                 else -> throw IOException("обрізати вмію FLAC, MP3 і WAV")
             }
         }
+        stage(0.95f, 1f)
         // Перевірка: новий файл читається і тривалість та, що треба (±0,2 с; MP3 — оцінка).
         val check = result.inputStream().buffered(64 * 1024).use { FileTags.read(it, result.length(), name) }
         val want = count * 1000 / pcm.rate
@@ -149,6 +180,7 @@ object TrimApply {
                 TrimFade.shape(buf, want, done, count, fadeIn, fadeOut, 2)
                 sink(buf, want)
                 done += want / 4
+                report(done.toFloat() / count)
             }
         }
     }
@@ -167,6 +199,7 @@ object TrimApply {
                         val n = f.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
                         if (n < 0) break
                         o.write(buf, 0, n); left -= n
+                        report(1f - left.toFloat() / maxOf(1L, info.dataBytes))
                     }
                 }
             }
@@ -181,6 +214,7 @@ object TrimApply {
         val codec = MediaCodec.createDecoderByType(fmt.getString(MediaFormat.KEY_MIME)!!)
         codec.configure(fmt, null, null, 0)
         codec.start()
+        val durationUs = if (fmt.containsKey(MediaFormat.KEY_DURATION)) fmt.getLong(MediaFormat.KEY_DURATION) else 0L
         var rate = fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE)
         var channels = fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
         val info = MediaCodec.BufferInfo()
@@ -198,6 +232,7 @@ object TrimApply {
                                 inputDone = true
                             } else {
                                 codec.queueInputBuffer(i, 0, n, ex.sampleTime, 0)
+                                if (durationUs > 0) report(ex.sampleTime.toFloat() / durationUs)
                                 ex.advance()
                             }
                         }

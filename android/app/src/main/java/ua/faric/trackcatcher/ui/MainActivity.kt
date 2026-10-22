@@ -688,6 +688,11 @@ class MainActivity : Activity() {
         startService(CaptureService.stopIntent(this))
     }
 
+    /** T98: дописати поточну пісню й тоді зупинитись. */
+    fun stopAfterSong() {
+        startService(CaptureService.stopAfterSongIntent(this))
+    }
+
     fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }

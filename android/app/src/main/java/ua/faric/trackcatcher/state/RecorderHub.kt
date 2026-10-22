@@ -42,6 +42,8 @@ object RecorderHub {
         val recordedMs: Long = 0L,
         /** Спокійне повідомлення після запису (напр. «Записано 26 пісень — зупинено»). */
         val notice: String? = null,
+        /** T98: «Дочекатись кінця пісні» — запис зупиниться, щойно почнеться наступна (або плеєр стане). */
+        val stopAfterSong: Boolean = false,
     ) {
         val saved: Int get() = complete + partial
     }

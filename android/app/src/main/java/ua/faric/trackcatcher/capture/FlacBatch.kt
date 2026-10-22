@@ -35,6 +35,8 @@ object FlacBatch {
         val total: Int = 0,
         val label: String = "",
         val percent: Int = 0,
+        /** T93: поступ усередині поточної пісні (0–100); -1 — не міряється. */
+        val filePercent: Int = -1,
         val made: Int = 0,
         val problems: List<String> = emptyList(),
         /** Пропущено: файла нема на місці (перенесли чи видалили) — не рахувались. */
