@@ -33,6 +33,8 @@ class Settings(context: Context) {
         val treeUri: String = "",
         /** Без смайликів у назвах файлів і папок (T36); теги — як є. */
         val plainNames: Boolean = true,
+        /** Ім'я файлу — лише назва пісні (T97); false — «Виконавець — Назва». */
+        val titleOnlyNames: Boolean = false,
         /** Писати лише звук плеєра, чия пісня в шторці (T43); false — усе, що грає як «медіа». */
         val onlyPlayer: Boolean = true,
         /** Мітка гучності ReplayGain у тегах (T63); звук не змінюється. Типово вимкнено (faric 17.10). */
@@ -123,6 +125,7 @@ class Settings(context: Context) {
         stopAfterMin = stopAfterMin,
         treeUri = treeUri,
         plainNames = plainNames,
+        titleOnlyNames = titleOnlyNames,
         onlyPlayer = onlyPlayer,
         replayGain = replayGain,
         encodeTiming = encodeTiming,
@@ -153,6 +156,10 @@ class Settings(context: Context) {
     var plainNames: Boolean
         get() = prefs.getBoolean(KEY_PLAIN_NAMES, true)
         set(v) = prefs.edit().putBoolean(KEY_PLAIN_NAMES, v).apply()
+
+    var titleOnlyNames: Boolean
+        get() = prefs.getBoolean(KEY_TITLE_ONLY_NAMES, false)
+        set(v) = prefs.edit().putBoolean(KEY_TITLE_ONLY_NAMES, v).apply()
 
     /**
      * Налаштування для копії (T67): лише те, що має сенс на іншому телефоні. Без «своєї папки» (дозвіл Android —
@@ -206,13 +213,14 @@ class Settings(context: Context) {
         private const val KEY_ONLY_PLAYER = "only_player"
         private const val KEY_HISTORY_GROUP = "history_group"
         private const val KEY_HISTORY_OPEN = "history_open"
+        private const val KEY_TITLE_ONLY_NAMES = "names_title_only"
         private const val KEY_REPLAY_GAIN = "replay_gain"
         private const val KEY_ENCODE_TIMING = "encode_timing"
 
         private val PORTABLE = mapOf(
             KEY_FORMAT to Kind.STRING, KEY_BITRATE to Kind.INT, KEY_MIN_LENGTH to Kind.INT, KEY_REPEAT to Kind.STRING,
             KEY_ALBUM_FOLDERS to Kind.BOOL, KEY_TRIM_EDGES to Kind.BOOL, KEY_FADE_MS to Kind.INT, KEY_CUT_SHIFT_MS to Kind.INT,
-            KEY_PLAIN_NAMES to Kind.BOOL, KEY_ONLY_PLAYER to Kind.BOOL, KEY_HISTORY_GROUP to Kind.STRING, KEY_HISTORY_OPEN to Kind.BOOL, KEY_REPLAY_GAIN to Kind.BOOL,
+            KEY_PLAIN_NAMES to Kind.BOOL, KEY_ONLY_PLAYER to Kind.BOOL, KEY_HISTORY_GROUP to Kind.STRING, KEY_HISTORY_OPEN to Kind.BOOL, KEY_TITLE_ONLY_NAMES to Kind.BOOL, KEY_REPLAY_GAIN to Kind.BOOL,
         )
         const val MAX_STOP_AFTER = 999
         const val MAX_STOP_AFTER_MIN = 24 * 60

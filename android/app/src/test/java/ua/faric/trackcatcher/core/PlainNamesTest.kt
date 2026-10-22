@@ -38,4 +38,13 @@ class PlainNamesTest {
     fun albumFolderToo() {
         assertEquals("Music/Track Catcher/Neon/", FileNames.folderFor(TrackMeta("a", "b", "\uD83C\uDF03 Neon"), true, plain = true))
     }
+
+    @Test
+    fun titleOnlyNames() {
+        val m = TrackMeta("Saney", "🎵 TRACK 02 — VELVET TEMPLE. 🏛")
+        assertEquals("TRACK 02 — VELVET TEMPLE", FileNames.baseFor(m, plain = true, titleOnly = true))
+        assertEquals(FileNames.baseName(m, true), FileNames.baseFor(m, plain = true, titleOnly = false))
+        // Невідома пісня — без назви: лишається з виконавцем, а не порожнє ім'я.
+        assertEquals(FileNames.baseName(TrackMeta("Saney", ""), true), FileNames.baseFor(TrackMeta("Saney", ""), plain = true, titleOnly = true))
+    }
 }

@@ -75,7 +75,7 @@ class SegmentFinisher(context: Context) {
         if (verdict.status == RecStatus.COMPLETE || verdict.status == RecStatus.PARTIAL) {
             // T68: номер пісні в альбомі (з «TRACK 10» у назві або по порядку цього запису) і рік — у теги.
             job = job.copy(meta = job.meta.copy(trackNo = trackNumber(job), year = yearOf(job.closedAt)))
-            val base = FileNames.baseName(job.meta, settings.plainNames)
+            val base = FileNames.baseFor(job.meta, settings.plainNames, settings.titleOnlyNames)
             val dir = FileNames.folderFor(job.meta, settings.albumFolders, settings.plainNames)
             val fade = EdgeFade.frames(fadeMs = settings.fadeMs)
             // T63: мітка гучності — лише якщо ввімкнено; міряємо той самий звук, що піде у файл. Звук не міняється.
