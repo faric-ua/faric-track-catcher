@@ -34,6 +34,13 @@ import java.util.Locale
  */
 object Updater {
     var busy = false
+    /**
+     * T100: публікацію записано, чекаємо, поки Google Диск вивантажить (до 6 хв). Окремо від [busy]:
+     * «Перевірити оновлення» в цей час працює (faric 22.10 18:54 — скрін «Уже працюю…»).
+     */
+    @Volatile var verifying = false
+    @Volatile var stopVerify = false
+    internal var progressExtra: View? = null
     var progressTitle = ""
     var progressText = ""
     var progressFinished = false
@@ -60,6 +67,7 @@ object Updater {
         if (host === activity) host = null
         progressView = null
         progressButton = null
+        progressExtra = null
     }
 
     /** Виконати в головному потоці на видимому вікні; сховано — коли застосунок відкриють знову. */
@@ -78,6 +86,7 @@ object Updater {
             progressButton?.let { b ->
                 b.text = if (finished) "Закрити" else "Сховати (робота йде далі)"
             }
+            progressExtra?.visibility = if (verifying && !finished) View.VISIBLE else View.GONE
         }
     }
 }
@@ -324,8 +333,8 @@ class UpdateUi(private val host: MainActivity) {
     }
 
     private fun publish() {
-        if (Updater.busy) {
-            host.toast("Уже працюю…")
+        if (Updater.busy || Updater.verifying) {
+            showProgress() // T100: не «Уже працюю…», а те саме вікно — видно, що відбувається
             return
         }
         val apkUri = prefs.getString(KEY_APK_URI, "").orEmpty()
@@ -376,6 +385,10 @@ class UpdateUi(private val host: MainActivity) {
                 )
                 Updater.setProgress("Записую файл версії…")
                 writeText(resolver, Uri.parse(jsonUri), manifest.toJson())
+                // Далі лише чекаємо Google Диск — «Перевірити оновлення» вже не блокується (T100).
+                Updater.stopVerify = false
+                Updater.verifying = true
+                Updater.busy = false
                 val time = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date())
                 // Записали — ще не значить вивантажили: Google Диск робить це у фоні. Перевіряємо, як інші телефони.
                 val seen = waitUntilPublished(manifest, prefs.getString(KEY_JSON_ID, "").orEmpty().ifBlank { manifestId().orEmpty() })
@@ -383,6 +396,8 @@ class UpdateUi(private val host: MainActivity) {
                 if (ok) {
                     "Опубліковано й перевірено ${BuildConfig.VERSION_NAME} · збірка ${BuildConfig.VERSION_CODE} (${DriveUpdate.formatMb(done)}) · $time\n" +
                         "Інші телефони вже бачать цю версію: файл версії й APK з інтернету — саме ці."
+                } else if (Updater.stopVerify) {
+                    "Записано на телефоні $time. $seen"
                 } else {
                     "НЕ ДІЙШЛО до Диска (записано на телефоні $time, але за 6 хв Google Диск не вивантажив).\n$seen\n\n" +
                         "Що зробити: відкрий застосунок Google Диск (там видно вивантаження), перевір інтернет, і натисни «Опублікувати зараз» ще раз."
@@ -394,6 +409,7 @@ class UpdateUi(private val host: MainActivity) {
             }
             prefs.edit().putString(KEY_LAST_RESULT, outcome).apply()
             Updater.busy = false
+            Updater.verifying = false
             Updater.setProgress(outcome, finished = true)
             Updater.onMain { it.toast(if (ok) "Опубліковано й перевірено на Диску" else "Публікація не дійшла до Диска — подробиці у «Опублікувати цю версію на Диск»") }
         }, "update-publish").start()
@@ -408,9 +424,17 @@ class UpdateUi(private val host: MainActivity) {
         var last = "На Диску поки стара версія."
         val started = System.currentTimeMillis()
         for (delay in DriveUpdate.PUBLISH_CHECKS_MS) {
-            val waited = (System.currentTimeMillis() - started) / 1000
-            Updater.setProgress("Записано. Чекаю, поки Google Диск вивантажить… (${waited / 60}:${"%02d".format(waited % 60)})\nМожна сховати — перевірка йде далі.")
-            Thread.sleep(delay)
+            // Щосекунди — годинник у вікні і «Зупинити перевірку».
+            val until = System.currentTimeMillis() + delay
+            while (System.currentTimeMillis() < until) {
+                if (Updater.stopVerify) return "Перевірку зупинено. $last Google Диск може вивантажити й пізніше — перевір «Перевірити оновлення» на іншому телефоні."
+                val waited = (System.currentTimeMillis() - started) / 1000
+                Updater.setProgress(
+                    "Записано на телефоні. Тепер застосунок Google Диск має вивантажити файл в інтернет — " +
+                        "буває за хвилину, а буває чекає, поки його відкриєш.\n\nЧекаю: ${waited / 60}:${"%02d".format(waited % 60)} (до 6 хв). $last",
+                )
+                Thread.sleep(1_000)
+            }
             try {
                 val online = DriveUpdate.Manifest.parse(DriveHttp.readText(manifestId, 64 * 1024))
                 if (!DriveUpdate.manifestIsOurs(online, m.versionCode, m.apkSha256, m.apkSize)) {
@@ -460,7 +484,7 @@ class UpdateUi(private val host: MainActivity) {
             return
         }
         if (Updater.busy) {
-            if (!quiet) host.toast("Уже працюю…")
+            if (!quiet) showProgress() // T100: показати, чим зайнятий, а не «Уже працюю…»
             return
         }
         Updater.busy = true
@@ -684,9 +708,21 @@ class UpdateUi(private val host: MainActivity) {
         // Місце під текст — одразу на весь підсумок: вікно не міняє висоти, кнопка стоїть на місці.
         val status = ui.text(Updater.progressText, 15f, Palette.muted).apply { minLines = PROGRESS_LINES }
         box.addView(status)
+        // T100: поки чекаємо Google Диск — штовхнути його й можна перестати чекати.
+        val extra = FlowLayout(host, ui.dp(8), ui.dp(8)).apply {
+            addView(ui.iconButton(LineIcon.CLOUD, "Відкрити Google Диск", Ui.Kind.NORMAL) { openDrive() })
+            addView(ui.button("Зупинити перевірку", Ui.Kind.NORMAL) {
+                Updater.stopVerify = true
+                host.toast("Зупиняю перевірку")
+            })
+            visibility = if (Updater.verifying && !Updater.progressFinished) View.VISIBLE else View.GONE
+        }
+        box.addView(extra, ui.matchWrap())
+        Updater.progressExtra = extra
         val close = ui.button(if (Updater.progressFinished) "Закрити" else "Сховати (робота йде далі)", Ui.Kind.QUIET) {
             Updater.progressView = null
             Updater.progressButton = null
+            Updater.progressExtra = null
             host.overlay.dismiss()
         }
         // «Закрити» — у правий кут вікна, ближче до правої руки (faric 16.10, T53).
@@ -696,6 +732,20 @@ class UpdateUi(private val host: MainActivity) {
         Updater.progressView = status
         Updater.progressButton = close
         host.overlay.show(KEY_DIALOG_PROGRESS, box, dismissOnOutside = false)
+    }
+
+    /** Відкрити застосунок Google Диск: так він береться вивантажувати файли, що чекають (T100). */
+    private fun openDrive() {
+        val i = host.packageManager.getLaunchIntentForPackage("com.google.android.apps.docs")
+        if (i == null) {
+            host.toast("Застосунку Google Диск нема на цьому телефоні")
+            return
+        }
+        try {
+            host.startActivity(i)
+        } catch (e: Exception) {
+            host.toast("Не вдалося відкрити Google Диск")
+        }
     }
 
     /** Відновити вікно після повороту. */
@@ -746,7 +796,7 @@ class UpdateUi(private val host: MainActivity) {
         private const val KEY_LAST_AUTO = "last_auto_check"
 
         /** Скільки рядків тримати під текст поступу (найдовший підсумок на вузькому екрані — 5–6). */
-        const val PROGRESS_LINES = 6
+        const val PROGRESS_LINES = 8
 
         const val KEY_DIALOG_PUBLISH = "update:publish"
         const val KEY_DIALOG_RESET = "update:reset"

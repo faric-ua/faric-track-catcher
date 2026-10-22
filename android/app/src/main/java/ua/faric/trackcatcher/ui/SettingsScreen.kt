@@ -56,8 +56,9 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         val aboutCard = ui.card(8).apply {
             addView(ui.label("Про застосунок", LineIcon.INFO))
             addView(ui.title("Track Catcher ${BuildConfig.VERSION_NAME}", 17f))
-            addView(ui.iconButton(LineIcon.BOOK, "Інструкція користувача", Ui.Kind.PRIMARY) { GuideActivity.open(host) }, wrap())
-            addView(ui.numbers(ui.muted("Збірка ${BuildConfig.VERSION_CODE}", 13f)))
+            // T99 (faric 22.10 18:01): кнопка інструкції — на всю ширину; версія — тим самим рядком, що й угорі (T94).
+            addView(ui.numbers(ui.muted(MainActivity.versionLine(), 13f)))
+            addView(ui.iconButton(LineIcon.BOOK, "Інструкція користувача", Ui.Kind.PRIMARY) { GuideActivity.open(host) }, ui.matchWrap())
             addView(ui.muted("Записує звук, який грає телефон, і ріже його на пісні за назвою зі шторки. " +
                 "Записи лишаються на телефоні й нікуди не передаються: без реклами й аналітики. Інтернет — лише для перевірки оновлень " +
                 "з Google Диска автора. Лише для особистого користування.", 13.5f))
@@ -115,7 +116,7 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                     "Далі застосунок сам оновлює його після кожного запису: історія й налаштування. На новому телефоні — «Відновити з копії» → цей файл.",
                 13.5f,
             ))
-            autoSlot.addView(ui.iconButton(LineIcon.CLOUD, "Увімкнути автокопію", Ui.Kind.NORMAL) { host.enableAutoBackup() }, wrap())
+            autoSlot.addView(ui.iconButton(LineIcon.CLOUD, "Увімкнути автокопію", Ui.Kind.NORMAL) { host.enableAutoBackup() }, ui.matchWrap())
             return
         }
         val last = if (a.lastAt > 0) java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.getDefault()).format(java.util.Date(a.lastAt)) else "ще ні"
