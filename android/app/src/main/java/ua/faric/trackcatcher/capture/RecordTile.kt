@@ -19,6 +19,7 @@ class RecordTile : TileService() {
     private var unsubscribe: (() -> Unit)? = null
 
     override fun onStartListening() {
+        shownKey = null
         unsubscribe?.invoke()
         unsubscribe = RecorderHub.observe { render(it) }
     }
@@ -49,8 +50,14 @@ class RecordTile : TileService() {
         }
     }
 
+    /** Що плитка вже показує — оновлювати шторку лише коли щось змінилось (рівні звуку — 10 разів на секунду). */
+    private var shownKey: String? = null
+
     private fun render(s: RecorderHub.State) {
         val tile = qsTile ?: return
+        val key = "${s.phase}|${s.songs}"
+        if (key == shownKey) return
+        shownKey = key
         tile.label = "Запис"
         tile.state = when (s.phase) {
             RecorderHub.Phase.RECORDING -> Tile.STATE_ACTIVE

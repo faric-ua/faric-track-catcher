@@ -298,8 +298,9 @@ class MainActivity : Activity() {
             RecorderHub.Phase.IDLE -> null
         }
         // На вкладці «Запис» стан і так видно великим — значок лише на інших вкладках.
-        statusChip.visibility = if (text != null && tab != Tab.RECORD) View.VISIBLE else View.GONE
-        if (text != null) {
+        val vis = if (text != null && tab != Tab.RECORD) View.VISIBLE else View.GONE
+        if (statusChip.visibility != vis) statusChip.visibility = vis
+        if (text != null && statusChip.text.toString() != text) { // лише коли змінилось — рівні йдуть 10 разів на секунду
             statusChip.text = text
             statusChip.contentDescription = if (s.phase == RecorderHub.Phase.RECORDING) "Іде запис. Відкрити вкладку «Запис»" else "Зберігаю записи"
         }
