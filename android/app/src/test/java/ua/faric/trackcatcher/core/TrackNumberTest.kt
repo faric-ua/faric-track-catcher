@@ -50,4 +50,13 @@ class TrackNumberTest {
         assertEquals(3, TrackNumber.bonusOf("BONUS 03 — Z$tail"))
         assertEquals(3, TrackNumber.bonusOf("BONUS TRACK 03 — Z"))
     }
+
+    /** FARIC VOL. 1: «BONUS TRACK 11» після TRACK 10 — це 11-та на диску, а не 10 + 11 = 21. */
+    @Test fun bonusAboveLastTrackIsItsOwnNumber() {
+        val titles = (1..10).map { "TRACK %02d — SONG $it".format(it) } +
+            listOf("BONUS TRACK 11 — TEN ROADS, ONE HEART", "BONUS TRACK 12 — X", "BONUS TRACK 13 — Y")
+        assertEquals((1..13).toList(), TrackNumber.all(titles))
+        // А «бонус № 3» після 10 треків — як і було, 13.
+        assertEquals(13, TrackNumber.all((1..10).map { "TRACK $it" } + "BONUS 03 — Z").last())
+    }
 }

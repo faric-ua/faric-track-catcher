@@ -42,6 +42,10 @@ object TrackNumber {
      * повторюється, — номер 10; BONUS 03 — 13; пробіжиться й передивиться»):
      * «TRACK 10» → 10; «BONUS 03» → найбільший TRACK альбому + 3; інша назва → наступний по порядку.
      * Та сама назва вдруге — той самий номер, нічого не зсуває.
+     *
+     * BONUS з числом, більшим за найбільший TRACK альбому, — це вже номер на диску, а не «бонус № N»
+     * (22.10, від чату Audio Converter: FARIC VOL. 1 — «BONUS TRACK 11 — TEN ROADS, ONE HEART» після TRACK 10
+     * ставало 21 замість 11; там виправлено в 0.27.1, `core/TitleNumber`).
      */
     fun all(titles: List<String>): List<Int> {
         val maxTrack = titles.mapNotNull { fromTitle(it) }.maxOrNull() ?: 0
@@ -50,7 +54,7 @@ object TrackNumber {
         return titles.map { t ->
             val key = t.trim().lowercase()
             seen[key] ?: run {
-                val n = fromTitle(t) ?: bonusOf(t)?.takeIf { maxTrack > 0 }?.let { maxTrack + it } ?: (last + 1)
+                val n = fromTitle(t) ?: bonusOf(t)?.takeIf { maxTrack > 0 }?.let { b -> if (b > maxTrack) b else maxTrack + b } ?: (last + 1)
                 seen[key] = n
                 last = n
                 n
