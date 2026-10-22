@@ -190,7 +190,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 ui.setEnabled(mainButton, true)
             }
             RecorderHub.Phase.RECORDING -> {
-                mainButton.text = "■ Зупинити запис"
+                mainButton.text = if (s.stopAfterSong) "■ Зупинити зараз" else "■ Зупинити запис"
                 ui.styleButton(mainButton, Ui.Kind.DANGER)
                 ui.setEnabled(mainButton, true)
             }
@@ -375,6 +375,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         KEY_ALBUM -> { askAlbum(); true }
         KEY_LIMIT -> { askLimit(); true }
         KEY_MINUTES -> { askMinutes(); true }
+        KEY_STOP -> { if (RecorderHub.state.phase == RecorderHub.Phase.RECORDING) askStop(); true }
         else -> false
     }
 
@@ -389,7 +390,7 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 sb.setSpan(ForegroundColorSpan(Palette.rec), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 sb.append("Записую  ").append(TimeText.clock(System.currentTimeMillis() - s.startedAt))
                 statusTitle.text = sb
-                statusSub.text = sessionLine(s) + if (!s.playing) " · плеєр на паузі" else ""
+                statusSub.text = (s.notice?.let { "$it\n" } ?: "") + sessionLine(s) + if (!s.playing) " · плеєр на паузі" else ""
             }
             RecorderHub.Phase.FINISHING -> {
                 statusTitle.text = "Зберігаю останні пісні…"
@@ -469,9 +470,39 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     private fun onMain() {
         when (RecorderHub.state.phase) {
             RecorderHub.Phase.IDLE -> host.startCapture()
-            RecorderHub.Phase.RECORDING -> host.stopCapture()
+            RecorderHub.Phase.RECORDING -> askStop()
             RecorderHub.Phase.FINISHING -> Unit
         }
+    }
+
+    /**
+     * T98 (faric 22.10 17:39): «Зупинити» посеред пісні — спитати: дочекатись кінця (пісня збережеться повною)
+     * чи зупинити зараз. Уже чекаємо, плеєр на паузі чи пісня невідома — зупинити одразу, без питань.
+     */
+    private fun askStop() {
+        val s = RecorderHub.state
+        val meta = s.meta
+        if (s.stopAfterSong || !s.playing || meta == null || meta.isUnknown) {
+            host.stopCapture()
+            return
+        }
+        val pos = host.tracker.positionMs()
+        val where = if (pos != null && meta.durationMs > 0) " (${TimeText.clock(pos)} з ${TimeText.clock(meta.durationMs)})" else ""
+        val body = host.overlay.dialog(
+            title = "Зупинити запис?",
+            message = "Зараз пишеться «${meta.title.ifBlank { meta.displayName() }}»$where.\n\n" +
+                "«Дочекатись кінця пісні» — вона збережеться повною, а наступна вже не почне писатись (плеєр стане на паузу).\n" +
+                "«Зупинити зараз» — ця пісня збережеться неповною.",
+            actions = listOf("Дочекатись кінця пісні" to Ui.Kind.PRIMARY, "Зупинити зараз" to Ui.Kind.DANGER, "Скасувати" to Ui.Kind.QUIET),
+            onAction = { i ->
+                host.overlay.dismiss()
+                when (i) {
+                    0 -> host.stopAfterSong()
+                    1 -> host.stopCapture()
+                }
+            },
+        )
+        host.overlay.show(KEY_STOP, body)
     }
 
     private fun appLabel(pkg: String): String {
@@ -488,5 +519,6 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         private const val KEY_ALBUM = "plan:album"
         private const val KEY_LIMIT = "plan:limit"
         private const val KEY_MINUTES = "plan:minutes"
+        private const val KEY_STOP = "plan:stop"
     }
 }

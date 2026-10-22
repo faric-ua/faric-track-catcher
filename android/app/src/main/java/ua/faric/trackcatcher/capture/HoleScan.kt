@@ -30,15 +30,21 @@ object HoleScan {
             val copy = File(dir, "file.$ext")
             app.contentResolver.openInputStream(Uri.parse(uri))?.use { i -> copy.outputStream().use { o -> i.copyTo(o, 256 * 1024) } }
                 ?: throw IOException("файл не відкривається")
+            TrimApply.stage(0f, 0.7f)
             val pcm = TrimApply.decode(app, copy, ext, File(dir, "pcm.raw"))
             copy.delete()
+            TrimApply.stage(0.7f, 1f)
             val h = Holes(pcm.rate)
             RandomAccessFile(pcm.file, "r").use { f ->
                 val buf = ByteArray(256 * 1024)
+                val total = maxOf(1L, f.length())
+                var read = 0L
                 while (true) {
                     val n = f.read(buf)
                     if (n <= 0) break
                     h.feed(buf, 0, n - n % 4)
+                    read += n
+                    TrimApply.report(read.toFloat() / total)
                 }
             }
             val places = Holes.places(h.result())

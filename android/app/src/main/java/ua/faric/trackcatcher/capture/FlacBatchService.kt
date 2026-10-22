@@ -245,7 +245,9 @@ class FlacBatchService : Service() {
             FlacBatch.update { it.copy(index = i + 1, label = label, percent = (i * 100) / ids.size) }
             notify("Обрізаю: ${i + 1} з ${ids.size}", label, (i * 100) / ids.size)
             if (Renumber.present(app, listOf(r)).isNullOrEmpty()) { skipped++; FlacBatch.update { it.copy(skipped = skipped) }; continue }
+            TrimApply.progress = { f -> filePart(i, ids.size, "Обрізаю", label, f) }
             val bad = runCatching { TrimApply.apply(app, r, plan) }.getOrElse { listOf("${r.title}\t${ua.faric.trackcatcher.core.ErrorText.human(it)}") }
+            TrimApply.progress = null
             if (bad.isEmpty()) { fixed++; FlacBatch.update { it.copy(made = fixed) } } else { problems += bad; FlacBatch.update { it.copy(problems = problems.toList()) } }
         }
         FlacBatch.update { it.copy(running = false, finished = true, made = fixed, problems = problems.toList(), cancelled = cancelled, index = ids.size, skipped = skipped) }
@@ -276,7 +278,8 @@ class FlacBatchService : Service() {
             if (!HoleScan.canCheck(r)) { problems += "$label\t${HoleScan.OnlyMp3().message}"; continue }
             if (Renumber.present(app, listOf(r)).isNullOrEmpty()) { skipped++; FlacBatch.update { it.copy(skipped = skipped) }; continue }
             try {
-                val places = HoleScan.check(app, r)
+                TrimApply.progress = { f -> filePart(i, ids.size, "Шукаю тріски", label, f) }
+                val places = try { HoleScan.check(app, r) } finally { TrimApply.progress = null }
                 checked++
                 if (places.isNotEmpty()) report += HoleScan.line(r, places)
                 FlacBatch.update { it.copy(made = report.size, report = report.toList()) }
@@ -325,7 +328,14 @@ class FlacBatchService : Service() {
         stopSelf()
     }
 
-    private fun enter(n: Notification) {
+    /** T93: поступ усередині пісні — у вікні (смужка) і в шторці (загальний, з урахуванням частини пісні). */
+    private fun filePart(i: Int, total: Int, what: String, label: String, f: Float) {
+        val pct = (f * 100).toInt()
+        FlacBatch.update { it.copy(filePercent = pct) }
+        notify("$what: ${i + 1} з $total · $pct %", label, ((i + f) * 100 / maxOf(1, total)).toInt())
+    }
+
+        private fun enter(n: Notification) {
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else startForeground(NOTIF_ID, n)
     }
 

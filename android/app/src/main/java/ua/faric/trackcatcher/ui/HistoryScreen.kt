@@ -1616,6 +1616,29 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
     }
 
     private var batchText: android.widget.TextView? = null
+    /** T93: смужки поступу — пісня (обрізка, тріски, FLAC) і вся пачка. */
+    private var batchFileBar: ProgressLine? = null
+    private var batchFileText: android.widget.TextView? = null
+    private var batchAllBar: ProgressLine? = null
+
+    private fun filePercent(s: FlacBatch.State): Int = when (s.mode) {
+        FlacBatch.Mode.TRIM, FlacBatch.Mode.HOLES -> s.filePercent
+        FlacBatch.Mode.FLAC -> s.percent
+        else -> -1
+    }
+
+    private fun allFraction(s: FlacBatch.State): Float {
+        if (s.total <= 0) return 0f
+        val inside = filePercent(s).coerceAtLeast(0) / 100f
+        return ((s.index - 1).coerceAtLeast(0) + inside) / s.total
+    }
+
+    private fun renderBars(s: FlacBatch.State) {
+        val fp = filePercent(s)
+        batchFileBar?.let { it.fraction = if (fp < 0) 0f else fp / 100f; it.visibility = if (fp < 0) View.GONE else View.VISIBLE }
+        batchFileText?.let { it.text = "Ця пісня: ${fp.coerceAtLeast(0)} %"; it.visibility = if (fp < 0) View.GONE else View.VISIBLE }
+        batchAllBar?.fraction = allFraction(s)
+    }
 
     /** Поступ або підсумок перетворення — з [FlacBatch.state], тож переживає поворот (faric 17.10 22:25). */
     private fun showBatch(s: FlacBatch.State) {
@@ -1633,6 +1656,12 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                     FlacBatch.Mode.FLAC -> "Роблю FLAC з обкладинками"
                 }, 19f))
                 addView(text)
+                // T93 (faric 20.10 17:43): смужки — поступ пісні й усієї пачки (висота незмінна — вікно не стрибає).
+                batchFileText = ui.numbers(ui.muted("", 13f)).also { addView(it) }
+                batchFileBar = ProgressLine(host).also { addView(it, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(8))) }
+                addView(ui.muted("Усього:", 13f))
+                batchAllBar = ProgressLine(host).also { addView(it, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(8))) }
+                renderBars(s)
                 addView(ui.muted("Можна повертати екран і згортати застосунок — поступ і «Зупинити» є в шторці. Перервалось? Ту саму кнопку ще раз: зроблені пропускаються.", 13f))
                 val row = FlowLayout(host, ui.dp(8), ui.dp(8), alignEnd = true)
                 row.addView(ui.button("Зупинити", Ui.Kind.DANGER) { FlacBatch.stop(); host.toast("Зупиню після цієї пісні") })
@@ -1708,7 +1737,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     private fun onBatch(s: FlacBatch.State) {
         when {
-            s.running -> batchText?.takeIf { host.overlay.key == KEY_FLAC_RUN }?.text = batchLine(s)
+            s.running -> if (host.overlay.key == KEY_FLAC_RUN) {
+                batchText?.text = batchLine(s)
+                renderBars(s)
+            }
             s.finished && !s.worthShowing -> FlacBatch.acknowledge() // сам після запису й усе гаразд — мовчки
             s.finished && (host.overlay.key == null || host.overlay.key == KEY_FLAC_RUN) -> showBatch(s)
         }

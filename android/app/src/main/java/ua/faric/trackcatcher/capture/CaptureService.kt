@@ -54,6 +54,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     private var capturedPackage: String? = null
     private val events = ConcurrentLinkedQueue<TrackEvent>()
 
+    /** T98: дописати поточну пісню й зупинитись. */
+    @Volatile private var stopAfterSong = false
     @Volatile private var running = false
     @Volatile private var stopping = false
     @Volatile private var playerPaused = false
@@ -137,6 +139,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
                 userStop = true
                 stopRecording()
             }
+            ACTION_STOP_AFTER_SONG -> waitSongEnd()
             ACTION_RECOVER -> recoverOrphans(stopWhenNothing = true)
         }
         return START_NOT_STICKY
@@ -146,7 +149,12 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
 
     @SuppressLint("MissingPermission")
     private fun startRecording(intent: Intent) {
-        if (running || stopping) return
+        if (running || stopping) {
+            // T92: раніше мовчки нічого не було — ніби кнопка «не працює».
+            if (stopping) RecorderHub.update { it.copy(error = "Ще зберігаю попередні пісні — зачекай кілька секунд і натисни «Почати запис» ще раз.") }
+            return
+        }
+        stopAfterSong = false
         userStop = false
         enterForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION, notification("Готуюсь до запису…", ""))
         val code = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
@@ -514,6 +522,11 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         if (limitReached) return // ліміт досягнуто — далі нічого не ріжемо, лише зупиняємось
         val m = withAlbum(meta)
         events.add(TrackEvent(m, positionMs, force = restart, details = false))
+        // T98: чекали кінця пісні — почалась наступна: зупинитись, її початок у файл не йде.
+        if (running && stopAfterSong) {
+            finishAfterSong()
+            return
+        }
         if (!meta.isUnknown) songsStarted++
         RecorderHub.update { it.copy(meta = m, songs = songsStarted) }
         updateNotification()
@@ -554,6 +567,41 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     override fun onPlaying(playing: Boolean) {
         playerPaused = !playing
         RecorderHub.update { it.copy(playing = playing) }
+        // T98: пісня скінчилась, а далі плеєр став (кінець черги) — зупинитись, пісня вже ціла.
+        if (!playing && running && stopAfterSong) {
+            main.postDelayed({ if (running && stopAfterSong && playerPaused) { userStop = true; stopRecording() } }, 3_000)
+        }
+    }
+
+    /**
+     * T98 (faric 22.10 17:39: «коли зупиняю — не питає, зупинити зараз чи дочекатися кінця пісні»): дописати
+     * поточну пісню до кінця й тоді зупинитись. Плеєр на паузі чи пісня невідома — зупинитись одразу.
+     */
+    private fun waitSongEnd() {
+        if (!running) return
+        val meta = RecorderHub.state.meta
+        if (playerPaused || meta == null || meta.isUnknown) {
+            userStop = true
+            stopRecording()
+            return
+        }
+        stopAfterSong = true
+        RecorderHub.update { it.copy(stopAfterSong = true, notice = "Зупинюсь, коли допишеться «${meta.title.ifBlank { meta.displayName() }}».") }
+        lastNotified = ""
+        updateNotification()
+    }
+
+    private fun finishAfterSong() {
+        limitReached = true
+        tracker?.pausePlayer()
+        RecorderHub.update { it.copy(notice = "Пісню дописано до кінця — запис зупинено, плеєр на паузі.") }
+        main.postDelayed({
+            if (running) {
+                discardLast = true
+                userStop = true
+                stopRecording()
+            }
+        }, 2_500)
     }
 
     // ---------- стоп ----------
@@ -711,7 +759,15 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
             .setCategory(Notification.CATEGORY_SERVICE)
             .setContentIntent(open)
         if (running) {
-            b.addAction(Notification.Action.Builder(Icon.createWithResource(this, R.drawable.ic_stat_stop), "Стоп", stop).build())
+            // T98: і в шторці — «Після пісні» (дописати поточну й зупинитись) поруч зі «Стоп».
+            if (!stopAfterSong) {
+                val after = PendingIntent.getService(
+                    this, 2, Intent(this, CaptureService::class.java).setAction(ACTION_STOP_AFTER_SONG),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                )
+                b.addAction(Notification.Action.Builder(Icon.createWithResource(this, R.drawable.ic_stat_stop), "Після пісні", after).build())
+            }
+            b.addAction(Notification.Action.Builder(Icon.createWithResource(this, R.drawable.ic_stat_stop), if (stopAfterSong) "Стоп зараз" else "Стоп", stop).build())
         }
         if (Build.VERSION.SDK_INT >= 31) b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         return b.build()
@@ -733,6 +789,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     companion object {
         const val ACTION_START = "ua.faric.trackcatcher.action.START"
         const val ACTION_STOP = "ua.faric.trackcatcher.action.STOP"
+        const val ACTION_STOP_AFTER_SONG = "ua.faric.trackcatcher.action.STOP_AFTER_SONG"
         const val ACTION_RECOVER = "ua.faric.trackcatcher.action.RECOVER"
         private const val EXTRA_RESULT_CODE = "result_code"
         private const val EXTRA_DATA = "data"
@@ -755,6 +812,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
                 .putExtra(EXTRA_DATA, data)
 
         fun stopIntent(context: Context): Intent = Intent(context, CaptureService::class.java).setAction(ACTION_STOP)
+
+        fun stopAfterSongIntent(context: Context): Intent = Intent(context, CaptureService::class.java).setAction(ACTION_STOP_AFTER_SONG)
 
         fun recoverIntent(context: Context): Intent = Intent(context, CaptureService::class.java).setAction(ACTION_RECOVER)
     }
