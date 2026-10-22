@@ -17,6 +17,13 @@ object FileNames {
      * [plain] — без смайликів і невидимих символів (T36, faric 14.10 08:18: «за замовчуванням усі прибирай»).
      * Теги всередині файлу лишаються як є — їх це не стосується.
      */
+    /**
+     * Ім'я нового файлу (T97, faric 22.10 05:20: «як зберігати — автор і назва чи просто назва»).
+     * [titleOnly] — лише назва пісні; назви нема (невідома пісня) — як завжди, «Виконавець — Назва».
+     */
+    fun baseFor(meta: TrackMeta, plain: Boolean, titleOnly: Boolean): String =
+        if (titleOnly && meta.title.isNotBlank()) baseName(TrackMeta("", meta.title), plain) else baseName(meta, plain)
+
     fun baseName(meta: TrackMeta, plain: Boolean = false): String {
         if (!plain) return sanitize(meta.displayName())
         val artist = stripSymbols(meta.artist)

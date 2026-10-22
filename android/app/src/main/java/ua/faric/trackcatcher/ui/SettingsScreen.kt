@@ -186,6 +186,17 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         renderFolder(v)
 
         albumSlot.removeAllViews()
+        // T97 (faric 22.10 05:20): ім'я нового файлу — «Виконавець — Назва» чи лише назва.
+        albumSlot.addView(ui.label("Ім'я файлу"))
+        albumSlot.addView(flow(listOf(false to "Виконавець — Назва", true to "Лише назва").map { (on, text) ->
+            ui.choice(text, v.titleOnlyNames == on) { settings.titleOnlyNames = on; renderChoices() }
+        }))
+        albumSlot.addView(ui.muted(
+            (if (v.titleOnlyNames) "Нові файли: «TRACK 02 — VELVET TEMPLE.flac». Невідома пісня (без назви) — як завжди, з виконавцем."
+            else "Нові файли: «Saney — TRACK 02 — VELVET TEMPLE.flac».") +
+                " Уже записані не перейменовуються — для них «Історія» → «Змінити теги» → «Ім'я файлу».",
+            13.5f,
+        ))
         albumSlot.addView(ui.label("Смайлики в назві файлу"))
         albumSlot.addView(flow(listOf(true to "Прибирати", false to "Лишати").map { (on, text) ->
             ui.choice(text, v.plainNames == on) { settings.plainNames = on; renderChoices() }
