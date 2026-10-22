@@ -160,8 +160,26 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
     }
 
+    /**
+     * Стан без рівнів — що екран уже показав. Рівні звуку приходять 10 разів на секунду; раніше кожен раз
+     * перебудовувався весь екран (список «Ця сесія», кнопка, тексти) — на M30s це 56–70 % ядра під час запису
+     * (Phone Diagnostics 22.10 21:46; у фоні — 3 %). Тепер на рівні — лише смужки.
+     */
+    private var shown: RecorderHub.State? = null
+
+    private fun onHub(s: RecorderHub.State) {
+        val key = s.copy(levelL = 0f, levelR = 0f)
+        if (key == shown) {
+            meter.setLevels(s.levelL, s.levelR)
+            return
+        }
+        shown = key
+        render(s)
+    }
+
     override fun onStart() {
-        unobserve = RecorderHub.observe { render(it) }
+        shown = null
+        unobserve = RecorderHub.observe { onHub(it) }
         handler.post(tick)
     }
 
@@ -446,7 +464,13 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }
     }
 
+    private var shownRecent: Pair<List<RecorderHub.Result>, RecorderHub.Phase>? = null
+
     private fun renderRecent(s: RecorderHub.State) {
+        // Список перебудовувати лише коли він справді змінився (нова пісня), а не на кожне оновлення стану.
+        val key = s.recent to (if (s.phase == RecorderHub.Phase.IDLE) RecorderHub.Phase.IDLE else RecorderHub.Phase.RECORDING)
+        if (key == shownRecent) return
+        shownRecent = key
         recentList.removeAllViews()
         if (s.recent.isEmpty()) {
             recentList.addView(ui.muted(
