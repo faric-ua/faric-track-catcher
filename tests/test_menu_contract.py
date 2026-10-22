@@ -54,6 +54,14 @@ class MenuContract(unittest.TestCase):
         self.assertIn('kill -0 "$pid"', b)
         self.assertIn('wait "$pid"', b)
 
+    def test_local_build_stops_gradle_daemon(self):
+        # faric 23.10: після збірки Gradle і Kotlin не мають лишатись у пам'яті телефона.
+        b = (ROOT / "tools/termux/tc-local-build.sh").read_text(encoding="utf-8")
+        stop = b.index('"$gradle" --stop')
+        self.assertLess(b.index('wait "$pid"'), stop)
+        self.assertLess(stop, b.index('if [ "$rc" = 0 ]'))  # і після вдалої, і після невдалої збірки
+        self.assertIn("KotlinCompileDaemon", b)
+
     def test_second_phone_never_creates_second_key(self):
         setup = (ROOT / "tools/termux/tc-signing-setup.sh").read_text(encoding="utf-8")
         guard = setup.index("gh secret list")
