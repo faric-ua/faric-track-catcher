@@ -349,18 +349,32 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         }))
         edgesCard.addView(ui.muted("Гучність плавно росте з нуля на початку файлу й спадає до нуля в кінці.", 13.5f))
 
+        // T103 (faric 22.10 22:40: «щоб можна було своє значення — плюс-плюс-плюс, +15 с»): крок ±0,5 і ±5 с, до ±30 с;
+        // і свій зсув для плеєра, що зараз у шторці (AIMP з інтернету — на 10 с, Suno — точно).
         edgesCard.addView(ui.title("Зсув розрізу", 15.5f))
-        edgesCard.addView(flow(Settings.SHIFT_CHOICES.map { ms ->
-            ui.choice(if (ms == 0) "0" else (if (ms > 0) "+" else "−") + secs(Math.abs(ms)), v.cutShiftMs == ms) { settings.cutShiftMs = ms; renderChoices() }
+        edgesCard.addView(ui.muted("«+» — якщо на початку файлу чути кінець попередньої пісні (розріз пізніше); «−» — якщо в кінці чути початок наступної. «0» — найкраща точка для Suno.", 13.5f))
+        edgesCard.addView(shiftRow("Усі плеєри", v.cutShiftMs, own = true) { ms -> settings.cutShiftMs = ms; renderChoices() })
+        val pkg = host.tracker.sourcePackage?.takeIf { it != host.packageName }
+        if (pkg != null) {
+            val name = runCatching { host.packageManager.getApplicationLabel(host.packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault("Цей плеєр")
+            val own = settings.hasOwnCutShift(pkg)
+            edgesCard.addView(shiftRow("«$name» (зараз у шторці)", settings.cutShiftFor(pkg), own) { ms -> settings.setCutShiftFor(pkg, ms); renderChoices() })
+            if (own) edgesCard.addView(ui.button("«$name» — як для всіх", Ui.Kind.QUIET) { settings.clearCutShiftFor(pkg); renderChoices() }, ui.matchWrap())
+            else edgesCard.addView(ui.muted("Для «$name» — як для всіх. Натисни ± у його рядку — і буде свій.", 12.5f))
+        } else {
+            edgesCard.addView(ui.muted("Свій зсув для плеєра: увімкни в ньому пісню — тут з'явиться його рядок.", 12.5f))
+        }
+    }
+
+    /** Рядок «назва: +10 с» і кнопки −5 · −0,5 · +0,5 · +5 (T103). [own] = false — значення успадковане (сіре). */
+    private fun shiftRow(label: String, ms: Int, own: Boolean, set: (Int) -> Unit): View = ui.column(6).apply {
+        val value = if (ms == 0) "0 с" else (if (ms > 0) "+" else "−") + secs(Math.abs(ms))
+        addView(ui.numbers(ui.text("$label: $value", 15f, if (own) Palette.text else Palette.muted, medium = own)))
+        addView(flow(ua.faric.trackcatcher.core.CutShift.STEPS.map { d ->
+            ui.button((if (d > 0) "+" else "−") + secs(Math.abs(d)).removeSuffix(" с"), Ui.Kind.NORMAL) {
+                set(ua.faric.trackcatcher.core.CutShift.step(ms, d))
+            }
         }))
-        edgesCard.addView(ui.muted(
-            when {
-                v.cutShiftMs > 0 -> "Розріз пізніше: якщо на початку файлу чути кінець попередньої пісні."
-                v.cutShiftMs < 0 -> "Розріз раніше: якщо в кінці файлу чути початок наступної пісні."
-                else -> "«0» — найкраща точка, знайдена на телефоні (колишні +0,5 с). «+» — якщо на початку чути кінець попередньої пісні; «−» — якщо в кінці чути початок наступної."
-            },
-            13.5f,
-        ))
     }
 
     /** 500 → «0,5 с», 1000 → «1 с». */

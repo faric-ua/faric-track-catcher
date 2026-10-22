@@ -180,4 +180,38 @@ class TrackSplitterTest {
         // розріз ≈ 3,2 с, сигнал на 4,4 с з позицією 1,0 с → позиція в точці розрізу ≈ 0 (не мінус)
         assertEquals(0L, sink.segments[1].start.positionMs)
     }
+
+    /** T103: AIMP з інтернету — сигнал зі шторки на 10 с раніше за звук; зсув +10 с ставить розріз туди, де справді нова пісня. */
+    @Test
+    fun bigPositiveShiftCutsLater() {
+        val sink = MemorySink()
+        val s = TrackSplitter(sink, shiftMs = 10_000)
+        s.onTrackChange(a, 0)
+        feed(s, TestAudio.tone(TestAudio.ms(5_000)))
+        s.onTrackChange(b, 0)                                  // сигнал на 5 с, а стара пісня грає ще 10 с
+        feed(s, TestAudio.tone(TestAudio.ms(9_800)))
+        feed(s, TestAudio.silence(TestAudio.ms(400)))           // справжня межа ≈ 15 с
+        feed(s, TestAudio.tone(TestAudio.ms(6_000), 660.0))
+        s.stop()
+        assertEquals(2, sink.segments.size)
+        val cutMs = Pcm.framesToMs(sink.segments[0].frames)
+        assertTrue("розріз $cutMs мс", cutMs in 14_800..15_300)
+    }
+
+    /** T103: від'ємний зсув −8 с — розріз раніше за сигнал (звук назад тримається в пам'яті). */
+    @Test
+    fun bigNegativeShiftCutsEarlier() {
+        val sink = MemorySink()
+        val s = TrackSplitter(sink, shiftMs = -8_000)
+        s.onTrackChange(a, 0)
+        feed(s, TestAudio.tone(TestAudio.ms(4_000)))
+        feed(s, TestAudio.silence(TestAudio.ms(400)))           // справжня межа ≈ 4,2 с
+        feed(s, TestAudio.tone(TestAudio.ms(7_800), 660.0))
+        s.onTrackChange(b, 0)                                  // сигнал запізнився на 8 с (≈ 12,2 с)
+        feed(s, TestAudio.tone(TestAudio.ms(4_000), 660.0))
+        s.stop()
+        assertEquals(2, sink.segments.size)
+        val cutMs = Pcm.framesToMs(sink.segments[0].frames)
+        assertTrue("розріз $cutMs мс", cutMs in 4_000..4_500)
+    }
 }

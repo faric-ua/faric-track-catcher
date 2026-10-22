@@ -98,6 +98,9 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
      * «g:<альбом>» — альбом / виконавець, «s:<сесія>» — сесія, «gs:<альбом>:<сесія>» — сесія всередині альбому.
      */
     private val toggled = LinkedHashSet<String>().apply { state?.getStringArray(KEY_TOGGLED)?.forEach { add(it) } }
+    private var groupScroll: View? = null
+    private var chipsScroll: View? = null
+
     /** Записи, які зараз видно (у відкритих групах) — «Вибрати всі видимі» бере лише їх. */
     private val shownIds = LinkedHashSet<Long>()
     private lateinit var listScroll: android.widget.ScrollView
@@ -114,10 +117,10 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         })
         val top = ui.column(10).apply {
             setPadding(ui.dp(16), ui.dp(12), ui.dp(16), ui.dp(4))
+            addView(pickBar, ui.matchWrap()) // T104: панель вибору — у самому верху, пошук і фільтри на цей час ховаються
             addView(search, ui.matchWrap())
-            addView(ui.hscroll(groupChips), ui.matchWrap())
-            addView(ui.hscroll(chips), ui.matchWrap())
-            addView(pickBar, ui.matchWrap())
+            addView(ui.hscroll(groupChips).also { groupScroll = it }, ui.matchWrap())
+            addView(ui.hscroll(chips).also { chipsScroll = it }, ui.matchWrap())
         }
         val listColumn = ui.column().apply {
             addView(top, ui.matchWrap())
@@ -274,6 +277,12 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         val all = db.list(null, "").associateBy { it.id }
         picked.retainAll(all.keys)
         pickBar.visibility = if (picked.isEmpty()) View.GONE else View.VISIBLE
+        // T104 (faric 22.10 22:37: «меню вибору — хай піднімається в самий верх, воно закриває весь екран»):
+        // поки вибираєш — пошук і фільтри сховані, панель угорі, під нею одразу список.
+        val choosing = picked.isNotEmpty()
+        search.visibility = if (choosing) View.GONE else View.VISIBLE
+        groupScroll?.visibility = if (choosing) View.GONE else View.VISIBLE
+        chipsScroll?.visibility = if (choosing) View.GONE else View.VISIBLE
         if (picked.isEmpty()) return
         val withFiles = picked.count { all[it]?.hasFile == true }
         pickBar.addView(ui.numbers(ui.title("Вибрано: ${picked.size}", 16f)))
@@ -324,11 +333,23 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             }
             append(" Повернути не вийде.")
         }
+        // T104 (faric 22.10 22:38: «видалити з файлами, видалити з історії»): друга кнопка — лише з історії, файли лишаються.
+        val actions = if (withFiles > 0) {
+            listOf("Видалити з файлами" to Ui.Kind.DANGER, "Лише з історії" to Ui.Kind.NORMAL, "Скасувати" to Ui.Kind.QUIET)
+        } else {
+            listOf("Видалити" to Ui.Kind.DANGER, "Скасувати" to Ui.Kind.QUIET)
+        }
         val body = host.overlay.dialog(
             title = if (chosen.size == 1) "Видалити запис?" else "Видалити ${chosen.size} записів?",
-            message = message,
-            actions = listOf("Видалити" to Ui.Kind.DANGER, "Скасувати" to Ui.Kind.QUIET),
-            onAction = { i -> if (i == 0) deleteMany(chosen) else host.overlay.dismiss() },
+            message = message + if (withFiles > 0) "\n\n«Лише з історії» — записи зникнуть зі списку, а файли лишаться в папці (їх видно в «Моїх файлах» і в Audio Converter)." else "",
+            actions = actions,
+            onAction = { i ->
+                when (actions[i].first) {
+                    "Видалити з файлами", "Видалити" -> deleteMany(chosen)
+                    "Лише з історії" -> forgetMany(chosen)
+                    else -> host.overlay.dismiss()
+                }
+            },
         )
         host.overlay.show(KEY_DELETE_MANY, body)
     }
@@ -351,6 +372,26 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         if (selectedId in gone) selectedId = 0L
         host.overlay.dismiss()
         if (stuck > 0) host.toast("Не вдалося видалити файли ${TimeText.plural(stuck, "запису", "записів", "записів")} — вони лишились в історії.")
+        reload()
+        host.refreshBack()
+    }
+
+    /** T104: прибрати записи з історії, файли не чіпати. */
+    private fun forgetMany(chosen: List<RecordingRow>) {
+        val ids = chosen.map { it.id }
+        db.delete(ids)
+        picked.removeAll(ids.toSet())
+        if (selectedId in ids) selectedId = 0L
+        host.overlay.dismiss()
+        host.toast("З історії прибрано ${TimeText.plural(ids.size, "запис", "записи", "записів")} — файли лишились на місці")
+        reload()
+        host.refreshBack()
+    }
+
+    /** T104 (faric 22.10 22:38: «групу затиснути й тримати — що з нею зробити»): довге натискання на плитку групи — вибрати всі її пісні. */
+    private fun pickGroup(members: List<RecordingRow>) {
+        members.forEach { picked += it.id }
+        host.toast("Вибрано ${TimeText.plural(members.size, "запис", "записи", "записів")} групи — дії вгорі")
         reload()
         host.refreshBack()
     }
@@ -491,6 +532,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     private fun tile(key: String, title: String, sub: String, members: List<RecordingRow>, open: Boolean, nested: Boolean): View {
         val t = GroupTile(host, ui, title, sub, marks(members), groupArt(members, if (nested) 40 else 52), open, nested) { toggle(key) }
+        t.setOnLongClickListener { pickGroup(members); true }
         marquee.add(t)
         return t
     }

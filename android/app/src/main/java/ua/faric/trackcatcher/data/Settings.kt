@@ -88,6 +88,19 @@ class Settings(context: Context) {
         }
         set(v) = prefs.edit().putInt(KEY_CUT_SHIFT_MS, v).putBoolean(KEY_CUT_SHIFT_V2, true).apply()
 
+    /**
+     * T103: свій зсув для окремого плеєра (AIMP з інтернету — сигнал на 10 с раніше за звук, а Suno — точно).
+     * Нема свого — як для всіх ([cutShiftMs]).
+     */
+    fun cutShiftFor(pkg: String?): Int =
+        if (!pkg.isNullOrBlank() && prefs.contains(KEY_CUT_SHIFT_PKG + pkg)) prefs.getInt(KEY_CUT_SHIFT_PKG + pkg, 0) else cutShiftMs
+
+    fun hasOwnCutShift(pkg: String?): Boolean = !pkg.isNullOrBlank() && prefs.contains(KEY_CUT_SHIFT_PKG + pkg)
+
+    fun setCutShiftFor(pkg: String, ms: Int) = prefs.edit().putInt(KEY_CUT_SHIFT_PKG + pkg, ms).apply()
+
+    fun clearCutShiftFor(pkg: String) = prefs.edit().remove(KEY_CUT_SHIFT_PKG + pkg).apply()
+
     /** Один раз після оновлення до 0.1.25: збережений зсув — від нового нуля, щоб розріз не з'їхав на +0,5 с. */
     private fun migrateCutShift() {
         if (prefs.getBoolean(KEY_CUT_SHIFT_V2, false)) return
@@ -214,6 +227,7 @@ class Settings(context: Context) {
         private const val KEY_HISTORY_GROUP = "history_group"
         private const val KEY_HISTORY_OPEN = "history_open"
         private const val KEY_TITLE_ONLY_NAMES = "names_title_only"
+        private const val KEY_CUT_SHIFT_PKG = "cut_shift_pkg_"
         private const val KEY_REPLAY_GAIN = "replay_gain"
         private const val KEY_ENCODE_TIMING = "encode_timing"
 
