@@ -372,7 +372,21 @@ class FlacBatchService : Service() {
         return b.build()
     }
 
+    override fun onDestroy() {
+        // Служба закривається, а робота не дійшла до кінця — не лишати в шторці «вічне» «Перевіряю…».
+        if (worker != null) runCatching { getSystemService(NotificationManager::class.java).cancel(NOTIF_ID) }
+        super.onDestroy()
+    }
+
     companion object {
+        /** Після старту процесу: незакінчене (ongoing) повідомлення роботи — від минулого, уже вбитого процесу. */
+        fun clearStale(context: android.content.Context) {
+            runCatching {
+                val nm = context.getSystemService(NotificationManager::class.java)
+                if (nm.activeNotifications.any { it.id == NOTIF_ID && (it.notification.flags and Notification.FLAG_ONGOING_EVENT) != 0 }) nm.cancel(NOTIF_ID)
+            }
+        }
+
         const val EXTRA_IDS = "ids"
         const val EXTRA_MODE = "mode"
         const val EXTRA_AUTO = "auto"

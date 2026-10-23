@@ -101,12 +101,15 @@ object Renumber {
             val after = fresh.inputStream().buffered(64 * 1024).use { FileTags.read(it, fresh.length(), name) }
             if (!check(after)) throw IOException("новий тег не записався — файл не чіпаю")
             try {
+                WriteJournal.begin(app, uri, name, backup, fresh.length()) // закриють посеред запису — наступний старт поверне
                 write(app, u, fresh)
                 val written = resolver.openInputStream(u)?.buffered(256 * 1024)?.use { Retag.audioDigest(kind, it) }
                 if (written != sound) throw IOException("після заміни звук не той")
             } catch (e: Exception) {
                 runCatching { write(app, u, backup) }
                 throw IOException("не вдалося переписати (${e.message}) — повернув файл, як був")
+            } finally {
+                WriteJournal.end(app)
             }
         } finally {
             backup.delete()
