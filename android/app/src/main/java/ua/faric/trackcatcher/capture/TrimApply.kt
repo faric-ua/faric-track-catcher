@@ -290,6 +290,7 @@ object TrimApply {
             out.use { o -> src.inputStream().use { it.copyTo(o, 256 * 1024) } }
         }
         try {
+            WriteJournal.begin(app, u.toString(), u.lastPathSegment.orEmpty(), backup, from.length())
             write(from)
             // Звірка: у файлі тепер рівно стільки байтів, скільки в новому (рахуємо самі, а не з бази Android).
             var n = 0L
@@ -298,6 +299,8 @@ object TrimApply {
         } catch (e: Exception) {
             runCatching { write(backup) }
             throw IOException("не вдалося замінити (${e.message}) — повернув файл, як був")
+        } finally {
+            WriteJournal.end(app)
         }
     }
 
