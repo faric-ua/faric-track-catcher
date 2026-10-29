@@ -45,8 +45,8 @@ android {
         // Запис звуку інших застосунків (AudioPlaybackCapture) є лише з Android 10.
         minSdk = 29
         targetSdk = 36
-        versionCode = 61
-        versionName = "0.1.60"
+        versionCode = 62
+        versionName = "0.1.61"
         buildConfigField("String", "GIT_COMMIT", "\"$tcCommit\"")
     }
 

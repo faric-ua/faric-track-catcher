@@ -21,6 +21,7 @@ import ua.faric.trackcatcher.data.AutoBackup
 import ua.faric.trackcatcher.data.Settings
 import ua.faric.trackcatcher.encode.Mp3Encoder
 import ua.faric.trackcatcher.state.RecorderHub
+import ua.faric.trackcatcher.state.WorkLog
 
 /**
  * «Налаштування»: формат, якість MP3, мінімальна довжина, повтори, папка, дозволи, про застосунок.
@@ -59,6 +60,8 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             // T99 (faric 22.10 18:01): кнопка інструкції — на всю ширину; версія — тим самим рядком, що й угорі (T94).
             addView(ui.numbers(ui.muted(MainActivity.versionLine(), 13f)))
             addView(ui.iconButton(LineIcon.BOOK, "Інструкція користувача", Ui.Kind.PRIMARY) { GuideActivity.open(host) }, ui.matchWrap())
+            // T108 (faric 29.10 16:57): журнал роботи — що застосунок робив; той самий іде в автокопію на Диск для Claude.
+            addView(ui.iconButton(LineIcon.FILE, "Журнал роботи", Ui.Kind.NORMAL) { showJournal() }, ui.matchWrap())
             addView(ui.muted("Записує звук, який грає телефон, і ріже його на пісні за назвою зі шторки. " +
                 "Записи лишаються на телефоні й нікуди не передаються: без реклами й аналітики. Інтернет — лише для перевірки оновлень " +
                 "з Google Диска автора. Лише для особистого користування.", 13.5f))
@@ -312,7 +315,40 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         host.overlay.show("$KEY_LOUD$step", body)
     }
 
+    /** T108: журнал роботи — найновіше вгорі; «Копіювати» — щоб вставити в чат. */
+    private fun showJournal() {
+        val lines = WorkLog.tail(48 * 1024)
+        val a = AutoBackup.state(host)
+        val hint = if (a.on) "Що застосунок робив останнім часом — найновіше вгорі. Журнал щоразу йде разом з автокопією («${a.name}»), тож Claude читає його сам."
+        else "Що застосунок робив останнім часом — найновіше вгорі. Щоб Claude читав його сам, увімкни «Автокопію» на Google Диск; або «Копіювати» й встав у чат."
+        val text = ui.text(if (lines.isEmpty()) "Поки порожньо." else lines.asReversed().joinToString("\n"), 11.5f, Palette.text).apply {
+            typeface = android.graphics.Typeface.MONOSPACE
+            setTextIsSelectable(true)
+        }
+        val body = host.overlay.dialog(
+            title = "Журнал роботи",
+            message = hint,
+            actions = listOf("Копіювати" to Ui.Kind.NORMAL, "Закрити" to Ui.Kind.QUIET),
+            onAction = { i ->
+                if (i == 0) {
+                    val all = WorkLog.tail()
+                    val cm = host.getSystemService(android.content.ClipboardManager::class.java)
+                    cm?.setPrimaryClip(android.content.ClipData.newPlainText("Track Catcher", "${ua.faric.trackcatcher.core.AppInfo.encoder}\n" + all.joinToString("\n")))
+                    host.toast("Скопійовано — встав у чат")
+                } else {
+                    host.overlay.dismiss()
+                }
+            },
+            extra = text,
+        )
+        host.overlay.show(KEY_JOURNAL, body)
+    }
+
     override fun restoreDialog(key: String): Boolean {
+        if (key == KEY_JOURNAL) {
+            showJournal()
+            return true
+        }
         if (!key.startsWith(KEY_LOUD)) return false
         askLoudness(key.removePrefix(KEY_LOUD).toIntOrNull()?.coerceIn(1, 3) ?: 1)
         return true
@@ -442,5 +478,6 @@ class SettingsScreen(host: MainActivity, state: Bundle?) : Screen(host) {
 
     companion object {
         private const val KEY_LOUD = "loud:"
+        private const val KEY_JOURNAL = "settings:journal"
     }
 }

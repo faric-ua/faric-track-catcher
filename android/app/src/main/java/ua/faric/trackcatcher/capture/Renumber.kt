@@ -9,6 +9,7 @@ import ua.faric.trackcatcher.core.Retag
 import ua.faric.trackcatcher.core.TrackNumber
 import ua.faric.trackcatcher.data.HistoryDb
 import ua.faric.trackcatcher.data.RecordingRow
+import ua.faric.trackcatcher.state.WorkLog
 
 /**
  * Перевірка номерів пісень в альбомі (T70, faric 18.10 04:11: «після запису пробіжиться й передивиться, чи номери
@@ -62,14 +63,20 @@ object Renumber {
      * знову перевірка; збій під час заміни — оригінал записується назад.
      */
     fun fixFile(app: Context, r: RecordingRow, uri: String, name: String, number: Int): Boolean {
+        val t0 = System.currentTimeMillis()
         val current = readTags(app, uri, name)
         val set = wanted(r, number, current)
         // Номер правильний, але теги не в звичному порядку (після 0.1.36 назва опинилась у кінці) — лише впорядкувати.
         if (set.isEmpty()) {
-            if (Retag.inOrder(current.raw.map { it.key })) return false
+            if (Retag.inOrder(current.raw.map { it.key })) {
+                WorkLog.step("номери", "теги прочитано за ${System.currentTimeMillis() - t0} мс — номер $number правильний")
+                return false
+            }
+            WorkLog.step("номери", "номер $number правильний, теги не в звичному порядку — впорядковую")
             safeRetag(app, uri, name, emptyMap()) { true }
             return true
         }
+        WorkLog.step("номери", "теги прочитано за ${System.currentTimeMillis() - t0} мс — треба вписати: $set")
         safeRetag(app, uri, name, set) { it[FileTags.Field.TRACK]?.substringBefore('/')?.trim()?.toIntOrNull() == number }
         return true
     }
@@ -93,19 +100,28 @@ object Renumber {
         val dir = File(app.cacheDir, "retag").apply { mkdirs() }
         val backup = File(dir, "original.bak")
         val fresh = File(dir, "new.tmp")
+        var t = System.currentTimeMillis()
+        fun took(): Long = (System.currentTimeMillis() - t).also { t = System.currentTimeMillis() }
         try {
+            WorkLog.step("теги", "копіюю оригінал: $name")
             resolver.openInputStream(u)?.use { i -> backup.outputStream().use { o -> i.copyTo(o, 256 * 1024) } } ?: throw IOException("файл не відкривається")
+            WorkLog.step("теги", "копія ${backup.length()} Б за ${took()} мс; пишу новий файл")
             backup.inputStream().buffered(256 * 1024).use { i -> fresh.outputStream().buffered(256 * 1024).use { o -> Retag.rewrite(kind, i, o, set) } }
+            WorkLog.step("теги", "новий ${fresh.length()} Б за ${took()} мс; звіряю звук")
             val sound = backup.inputStream().buffered(256 * 1024).use { Retag.audioDigest(kind, it) }
             if (fresh.inputStream().buffered(256 * 1024).use { Retag.audioDigest(kind, it) } != sound) throw IOException("перевірка звуку не зійшлась — файл не чіпаю")
             val after = fresh.inputStream().buffered(64 * 1024).use { FileTags.read(it, fresh.length(), name) }
             if (!check(after)) throw IOException("новий тег не записався — файл не чіпаю")
+            WorkLog.step("теги", "звук той самий (${took()} мс); замінюю файл")
             try {
                 WriteJournal.begin(app, uri, name, backup, fresh.length()) // закриють посеред запису — наступний старт поверне
                 write(app, u, fresh)
+                WorkLog.step("теги", "записано за ${took()} мс; перевіряю записане")
                 val written = resolver.openInputStream(u)?.buffered(256 * 1024)?.use { Retag.audioDigest(kind, it) }
                 if (written != sound) throw IOException("після заміни звук не той")
+                WorkLog.step("теги", "готово, перевірено за ${took()} мс")
             } catch (e: Exception) {
+                WorkLog.e("теги", "збій під час заміни «$name» — повертаю оригінал", e)
                 runCatching { write(app, u, backup) }
                 throw IOException("не вдалося переписати (${e.message}) — повернув файл, як був")
             } finally {

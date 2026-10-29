@@ -9,6 +9,10 @@ class TrackCatcherApp : Application() {
         super.onCreate()
         ua.faric.trackcatcher.core.AppInfo.versionName = BuildConfig.VERSION_NAME
         ua.faric.trackcatcher.core.AppInfo.versionCode = BuildConfig.VERSION_CODE
+        // T108: журнал роботи — першим, щоб у нього потрапило все, що далі (і причина минулого закриття).
+        ua.faric.trackcatcher.state.WorkLog.install(filesDir)
+        ua.faric.trackcatcher.state.WorkLog.onAlarm = { ua.faric.trackcatcher.data.AutoBackup.request(this) }
+        ua.faric.trackcatcher.state.WorkLog.i("старт", startLine())
         // Запис обірвався разом із застосунком чи була помилка — пояснити на екрані «Запис» (faric 20.10 17:10).
         ua.faric.trackcatcher.state.LastExit.install(this)
         // Застосунок щойно стартував — жодна фонова робота зараз не йде: «Перевіряю номери: 1 з 2», що лишилось
@@ -18,6 +22,7 @@ class TrackCatcherApp : Application() {
         val app = this
         Thread({
             ua.faric.trackcatcher.capture.WriteJournal.recover(app)?.let { msg ->
+                ua.faric.trackcatcher.state.WorkLog.w("старт", msg)
                 ua.faric.trackcatcher.state.RecorderHub.update { it.copy(error = msg) }
             }
         }, "write-journal").start()
@@ -39,6 +44,16 @@ class TrackCatcherApp : Application() {
                 setShowBadge(false)
             },
         )
+    }
+
+    /** Перший рядок журналу після старту: версія, телефон, пам'ять (T108). */
+    private fun startLine(): String {
+        val am = getSystemService(android.app.ActivityManager::class.java)
+        val mem = android.app.ActivityManager.MemoryInfo().also { runCatching { am.getMemoryInfo(it) } }
+        val mb = 1024L * 1024L
+        return "${ua.faric.trackcatcher.core.AppInfo.encoder} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · " +
+            "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}) · " +
+            "пам'ять ${mem.availMem / mb} з ${mem.totalMem / mb} МБ вільно" + if (mem.lowMemory) " · МАЛО" else ""
     }
 
     companion object {

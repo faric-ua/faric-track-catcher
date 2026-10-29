@@ -53,11 +53,14 @@ class FinisherQueue(context: Context, private val onIdle: () -> Unit) {
 
     private fun start(job: SegmentJob, settings: Settings.Values) {
         executor.execute {
+            val t0 = System.currentTimeMillis()
             val row = try {
                 finisher.finish(job, settings)
             } catch (t: Throwable) {
+                ua.faric.trackcatcher.state.WorkLog.e("збереження", "пісня не збереглась", t)
                 finisher.failure(job, t)
             }
+            ua.faric.trackcatcher.state.WorkLog.i("збереження", "${row.displayName} — за ${System.currentTimeMillis() - t0} мс")
             RecorderHub.addResult(RecorderHub.Result(row.displayName, row.status, row.reason))
             ua.faric.trackcatcher.data.AutoBackup.request(app) // T67: нічого не робить, якщо автокопію не ввімкнено
             if (pending.decrementAndGet() == 0) onIdle()
