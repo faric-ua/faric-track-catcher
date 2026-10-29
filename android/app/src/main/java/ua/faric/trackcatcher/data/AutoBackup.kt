@@ -77,13 +77,19 @@ object AutoBackup {
             val out = runCatching { resolver.openOutputStream(uri, "wt") }.getOrNull()
                 ?: resolver.openOutputStream(uri, "w")
                 ?: throw IOException("файл копії не відкривається на запис")
-            val n = out.use { HistoryBackup.export(HistoryDb.get(app), it, BuildConfig.VERSION_NAME, Settings(app).exportMap()) }
+            val journal = linkedMapOf<String, Any?>(
+                "phone" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
+                "writtenAt" to System.currentTimeMillis(),
+                "lines" to ua.faric.trackcatcher.state.WorkLog.tail(),
+            )
+            val n = out.use { HistoryBackup.export(HistoryDb.get(app), it, BuildConfig.VERSION_NAME, Settings(app).exportMap(), journal) }
             p.edit().putLong(KEY_LAST_AT, System.currentTimeMillis()).remove(KEY_ERROR).apply()
             n
         } catch (e: SecurityException) {
             p.edit().putString(KEY_ERROR, "Android забрав доступ до файлу — вибери файл ще раз").apply()
             throw e
         } catch (e: Exception) {
+            ua.faric.trackcatcher.state.WorkLog.i("автокопія", "не вдалося: ${e.message ?: e.javaClass.simpleName}") // не W — інакше знову автокопія
             p.edit().putString(KEY_ERROR, e.message ?: e.javaClass.simpleName).apply()
             throw e
         }

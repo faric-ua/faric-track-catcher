@@ -57,12 +57,24 @@ object RecorderHub {
 
     @Synchronized
     fun update(change: (State) -> State) {
+        val before = state
         state = change(state)
         val snapshot = state
+        // T108: у журнал — лише зміни фази й нові помилки (рівні звуку оновлюються 10 разів на секунду — їх ні).
+        if (snapshot.phase != before.phase) {
+            WorkLog.i("запис", "${before.phase} → ${snapshot.phase}" + if (snapshot.phase == Phase.IDLE) " · пісень ${snapshot.songs}, збережено ${snapshot.complete}, неповних ${snapshot.partial}, не вдалося ${snapshot.failed}" else "")
+        }
+        val m = snapshot.meta
+        if (m != null && snapshot.phase == Phase.RECORDING && (m.title != before.meta?.title || m.artist != before.meta?.artist)) {
+            WorkLog.i("запис", "грає: ${m.artist} — ${m.title}" + (if (m.album.isNotBlank()) " · ${m.album}" else "") + " · ${m.sourcePackage}" +
+                if (m.durationMs > 0) " · ${m.durationMs / 1000} с" else "")
+        }
+        if (snapshot.error != null && snapshot.error != before.error) WorkLog.w("запис", "на екрані «Запис»: ${snapshot.error}")
         main.post { listeners.forEach { it(snapshot) } }
     }
 
     fun addResult(result: Result) = update { s ->
+        WorkLog.i("запис", "збережено: ${result.name} · ${result.status}" + if (result.reason.isNotBlank()) " · ${result.reason}" else "")
         s.copy(
             queued = maxOf(0, s.queued - 1),
             complete = s.complete + if (result.status == RecStatus.COMPLETE) 1 else 0,

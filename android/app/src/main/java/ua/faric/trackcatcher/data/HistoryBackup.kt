@@ -21,7 +21,8 @@ object HistoryBackup {
     data class Result(val added: Int, val skipped: Int, val settings: Map<*, *>? = null)
 
     /** [settings] — налаштування (T67: автокопія кладе їх разом з історією); старі копії їх не мають. */
-    fun export(db: HistoryDb, out: OutputStream, appVersion: String, settings: Map<String, Any?>? = null): Int {
+    /** [journal] — журнал роботи (T108): лише в автокопії, щоб Claude бачив, що відбувалось на телефоні. */
+    fun export(db: HistoryDb, out: OutputStream, appVersion: String, settings: Map<String, Any?>? = null, journal: Map<String, Any?>? = null): Int {
         val rows = db.all()
         val doc = linkedMapOf(
             "format" to FORMAT,
@@ -33,6 +34,7 @@ object HistoryBackup {
             "recordings" to rows.map { toMap(it) },
         )
         if (settings != null) doc["settings"] = settings
+        if (journal != null) doc["journal"] = journal
         out.write(JsonDoc.write(doc).toByteArray(Charsets.UTF_8))
         return rows.size
     }

@@ -23,6 +23,7 @@ object LastExit {
         val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, e ->
+            runCatching { WorkLog.e("збій", "застосунок падає: потік «${thread.name}»", e) }
             runCatching {
                 val sw = StringWriter()
                 e.printStackTrace(PrintWriter(sw))

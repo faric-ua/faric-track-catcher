@@ -11,9 +11,11 @@ import android.os.Build
 import android.os.IBinder
 import ua.faric.trackcatcher.R
 import ua.faric.trackcatcher.TrackCatcherApp
+import ua.faric.trackcatcher.core.LogText
 import ua.faric.trackcatcher.core.TimeText
 import ua.faric.trackcatcher.data.HistoryDb
 import ua.faric.trackcatcher.data.Settings
+import ua.faric.trackcatcher.state.WorkLog
 import ua.faric.trackcatcher.ui.MainActivity
 
 /**
@@ -27,6 +29,7 @@ class FlacBatchService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            WorkLog.i("робота", "натиснули «Зупинити» (потік ${if (worker?.isAlive == true) "працює" else "не працює"}, останній крок: ${WorkLog.stepWhat})")
             FlacBatch.stop()
             return START_NOT_STICKY
         }
@@ -39,18 +42,62 @@ class FlacBatchService : Service() {
         val mode = intent.getStringExtra(EXTRA_MODE)
         val auto = intent.getBooleanExtra(EXTRA_AUTO, false)
         val tail = intent.getStringExtra(EXTRA_TAIL).orEmpty()
+        val what = mode ?: FlacBatch.Mode.FLAC.name
+        WorkLog.step("робота", "почалось: $what · записів ${ids.size}" + if (auto) " · сам після запису" else "")
         worker = Thread({
-            when (mode) {
-                FlacBatch.Mode.RENUMBER.name -> renumber(ids, auto)
-                FlacBatch.Mode.TITLES.name -> titles(ids, tail)
-                FlacBatch.Mode.EDIT.name -> editMeta(ids, specOf(intent))
-                FlacBatch.Mode.TRIM.name -> trim(ids, planOf(intent))
-                FlacBatch.Mode.HOLES.name -> holes(ids)
-                FlacBatch.Mode.RETITLE.name -> retitle(ids, intent.getStringArrayExtra(EXTRA_TITLES)?.map { it ?: "" }.orEmpty())
-                else -> run(ids)
+            try {
+                when (mode) {
+                    FlacBatch.Mode.RENUMBER.name -> renumber(ids, auto)
+                    FlacBatch.Mode.TITLES.name -> titles(ids, tail)
+                    FlacBatch.Mode.EDIT.name -> editMeta(ids, specOf(intent))
+                    FlacBatch.Mode.TRIM.name -> trim(ids, planOf(intent))
+                    FlacBatch.Mode.HOLES.name -> holes(ids)
+                    FlacBatch.Mode.RETITLE.name -> retitle(ids, intent.getStringArrayExtra(EXTRA_TITLES)?.map { it ?: "" }.orEmpty())
+                    else -> run(ids)
+                }
+                val s = FlacBatch.state
+                WorkLog.i(
+                    "робота",
+                    "кінець: $what · ${s.index} з ${s.total} · зроблено ${s.made}" + (if (s.cancelled) " · зупинено" else "") +
+                        (if (s.skipped > 0) " · пропущено ${s.skipped}" else "") +
+                        s.problems.joinToString("") { "\nне вийшло: " + it.replace('\t', ' ') },
+                )
+            } catch (t: Throwable) {
+                WorkLog.e("робота", "збій посеред «$what», останній крок: ${WorkLog.stepWhat}", t)
+                throw t
+            } finally {
+                WorkLog.idle()
             }
         }, "wav-to-flac").also { it.start() }
+        watch(worker!!, what)
         return START_NOT_STICKY
+    }
+
+    /**
+     * Сторож (T108, faric 29.10 16:50: «Перевіряю номери: 1 з 8» стоїть 5 хв, застосунок живий): робота хвилину без
+     * жодного кроку — у журнал іде, де саме стоїть потік, і автокопія з журналом іде на Диск. Сам нічого не перериває.
+     */
+    private fun watch(w: Thread, what: String) {
+        Thread({
+            var warnedAt = 0L
+            while (w.isAlive) {
+                try {
+                    Thread.sleep(10_000)
+                } catch (e: InterruptedException) {
+                    return@Thread
+                }
+                val now = System.currentTimeMillis()
+                val at = WorkLog.stepAt
+                if (w.isAlive && LogText.stuck(now, at, warnedAt)) {
+                    warnedAt = now
+                    WorkLog.w(
+                        "сторож",
+                        "«$what» без руху ${(now - at) / 1000} с; останній крок: ${WorkLog.stepWhat}; потік: ${w.state}\n" +
+                            LogText.threadStack(w.stackTrace),
+                    )
+                }
+            }
+        }, "work-watchdog").apply { isDaemon = true }.start()
     }
 
     private fun run(ids: LongArray) {
@@ -74,14 +121,17 @@ class FlacBatchService : Service() {
                 if (pct == shown) return
                 shown = pct
                 FlacBatch.update { it.copy(index = i + 1, label = label, percent = pct) }
+                WorkLog.alive("FLAC ${i + 1} з ${ids.size}: $label · $pct %")
                 notify("${i + 1} з ${ids.size}: $label", "$pct %", ((i + p) * 100 / ids.size).toInt())
             }
+            WorkLog.step("flac", "${i + 1} з ${ids.size}: $label · ${r.wavName}")
             say(0f)
             try {
                 FlacBatch.makeOne(app, r, settings) { say(it) }
                 made++
                 FlacBatch.update { it.copy(made = made) }
             } catch (e: Exception) {
+                WorkLog.e("flac", "не вийшло: $label", e)
                 problems += "$label\t${ua.faric.trackcatcher.core.ErrorText.human(e)}"
                 FlacBatch.update { it.copy(problems = problems.toList()) }
             }
@@ -124,6 +174,7 @@ class FlacBatchService : Service() {
         }
         FlacBatch.update { it.copy(skipped = skipped, problems = problems.toList()) }
         FlacBatch.update { it.copy(total = work.size) }
+        WorkLog.step("номери", "файлів до перевірки: ${work.size}, пропущено: $skipped" + problems.joinToString("") { "\n" + it.replace('\t', ' ') })
         var fixed = 0
         var cancelled = false
         for ((i, w) in work.withIndex()) {
@@ -132,12 +183,14 @@ class FlacBatchService : Service() {
             val label = "№$n · " + row.title.ifBlank { row.displayName }
             FlacBatch.update { it.copy(index = i + 1, label = label, percent = (i * 100) / maxOf(1, work.size)) }
             notify("Перевіряю номери: ${i + 1} з ${work.size}", label, (i * 100) / maxOf(1, work.size))
+            WorkLog.step("номери", "${i + 1} з ${work.size}: $label · ${file.second}")
             try {
                 if (Renumber.fixFile(app, row, file.first, file.second, n)) {
                     fixed++
                     FlacBatch.update { it.copy(made = fixed) }
                 }
             } catch (e: Exception) {
+                WorkLog.e("номери", "не вийшло: ${file.second}", e)
                 problems += "${file.second}\t${ua.faric.trackcatcher.core.ErrorText.human(e)}"
                 FlacBatch.update { it.copy(problems = problems.toList()) }
             }
@@ -170,6 +223,7 @@ class FlacBatchService : Service() {
             val label = TitleFix.newTitle(r, tail) ?: r.title
             FlacBatch.update { it.copy(index = i + 1, label = label, percent = (i * 100) / ids.size) }
             notify("Прибираю зайве з назв: ${i + 1} з ${ids.size}", label, (i * 100) / ids.size)
+            WorkLog.step("робота", "Прибираю зайве з назв: ${i + 1} з ${ids.size}: $label")
             if (TitleFix.newTitle(r, tail) == null) continue
             if (r.hasFile && Renumber.present(app, listOf(r)).isNullOrEmpty()) {
                 skipped++ // файла нема на місці — не чіпаємо (faric 18.10 15:38)
@@ -209,6 +263,7 @@ class FlacBatchService : Service() {
             val title = titles.getOrNull(i) ?: continue
             FlacBatch.update { it.copy(index = i + 1, label = title, percent = (i * 100) / ids.size) }
             notify("Назви з імен файлів: ${i + 1} з ${ids.size}", title, (i * 100) / ids.size)
+            WorkLog.step("робота", "Назви з імен файлів: ${i + 1} з ${ids.size}: $title")
             val bad = runCatching { TitleFix.fixTo(app, r, title, "взято з імені файлу") }.getOrElse { listOf("${r.title}\t${ua.faric.trackcatcher.core.ErrorText.human(it)}") }
             if (bad.isEmpty()) { fixed++; FlacBatch.update { it.copy(made = fixed) } } else { problems += bad; FlacBatch.update { it.copy(problems = problems.toList()) } }
         }
@@ -244,6 +299,7 @@ class FlacBatchService : Service() {
             val label = r.title.ifBlank { r.displayName }
             FlacBatch.update { it.copy(index = i + 1, label = label, percent = (i * 100) / ids.size) }
             notify("Обрізаю: ${i + 1} з ${ids.size}", label, (i * 100) / ids.size)
+            WorkLog.step("робота", "Обрізаю: ${i + 1} з ${ids.size}: $label")
             if (Renumber.present(app, listOf(r)).isNullOrEmpty()) { skipped++; FlacBatch.update { it.copy(skipped = skipped) }; continue }
             TrimApply.progress = { f -> filePart(i, ids.size, "Обрізаю", label, f) }
             val bad = runCatching { TrimApply.apply(app, r, plan) }.getOrElse { listOf("${r.title}\t${ua.faric.trackcatcher.core.ErrorText.human(it)}") }
@@ -275,6 +331,7 @@ class FlacBatchService : Service() {
             val label = r.title.ifBlank { r.displayName }
             FlacBatch.update { it.copy(index = i + 1, label = label, percent = (i * 100) / ids.size) }
             notify("Шукаю тріски: ${i + 1} з ${ids.size}", label, (i * 100) / ids.size)
+            WorkLog.step("робота", "Шукаю тріски: ${i + 1} з ${ids.size}: $label")
             if (!HoleScan.canCheck(r)) { problems += "$label\t${HoleScan.OnlyMp3().message}"; continue }
             if (Renumber.present(app, listOf(r)).isNullOrEmpty()) { skipped++; FlacBatch.update { it.copy(skipped = skipped) }; continue }
             try {
@@ -314,6 +371,7 @@ class FlacBatchService : Service() {
             val label = r.title.ifBlank { r.displayName }
             FlacBatch.update { it.copy(index = i + 1, label = label, percent = (i * 100) / ids.size) }
             notify("Змінюю теги: ${i + 1} з ${ids.size}", label, (i * 100) / ids.size)
+            WorkLog.step("робота", "Змінюю теги: ${i + 1} з ${ids.size}: $label")
             if (Renumber.present(app, listOf(r)).isNullOrEmpty()) { skipped++; FlacBatch.update { it.copy(skipped = skipped) }; continue }
             val bad = runCatching { MetaApply.apply(app, r, spec, plain) }.getOrElse { listOf("${r.title}\t${ua.faric.trackcatcher.core.ErrorText.human(it)}") }
             if (bad.isEmpty()) { fixed++; FlacBatch.update { it.copy(made = fixed) } } else { problems += bad; FlacBatch.update { it.copy(problems = problems.toList()) } }
@@ -342,6 +400,7 @@ class FlacBatchService : Service() {
     private var lastShown = 0L
 
     private fun notify(title: String, text: String, percent: Int) {
+        WorkLog.alive("$title · $text")
         val now = System.currentTimeMillis()
         if (now - lastShown < 700) return
         lastShown = now
@@ -374,7 +433,10 @@ class FlacBatchService : Service() {
 
     override fun onDestroy() {
         // Служба закривається, а робота не дійшла до кінця — не лишати в шторці «вічне» «Перевіряю…».
-        if (worker != null) runCatching { getSystemService(NotificationManager::class.java).cancel(NOTIF_ID) }
+        if (worker != null) {
+            WorkLog.w("робота", "служба закривається, а робота не скінчилась; останній крок: ${WorkLog.stepWhat}")
+            runCatching { getSystemService(NotificationManager::class.java).cancel(NOTIF_ID) }
+        }
         super.onDestroy()
     }
 
@@ -383,7 +445,10 @@ class FlacBatchService : Service() {
         fun clearStale(context: android.content.Context) {
             runCatching {
                 val nm = context.getSystemService(NotificationManager::class.java)
-                if (nm.activeNotifications.any { it.id == NOTIF_ID && (it.notification.flags and Notification.FLAG_ONGOING_EVENT) != 0 }) nm.cancel(NOTIF_ID)
+                nm.activeNotifications.firstOrNull { it.id == NOTIF_ID && (it.notification.flags and Notification.FLAG_ONGOING_EVENT) != 0 }?.let {
+                    WorkLog.w("старт", "у шторці лишилось від минулого процесу: «${it.notification.extras.getCharSequence(Notification.EXTRA_TITLE)}» — прибрано")
+                    nm.cancel(NOTIF_ID)
+                }
             }
         }
 
