@@ -27,7 +27,8 @@ bash "$TOOLS/tc-widget.sh" --quiet 2>/dev/null || true
 
 pause_menu() {
   echo
-  read -r -p "Натисни Enter, щоб повернутись у меню…" _
+  # Termux закрили (не пунктом 0) — read одразу повертає помилку. Тоді виходимо, а не крутимось по колу (GitHub Storage 2026-10-30).
+  read -r -p "Натисни Enter, щоб повернутись у меню…" _ || exit 0
 }
 
 # Шапка меню: велика назва між смужками (власник 2026-10-16 02:12 — «щоб одразу видно, яке це меню»).
@@ -96,7 +97,7 @@ while true; do
   echo
   echo "  0 — Вийти"
   echo
-  read -r -p "Вибір: " choice
+  read -r -p "Вибір: " choice || exit 0
   case "$choice" in
     1)
       clear
