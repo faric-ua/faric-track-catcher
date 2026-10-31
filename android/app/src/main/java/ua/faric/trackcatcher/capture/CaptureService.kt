@@ -87,6 +87,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     }
 
     private var sessionId = 0L
+    /** Початок імен шматків цього запуску (T110: сесію можна продовжувати кілька разів). */
+    private var filePrefix = ""
     private var lastNotified = ""
     private var recoveryQueue: FinisherQueue? = null
     private var unobserve: (() -> Unit)? = null
@@ -236,7 +238,12 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         discardLast = false
         customAlbum = values.customAlbum
         val db = HistoryDb.get(this)
-        sessionId = db.startSession(System.currentTimeMillis(), values.label)
+        // T110: «Продовжити попередню» — пісні цього запуску йдуть в останню сесію.
+        val joined = if (Settings(this).joinLastSession) db.lastSession() else null
+        sessionId = joined?.id ?: db.startSession(System.currentTimeMillis(), values.label)
+        // Шматки на диску — свої для кожного запуску, навіть у тій самій сесії (щоб не зійтись з недописаними минулого разу).
+        filePrefix = "s$sessionId-r${System.currentTimeMillis() / 1000}"
+        ua.faric.trackcatcher.state.WorkLog.i("запис", if (joined != null) "продовжую сесію $sessionId (у ній ${db.sessionSize(sessionId)} записів)" else "нова сесія $sessionId")
         queue = FinisherQueue(this) { main.post { onQueueIdle() } }.apply {
             // T85: на слабкому телефоні — під час запису нічого не стискати, лише після «Стоп».
             hold = DeviceRam.deferEncoding(this@CaptureService, values.encodeTiming)
@@ -249,7 +256,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         // T103: зсув — свій для плеєра, що зараз у шторці (AIMP з інтернету — на 10 с), інакше — для всіх.
         val shiftPkg = playerPkg ?: runCatching { currentPlayerPackage() }.getOrNull()
         val splitter = TrackSplitter(
-            FileSegmentSink(segmentsDir, sessionId) { job -> queue?.submit(job, values) },
+            FileSegmentSink(segmentsDir, sessionId, filePrefix) { job -> queue?.submit(job, values) },
             shiftMs = CutShift.effective(Settings(this).cutShiftFor(shiftPkg)),
         )
 
@@ -700,7 +707,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
     private fun recoverOrphans(stopWhenNothing: Boolean) {
         val dir = segmentsDir(this)
         val orphans = dir.listFiles { f -> f.name.endsWith(".json") }
-            ?.filter { !it.name.startsWith("s$sessionId-") || sessionId == 0L }
+            ?.filter { filePrefix.isEmpty() || !it.name.startsWith("$filePrefix-") }
             ?.mapNotNull { SegmentJob.fromSidecar(it) }
             .orEmpty()
         if (orphans.isEmpty()) {

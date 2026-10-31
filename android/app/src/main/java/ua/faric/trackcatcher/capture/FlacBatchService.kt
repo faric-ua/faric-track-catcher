@@ -139,8 +139,8 @@ class FlacBatchService : Service() {
         FlacBatch.update { it.copy(running = false, finished = true, made = made, problems = problems.toList(), cancelled = cancelled) }
         val title = if (cancelled) "Зупинено: зроблено $made з ${ids.size}" else "Готово: " + TimeText.plural(made, "FLAC", "FLAC", "FLAC") + " з обкладинками"
         val done = notification(title, if (problems.isEmpty()) "WAV лишились на місці" else "Не вийшло: ${problems.size} — подробиці в застосунку", -1, ongoing = false)
-        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
-        getSystemService(NotificationManager::class.java).notify(NOTIF_ID, done)
+        leaveForeground()
+        getSystemService(NotificationManager::class.java).notify(NOTIF_DONE, done)
         worker = null
         stopSelf()
     }
@@ -196,13 +196,13 @@ class FlacBatchService : Service() {
             }
         }
         FlacBatch.update { it.copy(running = false, finished = true, made = fixed, problems = problems.toList(), cancelled = cancelled, index = work.size, skipped = skipped) }
-        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
+        leaveForeground()
         val nm = getSystemService(NotificationManager::class.java)
         if (auto && fixed == 0 && problems.isEmpty()) {
-            nm.cancel(NOTIF_ID) // після запису й усе гаразд — не заважаємо
+            // після запису й усе гаразд — не заважаємо (повідомлення поступу вже прибрано)
         } else {
             val title = if (fixed == 0) "Номери пісень правильні (${work.size})" else "Номери виправлено: $fixed з ${work.size}"
-            nm.notify(NOTIF_ID, notification(title, if (problems.isEmpty()) "Звук не змінювався — лише теги" else "Не вийшло: ${problems.size} — подробиці в застосунку", -1, ongoing = false))
+            nm.notify(NOTIF_DONE, notification(title, if (problems.isEmpty()) "Звук не змінювався — лише теги" else "Не вийшло: ${problems.size} — подробиці в застосунку", -1, ongoing = false))
         }
         worker = null
         stopSelf()
@@ -240,10 +240,10 @@ class FlacBatchService : Service() {
             }
         }
         FlacBatch.update { it.copy(running = false, finished = true, made = fixed, problems = problems.toList(), cancelled = cancelled, index = ids.size) }
-        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
+        leaveForeground()
         val title = if (cancelled) "Зупинено: назв виправлено $fixed" else "Назви виправлено: $fixed з ${ids.size}"
         getSystemService(NotificationManager::class.java).notify(
-            NOTIF_ID,
+            NOTIF_DONE,
             notification(title, if (problems.isEmpty()) "Звук не змінювався — лише назви" else "Не вийшло: ${problems.size} — подробиці в застосунку", -1, ongoing = false),
         )
         worker = null
@@ -268,9 +268,9 @@ class FlacBatchService : Service() {
             if (bad.isEmpty()) { fixed++; FlacBatch.update { it.copy(made = fixed) } } else { problems += bad; FlacBatch.update { it.copy(problems = problems.toList()) } }
         }
         FlacBatch.update { it.copy(running = false, finished = true, made = fixed, problems = problems.toList(), cancelled = cancelled, index = ids.size) }
-        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
+        leaveForeground()
         getSystemService(NotificationManager::class.java).notify(
-            NOTIF_ID,
+            NOTIF_DONE,
             notification("Назви з імен файлів: $fixed з ${ids.size}", if (problems.isEmpty()) "Звук не змінювався — лише назви" else "Не вийшло: ${problems.size} — подробиці в застосунку", -1, ongoing = false),
         )
         worker = null
@@ -307,9 +307,9 @@ class FlacBatchService : Service() {
             if (bad.isEmpty()) { fixed++; FlacBatch.update { it.copy(made = fixed) } } else { problems += bad; FlacBatch.update { it.copy(problems = problems.toList()) } }
         }
         FlacBatch.update { it.copy(running = false, finished = true, made = fixed, problems = problems.toList(), cancelled = cancelled, index = ids.size, skipped = skipped) }
-        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
+        leaveForeground()
         getSystemService(NotificationManager::class.java).notify(
-            NOTIF_ID,
+            NOTIF_DONE,
             notification("Обрізано: $fixed з ${ids.size}", if (problems.isEmpty()) TrimApply.describe(plan) else "Не вийшло: ${problems.size} — подробиці в застосунку", -1, ongoing = false),
         )
         worker = null
@@ -346,10 +346,10 @@ class FlacBatchService : Service() {
             FlacBatch.update { it.copy(problems = problems.toList()) }
         }
         FlacBatch.update { it.copy(running = false, finished = true, made = report.size, report = report.toList(), problems = problems.toList(), cancelled = cancelled, index = checked, skipped = skipped) }
-        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
+        leaveForeground()
         val title = if (report.isEmpty()) "Тріск нема ($checked перевірено)" else "Тріски: ${report.size} з $checked — перезаписати"
         getSystemService(NotificationManager::class.java).notify(
-            NOTIF_ID,
+            NOTIF_DONE,
             notification(title, "Файли не змінювались — лише перевірка", -1, ongoing = false),
         )
         worker = null
@@ -377,9 +377,9 @@ class FlacBatchService : Service() {
             if (bad.isEmpty()) { fixed++; FlacBatch.update { it.copy(made = fixed) } } else { problems += bad; FlacBatch.update { it.copy(problems = problems.toList()) } }
         }
         FlacBatch.update { it.copy(running = false, finished = true, made = fixed, problems = problems.toList(), cancelled = cancelled, index = ids.size, skipped = skipped) }
-        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_DETACH) else @Suppress("DEPRECATION") stopForeground(false)
+        leaveForeground()
         getSystemService(NotificationManager::class.java).notify(
-            NOTIF_ID,
+            NOTIF_DONE,
             notification("Теги змінено: $fixed з ${ids.size}", if (problems.isEmpty()) "Звук не змінювався — лише теги й імена" else "Не вийшло: ${problems.size} — подробиці в застосунку", -1, ongoing = false),
         )
         worker = null
@@ -393,7 +393,21 @@ class FlacBatchService : Service() {
         notify("$what: ${i + 1} з $total · $pct %", label, ((i + f) * 100 / maxOf(1, total)).toInt())
     }
 
-        private fun enter(n: Notification) {
+        /**
+     * Робота скінчилась — прибрати повідомлення поступу (T109, faric 31.10 01:50 на A26: «Перевіряю номери: 1 з 3»
+     * висить, хоча журнал показує: перевірка закінчилась за 0,2 с). Android 12+ відкладає показ повідомлення
+     * короткої фонової служби до 10 с — і показував його вже ПІСЛЯ кінця, а «відчеплене» (DETACH) воно лишалось
+     * назавжди. Тепер: повідомлення одразу (FOREGROUND_SERVICE_IMMEDIATE), служба знімає його повністю (REMOVE),
+     * підсумок — окремим повідомленням [NOTIF_DONE], і через 12 с ще раз перевірити шторку.
+     */
+    private fun leaveForeground() {
+        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") stopForeground(true)
+        getSystemService(NotificationManager::class.java).cancel(NOTIF_ID)
+        sweepLater(applicationContext)
+    }
+
+    private fun enter(n: Notification) {
+        runCatching { getSystemService(NotificationManager::class.java).cancel(NOTIF_DONE) }
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else startForeground(NOTIF_ID, n)
     }
 
@@ -420,6 +434,7 @@ class FlacBatchService : Service() {
             .setAutoCancel(!ongoing)
             .setOnlyAlertOnce(true)
             .setContentIntent(open)
+        if (ongoing && Build.VERSION.SDK_INT >= 31) b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         if (ongoing) {
             if (percent >= 0) b.setProgress(100, percent, false)
             val stop = PendingIntent.getService(
@@ -442,14 +457,21 @@ class FlacBatchService : Service() {
 
     companion object {
         /** Після старту процесу: незакінчене (ongoing) повідомлення роботи — від минулого, уже вбитого процесу. */
-        fun clearStale(context: android.content.Context) {
+        fun clearStale(context: android.content.Context, why: String = "від минулого процесу") {
             runCatching {
                 val nm = context.getSystemService(NotificationManager::class.java)
                 nm.activeNotifications.firstOrNull { it.id == NOTIF_ID && (it.notification.flags and Notification.FLAG_ONGOING_EVENT) != 0 }?.let {
-                    WorkLog.w("старт", "у шторці лишилось від минулого процесу: «${it.notification.extras.getCharSequence(Notification.EXTRA_TITLE)}» — прибрано")
+                    WorkLog.w("шторка", "лишилось $why: «${it.notification.extras.getCharSequence(Notification.EXTRA_TITLE)}» — прибрано")
                     nm.cancel(NOTIF_ID)
                 }
             }
+        }
+
+        private val sweeper = android.os.Handler(android.os.Looper.getMainLooper())
+
+        /** Через 12 с після кінця роботи: якщо Android усе ж показав запізніле повідомлення поступу — прибрати. */
+        private fun sweepLater(app: android.content.Context) {
+            sweeper.postDelayed({ if (!FlacBatch.state.running) clearStale(app, "після кінця роботи (запізніле від Android)") }, 12_000)
         }
 
         const val EXTRA_IDS = "ids"
@@ -460,5 +482,7 @@ class FlacBatchService : Service() {
         const val EXTRA_SPEC = "spec"
         private const val ACTION_STOP = "ua.faric.trackcatcher.flac.STOP"
         private const val NOTIF_ID = 3
+        /** Підсумок роботи — окремим повідомленням, щоб не плутався з поступом служби. */
+        private const val NOTIF_DONE = 4
     }
 }

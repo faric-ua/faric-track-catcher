@@ -243,7 +243,9 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         val album = settings.customAlbum
         val limit = settings.stopAfter
         val minutes = settings.stopAfterMin
-        val key = "$locked|$useAlbum|$album|$limit|$minutes"
+        val join = settings.joinLastSession
+        val last = if (join) runCatching { ua.faric.trackcatcher.data.HistoryDb.get(host).lastSession() }.getOrNull() else null
+        val key = "$locked|$useAlbum|$album|$limit|$minutes|$join|${last?.id}"
         if (key == planKey) return
         planKey = key
         planCard.removeAllViews()
@@ -254,6 +256,13 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         albumRow.addView(ui.choice("Як у плеєрі", !useAlbum) { settings.useCustomAlbum = false; planKey = ""; renderPlan(RecorderHub.state) })
         albumRow.addView(ui.choice(if (album.isBlank()) "Свій…" else "Свій: $album", useAlbum) { askAlbum() })
         planCard.addView(albumRow, ui.matchWrap())
+
+        // T110 (faric 31.10 04:56): сесія — нова чи дописати в попередню (кілька запусків — одна сесія).
+        planCard.addView(ui.title("Сесія", 15.5f))
+        val sessionRow = FlowLayout(host, ui.dp(8), ui.dp(8))
+        sessionRow.addView(ui.choice("Нова", !join) { settings.joinLastSession = false; planKey = ""; renderPlan(RecorderHub.state) })
+        sessionRow.addView(ui.choice("Продовжити попередню", join) { settings.joinLastSession = true; planKey = ""; renderPlan(RecorderHub.state) })
+        planCard.addView(sessionRow, ui.matchWrap())
 
         planCard.addView(ui.title("Зупинитись після", 15.5f))
         val limitRow = FlowLayout(host, ui.dp(8), ui.dp(8))
@@ -270,6 +279,10 @@ class RecordScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         planCard.addView(ui.muted(
             buildString {
                 append(if (useAlbum && album.isNotBlank()) "Усі пісні підуть в альбом «$album» (папка й теги). " else "Альбом — як показує плеєр. ")
+                if (join) append(
+                    if (last != null && !locked) "Пісні допишуться в сесію від ${TimeText.dateTime(last.startedAt)}. "
+                    else if (!locked) "Пісні допишуться в останню сесію. " else "",
+                )
                 append(
                     when {
                         limit > 0 -> "Після ${limit}-ї пісні плеєр стане на паузу, а запис зупиниться сам."

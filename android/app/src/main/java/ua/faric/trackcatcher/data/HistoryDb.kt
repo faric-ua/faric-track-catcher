@@ -217,6 +217,37 @@ class HistoryDb private constructor(context: Context) :
 
     fun allSessions(): List<SessionRow> = sessions().values.sortedBy { it.startedAt }
 
+    /** Остання сесія (T110: «Продовжити попередню»). */
+    fun lastSession(): SessionRow? = sessions().values.maxWithOrNull(compareBy<SessionRow>({ it.startedAt }, { it.id }))
+
+    /** Скільки записів у сесії. */
+    fun sessionSize(sessionId: Long): Int =
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM recordings WHERE session_id=?", arrayOf(sessionId.toString())).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+
+    /** T110: об'єднати сесії в найранішу; повертає її id або null. Файли не чіпаються. */
+    fun mergeSessions(ids: Collection<Long>): Long? {
+        val all = sessions()
+        val plan = ua.faric.trackcatcher.core.SessionMerge.plan(
+            ids.mapNotNull { all[it] }.map { ua.faric.trackcatcher.core.SessionMerge.Session(it.id, it.startedAt, it.stoppedAt) },
+        ) ?: return null
+        val w = writableDatabase
+        val inList = plan.others.joinToString(",")
+        w.beginTransaction()
+        try {
+            w.execSQL("UPDATE recordings SET session_id=? WHERE session_id IN ($inList)", arrayOf<Any>(plan.target))
+            w.update("sessions", ContentValues().apply {
+                put("started_at", plan.startedAt)
+                put("stopped_at", plan.stoppedAt)
+            }, "id=?", arrayOf(plan.target.toString()))
+            w.execSQL("DELETE FROM sessions WHERE id IN ($inList)")
+            w.setTransactionSuccessful()
+        } finally {
+            w.endTransaction()
+        }
+        changed()
+        return plan.target
+    }
+
     /** Сесія з таким самим початком (відновлення копії) або нова. */
     fun sessionFor(startedAt: Long, stoppedAt: Long, formatLabel: String): Long {
         readableDatabase.rawQuery("SELECT id FROM sessions WHERE started_at=? LIMIT 1", arrayOf(startedAt.toString())).use { c ->
