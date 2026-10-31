@@ -109,6 +109,14 @@ class Settings(context: Context) {
         e.apply()
     }
 
+    /**
+     * T110 (faric 31.10 04:56: «скільки б я раз не запускав, я міг би в одну сесію це все додати»): новий запис
+     * дописується в останню сесію, а не починає нову. Лишається, доки не вибереш «Нова».
+     */
+    var joinLastSession: Boolean
+        get() = prefs.getBoolean(KEY_JOIN_SESSION, false)
+        set(v) = prefs.edit().putBoolean(KEY_JOIN_SESSION, v).apply()
+
     /** Свій альбом увімкнено (назва лишається в пам'яті, навіть коли вимкнено). */
     var useCustomAlbum: Boolean
         get() = prefs.getBoolean(KEY_USE_ALBUM, false)
@@ -218,6 +226,7 @@ class Settings(context: Context) {
         private const val KEY_FADE_MS = "fade_ms"
         private const val KEY_CUT_SHIFT_MS = "cut_shift_ms"
         private const val KEY_USE_ALBUM = "use_custom_album"
+        private const val KEY_JOIN_SESSION = "join_last_session"
         private const val KEY_ALBUM = "custom_album"
         private const val KEY_STOP_AFTER = "stop_after"
         private const val KEY_TREE = "tree_uri"

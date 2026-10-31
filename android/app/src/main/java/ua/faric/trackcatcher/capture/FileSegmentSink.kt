@@ -16,12 +16,14 @@ import ua.faric.trackcatcher.core.TrackMeta
 class FileSegmentSink(
     private val dir: File,
     private val sessionId: Long,
+    /** Початок імені файлів шматків; свій для кожного запуску запису. */
+    private val prefix: String = "s$sessionId",
     private val onClosed: (SegmentJob) -> Unit,
 ) : SegmentSink {
 
     override fun open(meta: TrackMeta, start: SegmentStart): SegmentHandle {
         dir.mkdirs()
-        val base = "s$sessionId-" + start.index.toString().padStart(3, '0')
+        val base = "$prefix-" + start.index.toString().padStart(3, '0')
         return FileHandle(File(dir, "$base.pcm"), File(dir, "$base.json"), meta, start)
     }
 

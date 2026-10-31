@@ -212,6 +212,11 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
                 return true
             }
         }
+        if (key == KEY_MERGE) {
+            if (picked.isEmpty()) return false
+            confirmMerge()
+            return true
+        }
         if (key == KEY_DELETE_MANY) {
             if (picked.isEmpty()) return false
             confirmDeleteMany()
@@ -310,6 +315,9 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             clearPicked()
             checkHoles(pickedCheck.sortedBy { it.createdAt })
         })
+        // T110: вибрані пісні з кількох сесій — об'єднати ці сесії в одну.
+        val pickedSessions = picked.mapNotNull { all[it]?.sessionId }.toSet()
+        if (pickedSessions.size >= 2) actions.addView(ui.iconButton(LineIcon.LIST, "Об'єднати сесії (${pickedSessions.size})", Ui.Kind.NORMAL) { confirmMerge() })
         actions.addView(ui.button("Видалити (${picked.size})", Ui.Kind.DANGER) { confirmDeleteMany() })
         if (shownIds.any { it !in picked }) actions.addView(ui.button("Вибрати всі видимі", Ui.Kind.NORMAL) {
             shownIds.forEach { picked += it } // лише те, що видно: у закритих групах нічого не вибирається
@@ -352,6 +360,39 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
             },
         )
         host.overlay.show(KEY_DELETE_MANY, body)
+    }
+
+    /**
+     * T110 (faric 31.10 04:56: «одну пісню записав — сесія закінчилась; як мені їх в одну сесію з'єднати»):
+     * сесії вибраних пісень — в одну (найранішу). Файли не чіпаються; номери пісень після цього перевіряються самі.
+     */
+    private fun confirmMerge() {
+        val rows = picked.mapNotNull { db.get(it) }
+        val ids = rows.map { it.sessionId }.toSet()
+        if (ids.size < 2) return
+        val total = ids.sumOf { db.sessionSize(it) }
+        val body = host.overlay.dialog(
+            title = "Об'єднати ${TimeText.plural(ids.size, "сесію", "сесії", "сесій")}?",
+            message = "Усі ${TimeText.plural(total, "запис", "записи", "записів")} цих сесій стануть однією сесією — " +
+                "найранішою, з початком і кінцем на весь час. Файли й назви не змінюються. Номери пісень без альбому потім перевіряться самі.",
+            actions = listOf("Об'єднати" to Ui.Kind.PRIMARY, "Скасувати" to Ui.Kind.QUIET),
+            onAction = { i ->
+                if (i == 0) mergeSessions(ids) else host.overlay.dismiss()
+            },
+        )
+        host.overlay.show(KEY_MERGE, body)
+    }
+
+    private fun mergeSessions(ids: Set<Long>) {
+        val target = db.mergeSessions(ids)
+        host.overlay.dismiss()
+        clearPicked()
+        if (target == null) return
+        ua.faric.trackcatcher.state.WorkLog.i("історія", "об'єднано сесії ${ids.sorted()} → $target")
+        host.toast("Сесії об'єднано: ${TimeText.plural(ids.size, "сесія", "сесії", "сесій")} → одна")
+        val withFiles = db.sessionRows(target).filter { ua.faric.trackcatcher.capture.Renumber.files(it).isNotEmpty() }.map { it.id }.toLongArray()
+        if (withFiles.isNotEmpty()) FlacBatch.startRenumber(host, withFiles, auto = true)
+        reload()
     }
 
     private fun deleteMany(chosen: List<RecordingRow>) {
@@ -1833,6 +1874,7 @@ class HistoryScreen(host: MainActivity, state: Bundle?) : Screen(host) {
         private const val KEY_GROUP = "group"
         private const val KEY_PICKED = "picked"
         private const val KEY_DELETE_MANY = "deletemany:0"
+        private const val KEY_MERGE = "mergesessions:0"
         private const val KEY_NO_CONVERTER = "noconverter"
         private const val KEY_FLAC_CONFIRM = "makeflac:confirm"
         private const val KEY_FLAC_RUN = "makeflac:run"
