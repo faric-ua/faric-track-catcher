@@ -141,8 +141,17 @@ class PlaybackService : Service() {
         }
     }
 
+    /**
+     * T114 (від чатів Audio Converter і Dorama, 03.11): один час повідомлення на весь процес. Новий Builder щоразу
+     * бере «зараз», і шторка пересортовує часто оновлюване повідомлення серед інших — воно стрибає місцями.
+     * setShowWhen(false) лише ховає час, сортування лишається. Тому — setWhen(notifWhen).
+     */
+    private var notifWhen = 0L
+
     private fun notification(t: InAppPlayer.Track, playing: Boolean, s: MediaSession): Notification {
+        if (notifWhen == 0L) notifWhen = System.currentTimeMillis()
         val b = Notification.Builder(this, TrackCatcherApp.CHANNEL_PLAYBACK)
+            .setWhen(notifWhen)
             .setSmallIcon(R.drawable.ic_stat_play)
             .setContentTitle(t.title.ifBlank { "Невідома пісня" })
             .setContentText(listOf(t.artist, t.album).filter { it.isNotBlank() }.joinToString(" · "))
