@@ -34,6 +34,7 @@ class FlacBatchService : Service() {
             return START_NOT_STICKY
         }
         val ids = intent?.getLongArrayExtra(EXTRA_IDS)
+        if (ids != null && worker == null) notifWhen = 0L // нова робота — новий час повідомлення (T114)
         enter(notification("Готуюсь…", "", 0, ongoing = true))
         if (ids == null || worker != null) {
             if (worker == null) stopSelf()
@@ -421,12 +422,22 @@ class FlacBatchService : Service() {
         getSystemService(NotificationManager::class.java).notify(NOTIF_ID, notification(title, text, percent, ongoing = true))
     }
 
+    /**
+     * T114 (від чатів Audio Converter і Dorama, 03.11): один час повідомлення на весь процес. Новий Builder щоразу
+     * бере «зараз», і шторка пересортовує часто оновлюване повідомлення серед інших — воно стрибає місцями.
+     * setShowWhen(false) лише ховає час, сортування лишається. Тому — setWhen(notifWhen).
+     */
+    private var notifWhen = 0L
+
     private fun notification(title: String, text: String, percent: Int, ongoing: Boolean): Notification {
+        if (notifWhen == 0L) notifWhen = System.currentTimeMillis()
         val open = PendingIntent.getActivity(
             this, 31, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(MainActivity.EXTRA_TAB, "HISTORY"),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val b = Notification.Builder(this, TrackCatcherApp.CHANNEL_WORK)
+            .setWhen(notifWhen)
+            .setShowWhen(false)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(title)
             .setContentText(text)

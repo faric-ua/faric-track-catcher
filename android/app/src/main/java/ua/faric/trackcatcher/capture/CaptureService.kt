@@ -238,6 +238,7 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         discardLast = false
         customAlbum = values.customAlbum
         val db = HistoryDb.get(this)
+        notifWhen = 0L // новий запис — новий час повідомлення (T114)
         // T110: «Продовжити попередню» — пісні цього запуску йдуть в останню сесію.
         val joined = if (Settings(this).joinLastSession) db.lastSession() else null
         sessionId = joined?.id ?: db.startSession(System.currentTimeMillis(), values.label)
@@ -753,7 +754,15 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
         nm.notify(NOTIF_ID, notification(title, text))
     }
 
+    /**
+     * T114 (від чатів Audio Converter і Dorama, 03.11): один час повідомлення на весь процес. Новий Builder щоразу
+     * бере «зараз», і шторка пересортовує часто оновлюване повідомлення серед інших — воно стрибає місцями.
+     * setShowWhen(false) лише ховає час, сортування лишається. Тому — setWhen(notifWhen).
+     */
+    private var notifWhen = 0L
+
     private fun notification(title: String, text: String): Notification {
+        if (notifWhen == 0L) notifWhen = System.currentTimeMillis()
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
@@ -763,6 +772,8 @@ class CaptureService : Service(), NowPlayingTracker.Listener {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val b = Notification.Builder(this, TrackCatcherApp.CHANNEL_RECORDING)
+            .setWhen(notifWhen)
+            .setShowWhen(false)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(title)
             .setContentText(text)
