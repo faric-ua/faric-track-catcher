@@ -79,6 +79,7 @@ while true; do
   echo " 10 — Вікно встановлення сховалось? Відкрити ще раз"
   echo "  5 — Встановити версію, зібрану на іншому телефоні"
   echo " 13 — Відкрити папку з останнім APK"
+  echo " 14 — 🔑 Покласти ключ підпису в «Ключі» (для брата)"
   echo
   echo " ЩОДНЯ"
   echo "  1 — Оновити це меню"
@@ -132,6 +133,7 @@ while true; do
     9) run_tool tc-widget.sh ;;
     10) run_tool tc-reopen-install.sh ;;
     13) run_tool tc-open-apk-folder.sh ;;
+    14) clear; bash "$TOOLS/faric-keys-put.sh" "Track Catcher"; pause_menu ;;
     11) run_tool tc-local-build.sh ;;
     12)
       clear

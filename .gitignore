@@ -32,3 +32,10 @@ local.properties
 # Python
 __pycache__/
 *.py[cod]
+
+# Ключі підпису — ніколи не в git (інспектор 2026-11-06)
+*.age
+*-signing.properties
+release-signing.properties
+local-build-env.sh
+Ключі/
